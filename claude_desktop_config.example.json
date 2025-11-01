@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "browser-automation": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/browser-automation-mcp-server/dist/browser-automation-mcp-server.js"
+      ],
+      "env": {
+        "CEF_BRIDGE_HOST": "localhost",
+        "CEF_BRIDGE_PORT": "9222",
+        "ALLOWED_FILE_DIRS": "/home/user/downloads,/tmp",
+        "DEFAULT_TIMEOUT_MS": "30000"
+      }
+    }
+  }
+}

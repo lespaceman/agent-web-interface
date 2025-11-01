@@ -1,0 +1,52 @@
+{
+  "name": "browser-automation-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for browser automation via Qt + CEF",
+  "type": "module",
+  "main": "dist/browser-automation-mcp-server.js",
+  "bin": {
+    "browser-automation-mcp": "./dist/browser-automation-mcp-server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/browser-automation-mcp-server.js",
+    "mcp:inspect": "npx @modelcontextprotocol/inspector node dist/browser-automation-mcp-server.js",
+    "prepare": "npm run build",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{ts,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,js,json,md}\"",
+    "check": "npm run type-check && npm run lint && npm run format:check"
+  },
+  "keywords": [
+    "mcp",
+    "browser-automation",
+    "cef",
+    "qt",
+    "claude",
+    "ai-agents"
+  ],
+  "author": "Nadeem",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "chrome-remote-interface": "^0.33.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/chrome-remote-interface": "^0.31.14",
+    "@types/eslint__js": "^8.42.3",
+    "@types/node": "^20.0.0",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "prettier": "^3.6.2",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.46.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

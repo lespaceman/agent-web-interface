@@ -1,0 +1,606 @@
+{
+  "name": "browser-automation-toolkit",
+  "version": "1.0.0",
+  "description": "Comprehensive browser automation tools for navigating complex web applications via Qt + CEF",
+  "tools": [
+    {
+      "name": "dom_get_tree",
+      "description": "Returns a pruned, stable JSON representation of DOM nodes including id, tag, attributes, text content, and children. Use this to understand page structure.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "frameId": {
+            "type": "string",
+            "description": "Optional frame ID to scope the tree extraction"
+          },
+          "depth": {
+            "type": "number",
+            "description": "Maximum depth to traverse (default: unlimited)"
+          },
+          "visibleOnly": {
+            "type": "boolean",
+            "description": "If true, only return visible nodes (default: false)"
+          }
+        }
+      }
+    },
+    {
+      "name": "ax_get_tree",
+      "description": "Returns accessibility tree with roles, names, states, and relationships (label-for, controls). Preferred for finding interactive elements reliably.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "frameId": {
+            "type": "string",
+            "description": "Optional frame ID to scope the accessibility tree"
+          }
+        }
+      }
+    },
+    {
+      "name": "layout_get_box_model",
+      "description": "Converts any locator into geometry information (quad coordinates and bounding box). Use to verify element position.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["target"],
+        "properties": {
+          "target": {
+            "type": "object",
+            "description": "ElementRef or LocatorHint to get box model for"
+          }
+        }
+      }
+    },
+    {
+      "name": "layout_is_visible",
+      "description": "Evaluates real visibility of an element considering style, display properties, and occlusion. Returns boolean.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["target"],
+        "properties": {
+          "target": {
+            "type": "object",
+            "description": "ElementRef or LocatorHint to check visibility"
+          }
+        }
+      }
+    },
+    {
+      "name": "ui_discover",
+      "description": "Fuses DOM + accessibility + layout into a typed list of interactive elements with role, label, name, state, selectors, and bbox. Best for finding forms, buttons, inputs, tabs, menu items.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "object",
+            "description": "Optional LocatorHint to limit discovery to a specific region"
+          }
+        }
+      }
+    },
+    {
+      "name": "vision_ocr",
+      "description": "Performs OCR on screenshot or region. Use as fallback for canvas/SVG content or mislabeled controls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "w": { "type": "number" },
+              "h": { "type": "number" }
+            },
+            "description": "Optional region to perform OCR on"
+          }
+        }
+      }
+    },
+    {
+      "name": "vision_find_by_text",
+      "description": "Finds element by visible text using vision/OCR. Returns ElementRef with bbox. Use when semantic locators fail.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to search for"
+          },
+          "fuzzy": {
+            "type": "boolean",
+            "description": "Enable fuzzy matching (default: false)"
+          },
+          "areaHint": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "w": { "type": "number" },
+              "h": { "type": "number" }
+            },
+            "description": "Optional region to search within"
+          }
+        }
+      }
+    },
+    {
+      "name": "net_observe",
+      "description": "Observes network requests matching patterns. Returns stream of network events. Useful for verifying action results.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "patterns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "URL patterns to observe (e.g., ['*.csv', '/api/search*'])"
+          }
+        }
+      }
+    },
+    {
+      "name": "net_get_response_body",
+      "description": "Retrieves response body for a specific network request by ID.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["requestId"],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "description": "Network request ID from net_observe"
+          }
+        }
+      }
+    },
+    {
+      "name": "content_extract_main",
+      "description": "Extracts main content from page using readability or trafilatura. Returns title, HTML, and plain text. Use for comprehension or summarization.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["readability", "trafilatura"],
+            "description": "Extraction algorithm to use (default: readability)"
+          }
+        }
+      }
+    },
+    {
+      "name": "content_to_text",
+      "description": "Converts HTML to plain text using inscriptis or html-text library.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["html"],
+        "properties": {
+          "html": {
+            "type": "string",
+            "description": "HTML content to convert"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["inscriptis", "html-text"],
+            "description": "Conversion method (default: inscriptis)"
+          }
+        }
+      }
+    },
+    {
+      "name": "targets_resolve",
+      "description": "Resolves a locator hint to a canonical ElementRef. Hint can be semantic (role/label) or selector-based (CSS/XPath). Always use this before acting on elements.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["hint"],
+        "properties": {
+          "hint": {
+            "type": "object",
+            "description": "LocatorHint with role/label/name, CSS/XPath selectors, or bbox coordinates",
+            "properties": {
+              "role": { "type": "string" },
+              "label": { "type": "string" },
+              "name": { "type": "string" },
+              "nearText": { "type": "string" },
+              "css": { "type": "string" },
+              "xpath": { "type": "string" },
+              "ax": { "type": "string" },
+              "bbox": {
+                "type": "object",
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" },
+                  "w": { "type": "number" },
+                  "h": { "type": "number" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "act_click",
+      "description": "Clicks an element using accessibility, DOM, or bbox strategy. Ensures correct frame/context and dispatches real events.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["target"],
+        "properties": {
+          "target": {
+            "type": "object",
+            "description": "ElementRef from targets_resolve or ui_discover"
+          },
+          "strategy": {
+            "type": "string",
+            "enum": ["ax", "dom", "bbox"],
+            "description": "Click strategy (default: ax for accessibility-first)"
+          }
+        }
+      }
+    },
+    {
+      "name": "act_type",
+      "description": "Types text into an element. Focuses element first, then dispatches keyboard events.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["target", "text"],
+        "properties": {
+          "target": {
+            "type": "object",
+            "description": "ElementRef for input field"
+          },
+          "text": {
+            "type": "string",
+            "description": "Text to type"
+          },
+          "submit": {
+            "type": "string",
+            "enum": ["Enter", "Tab"],
+            "description": "Optional key to press after typing"
+          }
+        }
+      }
+    },
+    {
+      "name": "act_select",
+      "description": "Selects an option in a select element by value, label, or index.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["target"],
+        "properties": {
+          "target": {
+            "type": "object",
+            "description": "ElementRef for select element"
+          },
+          "value": {
+            "type": "string",
+            "description": "Option value to select"
+          },
+          "label": {
+            "type": "string",
+            "description": "Option label to select"
+          },
+          "index": {
+            "type": "number",
+            "description": "Option index to select"
+          }
+        }
+      }
+    },
+    {
+      "name": "act_scroll_into_view",
+      "description": "Scrolls element into viewport. Handles virtualized lists with incremental scrolling.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["target"],
+        "properties": {
+          "target": {
+            "type": "object",
+            "description": "ElementRef to scroll to"
+          },
+          "center": {
+            "type": "boolean",
+            "description": "If true, center element in viewport (default: false)"
+          }
+        }
+      }
+    },
+    {
+      "name": "act_upload",
+      "description": "Uploads files to a file input element. Files must be in allowed directories.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["target", "files"],
+        "properties": {
+          "target": {
+            "type": "object",
+            "description": "ElementRef for file input"
+          },
+          "files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Array of file paths to upload"
+          }
+        }
+      }
+    },
+    {
+      "name": "nav_goto",
+      "description": "Navigates to a URL. Waits for initial load.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to navigate to"
+          }
+        }
+      }
+    },
+    {
+      "name": "nav_wait",
+      "description": "Waits for specific condition: network idle, selector appearance, accessibility role, or route change.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["for"],
+        "properties": {
+          "for": {
+            "type": "string",
+            "enum": ["network-idle", "selector", "ax-role", "route-change"],
+            "description": "Condition to wait for"
+          },
+          "selector": {
+            "type": "string",
+            "description": "CSS selector to wait for (when for='selector')"
+          },
+          "roleName": {
+            "type": "string",
+            "description": "Accessibility role to wait for (when for='ax-role')"
+          },
+          "timeoutMs": {
+            "type": "number",
+            "description": "Maximum time to wait in milliseconds (default: 30000)"
+          }
+        }
+      }
+    },
+    {
+      "name": "nav_frame",
+      "description": "Switches context to a specific frame by selector, URL pattern, or name.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "CSS selector for frame element"
+          },
+          "urlContains": {
+            "type": "string",
+            "description": "Frame URL substring to match"
+          },
+          "name": {
+            "type": "string",
+            "description": "Frame name attribute"
+          }
+        }
+      }
+    },
+    {
+      "name": "form_detect",
+      "description": "Detects form fields and submit buttons in scope. Returns fields and submitButtons as ElementRefs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "object",
+            "description": "Optional LocatorHint to limit detection to specific region"
+          }
+        }
+      }
+    },
+    {
+      "name": "form_fill",
+      "description": "Fills form fields using slot-based mapping. Slots use heuristics (label regex, AX relations, proximity) to find fields.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["pairs"],
+        "properties": {
+          "pairs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["slot", "text"],
+              "properties": {
+                "slot": {
+                  "type": "string",
+                  "description": "Field identifier (e.g., 'email', 'password', 'username')"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text to fill into field"
+                }
+              }
+            },
+            "description": "Array of slot-text pairs to fill"
+          },
+          "scope": {
+            "type": "object",
+            "description": "Optional LocatorHint to limit to specific form"
+          }
+        }
+      }
+    },
+    {
+      "name": "form_submit",
+      "description": "Submits a form using button click or form.requestSubmit().",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": ["button", "formRequestSubmit"],
+            "description": "Submit strategy (default: button)"
+          }
+        }
+      }
+    },
+    {
+      "name": "kbd_press",
+      "description": "Presses keyboard key sequence (e.g., ['Ctrl', 'A'] or ['Alt', 'Tab']).",
+      "inputSchema": {
+        "type": "object",
+        "required": ["sequence"],
+        "properties": {
+          "sequence": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Array of keys to press in sequence"
+          }
+        }
+      }
+    },
+    {
+      "name": "kbd_type",
+      "description": "Types text at current focus position without targeting specific element.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to type"
+          }
+        }
+      }
+    },
+    {
+      "name": "session_save",
+      "description": "Saves current session state including cookies, localStorage, and sessionStorage for a domain.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["domain"],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain to save session state for"
+          }
+        }
+      }
+    },
+    {
+      "name": "session_restore",
+      "description": "Restores previously saved session state.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["state"],
+        "properties": {
+          "state": {
+            "type": "object",
+            "description": "Session state object from session_save"
+          }
+        }
+      }
+    },
+    {
+      "name": "session_cookies_get",
+      "description": "Retrieves all cookies for current page.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "session_cookies_set",
+      "description": "Sets cookies for current page.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["cookies"],
+        "properties": {
+          "cookies": {
+            "type": "array",
+            "items": { "type": "object" },
+            "description": "Array of cookie objects to set"
+          }
+        }
+      }
+    },
+    {
+      "name": "session_cookies_clear",
+      "description": "Clears all cookies for current page.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "memory_get_site_profile",
+      "description": "Retrieves learned site profile with known selectors and flows for a domain. Helps with recurring sites.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["domain"],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain to get profile for"
+          }
+        }
+      }
+    },
+    {
+      "name": "memory_put_site_profile",
+      "description": "Stores site profile with learned selectors and flows for a domain.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["domain", "profile"],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Domain to store profile for"
+          },
+          "profile": {
+            "type": "object",
+            "description": "Profile object with knownSelectors, flows, etc."
+          }
+        }
+      }
+    },
+    {
+      "name": "safety_set_policy",
+      "description": "Configures safety policy with domain allowlist, action budgets, and blocked patterns.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["allowlist", "actionBudgetPerMinute"],
+        "properties": {
+          "allowlist": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Array of allowed domains"
+          },
+          "actionBudgetPerMinute": {
+            "type": "number",
+            "description": "Maximum actions per minute"
+          },
+          "blockedPatterns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "URL patterns to block"
+          }
+        }
+      }
+    },
+    {
+      "name": "audit_snapshot",
+      "description": "Captures audit snapshot with screenshot, DOM digest, and optional HAR. All actions auto-log pre/post states.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["label"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Label for this snapshot (e.g., 'after-login', 'before-submit')"
+          }
+        }
+      }
+    }
+  ]
+}
