@@ -7,9 +7,14 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
 import type { ServerConfig } from './types.js';
 import type { Handlers } from './tool-registry.js';
+
+// Import Zod schemas for all domains
+import * as PerceptionSchemas from '../domains/perception/perception.schemas.js';
+import * as InteractionSchemas from '../domains/interaction/interaction.schemas.js';
+import * as NavigationSchemas from '../domains/navigation/navigation.schemas.js';
+import * as SessionSchemas from '../domains/session/session.schemas.js';
 
 /**
  * Helper function to wrap handler output for MCP
@@ -77,15 +82,9 @@ export class BrowserAutomationServer {
       'dom_get_tree',
       {
         title: 'Get DOM Tree',
-        description: 'Get the DOM tree structure',
-        inputSchema: {
-          maxDepth: z.number().optional(),
-          visibleOnly: z.boolean().optional(),
-        },
-        outputSchema: {
-          tree: z.any(),
-          timestamp: z.number(),
-        },
+        description: 'Retrieve the DOM tree structure with configurable depth and visibility filtering',
+        inputSchema: PerceptionSchemas.DomGetTreeInputSchema.shape,
+        outputSchema: PerceptionSchemas.DomGetTreeOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.domTree.handle(input)),
     );
@@ -95,14 +94,9 @@ export class BrowserAutomationServer {
       'ax_get_tree',
       {
         title: 'Get Accessibility Tree',
-        description: 'Get the accessibility tree',
-        inputSchema: {
-          frameId: z.string().optional(),
-        },
-        outputSchema: {
-          tree: z.any(),
-          timestamp: z.number(),
-        },
+        description: 'Retrieve the accessibility tree with ARIA roles and properties',
+        inputSchema: PerceptionSchemas.AxGetTreeInputSchema.shape,
+        outputSchema: PerceptionSchemas.AxGetTreeOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.axTree.handle(input)),
     );
@@ -112,20 +106,9 @@ export class BrowserAutomationServer {
       'ui_discover',
       {
         title: 'Discover UI Elements',
-        description: 'Discover interactive UI elements',
-        inputSchema: {
-          scope: z
-            .object({
-              css: z.string().optional(),
-              xpath: z.string().optional(),
-            })
-            .optional(),
-          visibleOnly: z.boolean().optional(),
-        },
-        outputSchema: {
-          elements: z.array(z.any()),
-          count: z.number(),
-        },
+        description: 'Discover interactive UI elements by fusing DOM, accessibility, and layout information',
+        inputSchema: PerceptionSchemas.UiDiscoverInputSchema.shape,
+        outputSchema: PerceptionSchemas.UiDiscoverOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.uiDiscover.handle(input)),
     );
@@ -135,18 +118,9 @@ export class BrowserAutomationServer {
       'layout_get_box_model',
       {
         title: 'Get Box Model',
-        description: 'Get element box model (position, size)',
-        inputSchema: {
-          target: z.object({
-            css: z.string().optional(),
-            xpath: z.string().optional(),
-            nodeId: z.number().optional(),
-          }),
-          frameId: z.string().optional(),
-        },
-        outputSchema: {
-          boxModel: z.any(),
-        },
+        description: 'Get element box model including position, size, and quad coordinates',
+        inputSchema: PerceptionSchemas.LayoutGetBoxModelInputSchema.shape,
+        outputSchema: PerceptionSchemas.LayoutGetBoxModelOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.layout.getBoxModel(input)),
     );
@@ -156,18 +130,9 @@ export class BrowserAutomationServer {
       'layout_is_visible',
       {
         title: 'Check Visibility',
-        description: 'Check if element is visible',
-        inputSchema: {
-          target: z.object({
-            css: z.string().optional(),
-            xpath: z.string().optional(),
-            nodeId: z.number().optional(),
-          }),
-          frameId: z.string().optional(),
-        },
-        outputSchema: {
-          visible: z.boolean(),
-        },
+        description: 'Check if an element is currently visible in the viewport',
+        inputSchema: PerceptionSchemas.LayoutIsVisibleInputSchema.shape,
+        outputSchema: PerceptionSchemas.LayoutIsVisibleOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.layout.isVisible(input)),
     );
@@ -177,14 +142,9 @@ export class BrowserAutomationServer {
       'vision_find_by_text',
       {
         title: 'Find by Text',
-        description: 'Find elements by visible text (OCR)',
-        inputSchema: {
-          text: z.string(),
-          exact: z.boolean().optional(),
-        },
-        outputSchema: {
-          elements: z.array(z.any()),
-        },
+        description: 'Find elements by visible text using OCR (Optical Character Recognition)',
+        inputSchema: PerceptionSchemas.VisionFindByTextInputSchema.shape,
+        outputSchema: PerceptionSchemas.VisionFindByTextOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.vision.findByText(input)),
     );
@@ -194,14 +154,9 @@ export class BrowserAutomationServer {
       'content_extract',
       {
         title: 'Extract Content',
-        description: 'Extract page content',
-        inputSchema: {
-          selector: z.string().optional(),
-          format: z.enum(['text', 'html', 'markdown']).optional(),
-        },
-        outputSchema: {
-          content: z.string(),
-        },
+        description: 'Extract page content including text and metadata',
+        inputSchema: PerceptionSchemas.ContentGetTextInputSchema.shape,
+        outputSchema: PerceptionSchemas.ContentGetTextOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.content.extract(input)),
     );
@@ -211,15 +166,9 @@ export class BrowserAutomationServer {
       'network_observe',
       {
         title: 'Observe Network',
-        description: 'Observe network activity',
-        inputSchema: {
-          patterns: z.array(z.string()).optional(),
-          captureHeaders: z.boolean().optional(),
-          captureBodies: z.boolean().optional(),
-        },
-        outputSchema: {
-          requests: z.array(z.any()),
-        },
+        description: 'Observe network activity including requests and responses',
+        inputSchema: PerceptionSchemas.NetObserveInputSchema.shape,
+        outputSchema: PerceptionSchemas.NetObserveOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.network.observe(input)),
     );
@@ -234,30 +183,9 @@ export class BrowserAutomationServer {
       'targets_resolve',
       {
         title: 'Resolve Target',
-        description: 'Resolve a locator hint to an element reference',
-        inputSchema: {
-          hint: z.object({
-            css: z.string().optional(),
-            xpath: z.string().optional(),
-            ax: z.string().optional(),
-            label: z.string().optional(),
-            role: z.string().optional(),
-            name: z.string().optional(),
-            nearText: z.string().optional(),
-            bbox: z
-              .object({
-                x: z.number(),
-                y: z.number(),
-                width: z.number(),
-                height: z.number(),
-              })
-              .optional(),
-          }),
-          frameId: z.string().optional(),
-        },
-        outputSchema: {
-          element: z.any(),
-        },
+        description: 'Resolve a locator hint to a specific element reference with selectors',
+        inputSchema: InteractionSchemas.TargetsResolveInputSchema.shape,
+        outputSchema: InteractionSchemas.TargetsResolveOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.action.resolve(input)),
     );
@@ -267,22 +195,9 @@ export class BrowserAutomationServer {
       'act_click',
       {
         title: 'Click Element',
-        description: 'Click an element',
-        inputSchema: {
-          target: z.object({
-            css: z.string().optional(),
-            xpath: z.string().optional(),
-            ax: z.string().optional(),
-            label: z.string().optional(),
-            role: z.string().optional(),
-            nodeId: z.number().optional(),
-          }),
-          frameId: z.string().optional(),
-          waitAfterMs: z.number().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Click an element using multiple strategies (accessibility, DOM, or bounding box)',
+        inputSchema: InteractionSchemas.ActClickInputSchema.shape,
+        outputSchema: InteractionSchemas.ActClickOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.action.click(input)),
     );
@@ -292,22 +207,9 @@ export class BrowserAutomationServer {
       'act_type',
       {
         title: 'Type Text',
-        description: 'Type text into an input field',
-        inputSchema: {
-          target: z.object({
-            css: z.string().optional(),
-            xpath: z.string().optional(),
-            nodeId: z.number().optional(),
-          }),
-          text: z.string(),
-          clearFirst: z.boolean().optional(),
-          pressEnterAfter: z.boolean().optional(),
-          simulateTyping: z.boolean().optional(),
-          frameId: z.string().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Type text into an input field with optional clearing and Enter key support',
+        inputSchema: InteractionSchemas.ActTypeInputSchema.shape,
+        outputSchema: InteractionSchemas.ActTypeOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.action.type(input)),
     );
@@ -317,18 +219,9 @@ export class BrowserAutomationServer {
       'act_scroll_into_view',
       {
         title: 'Scroll Into View',
-        description: 'Scroll element into viewport',
-        inputSchema: {
-          target: z.object({
-            css: z.string().optional(),
-            xpath: z.string().optional(),
-            nodeId: z.number().optional(),
-          }),
-          frameId: z.string().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Scroll an element into the viewport, optionally centering it',
+        inputSchema: InteractionSchemas.ActScrollIntoViewInputSchema.shape,
+        outputSchema: InteractionSchemas.ActScrollIntoViewOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.action.scrollIntoView(input)),
     );
@@ -338,19 +231,9 @@ export class BrowserAutomationServer {
       'act_upload',
       {
         title: 'Upload Files',
-        description: 'Upload files to file input',
-        inputSchema: {
-          target: z.object({
-            css: z.string().optional(),
-            xpath: z.string().optional(),
-            nodeId: z.number().optional(),
-          }),
-          files: z.array(z.string()),
-          frameId: z.string().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Upload one or more files to a file input element',
+        inputSchema: InteractionSchemas.ActUploadInputSchema.shape,
+        outputSchema: InteractionSchemas.ActUploadOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.action.upload(input)),
     );
@@ -360,21 +243,9 @@ export class BrowserAutomationServer {
       'form_detect',
       {
         title: 'Detect Form',
-        description: 'Detect form fields and submit buttons',
-        inputSchema: {
-          scope: z
-            .object({
-              css: z.string().optional(),
-              xpath: z.string().optional(),
-            })
-            .optional(),
-          frameId: z.string().optional(),
-          visibleOnly: z.boolean().optional(),
-          maxDepth: z.number().optional(),
-        },
-        outputSchema: {
-          forms: z.array(z.any()),
-        },
+        description: 'Detect form fields and submit buttons using enhanced field detection',
+        inputSchema: InteractionSchemas.FormDetectInputSchema.shape,
+        outputSchema: InteractionSchemas.FormDetectOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.form.detect(input)),
     );
@@ -384,21 +255,9 @@ export class BrowserAutomationServer {
       'form_fill',
       {
         title: 'Fill Form',
-        description: 'Fill multiple form fields at once',
-        inputSchema: {
-          fields: z.record(z.string()),
-          scope: z
-            .object({
-              css: z.string().optional(),
-              xpath: z.string().optional(),
-            })
-            .optional(),
-          submit: z.boolean().optional(),
-          frameId: z.string().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Fill multiple form fields at once with optional auto-submit',
+        inputSchema: InteractionSchemas.FormFillInputSchema.shape,
+        outputSchema: InteractionSchemas.FormFillOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.form.fill(input)),
     );
@@ -408,16 +267,9 @@ export class BrowserAutomationServer {
       'kb_press',
       {
         title: 'Press Key',
-        description: 'Press a key or key combination',
-        inputSchema: {
-          key: z.string(),
-          code: z.string().optional(),
-          modifiers: z.array(z.enum(['Alt', 'Ctrl', 'Meta', 'Shift'])).optional(),
-          delayMs: z.number().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Press a key or key combination with optional modifiers',
+        inputSchema: InteractionSchemas.KeyboardPressInputSchema.shape,
+        outputSchema: InteractionSchemas.KeyboardPressOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.keyboard.press(input)),
     );
@@ -427,25 +279,9 @@ export class BrowserAutomationServer {
       'kb_hotkey',
       {
         title: 'Execute Hotkey',
-        description: 'Execute common hotkey (copy, paste, etc.)',
-        inputSchema: {
-          hotkey: z.enum([
-            'copy',
-            'paste',
-            'cut',
-            'selectAll',
-            'undo',
-            'redo',
-            'save',
-            'find',
-            'refresh',
-            'newTab',
-            'closeTab',
-          ]),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Execute common hotkeys like copy, paste, save, etc.',
+        inputSchema: InteractionSchemas.KeyboardHotkeyInputSchema.shape,
+        outputSchema: InteractionSchemas.KeyboardHotkeyOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.keyboard.hotkey(input)),
     );
@@ -460,15 +296,9 @@ export class BrowserAutomationServer {
       'nav_goto',
       {
         title: 'Navigate to URL',
-        description: 'Navigate to URL',
-        inputSchema: {
-          url: z.string(),
-          waitUntil: z.enum(['load', 'domcontentloaded', 'networkidle']).optional(),
-          timeout: z.number().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Navigate to a URL with configurable wait conditions and timeout',
+        inputSchema: NavigationSchemas.NavGotoInputSchema.shape,
+        outputSchema: NavigationSchemas.NavGotoOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.navigation.goto(input)),
     );
@@ -478,11 +308,9 @@ export class BrowserAutomationServer {
       'nav_back',
       {
         title: 'Go Back',
-        description: 'Go back in history',
-        inputSchema: {},
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Navigate back in browser history',
+        inputSchema: NavigationSchemas.NavBackInputSchema.shape,
+        outputSchema: NavigationSchemas.NavBackOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.navigation.back(input)),
     );
@@ -492,11 +320,9 @@ export class BrowserAutomationServer {
       'nav_forward',
       {
         title: 'Go Forward',
-        description: 'Go forward in history',
-        inputSchema: {},
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Navigate forward in browser history',
+        inputSchema: NavigationSchemas.NavForwardInputSchema.shape,
+        outputSchema: NavigationSchemas.NavForwardOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.navigation.forward(input)),
     );
@@ -506,13 +332,9 @@ export class BrowserAutomationServer {
       'nav_reload',
       {
         title: 'Reload Page',
-        description: 'Reload current page',
-        inputSchema: {
-          ignoreCache: z.boolean().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Reload the current page with optional cache bypass',
+        inputSchema: NavigationSchemas.NavReloadInputSchema.shape,
+        outputSchema: NavigationSchemas.NavReloadOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.navigation.reload(input)),
     );
@@ -522,12 +344,9 @@ export class BrowserAutomationServer {
       'nav_get_url',
       {
         title: 'Get Current URL',
-        description: 'Get current URL and title',
-        inputSchema: {},
-        outputSchema: {
-          url: z.string(),
-          title: z.string(),
-        },
+        description: 'Get the current page URL and title',
+        inputSchema: NavigationSchemas.NavGetUrlInputSchema.shape,
+        outputSchema: NavigationSchemas.NavGetUrlOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.navigation.getUrl(input)),
     );
@@ -542,13 +361,9 @@ export class BrowserAutomationServer {
       'session_cookies_get',
       {
         title: 'Get Cookies',
-        description: 'Get cookies',
-        inputSchema: {
-          urls: z.array(z.string()).optional(),
-        },
-        outputSchema: {
-          cookies: z.array(z.any()),
-        },
+        description: 'Retrieve browser cookies, optionally filtered by URL',
+        inputSchema: SessionSchemas.SessionCookiesGetInputSchema.shape,
+        outputSchema: SessionSchemas.SessionCookiesGetOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.session.getCookies(input)),
     );
@@ -558,25 +373,9 @@ export class BrowserAutomationServer {
       'session_cookies_set',
       {
         title: 'Set Cookies',
-        description: 'Set cookies',
-        inputSchema: {
-          cookies: z.array(
-            z.object({
-              name: z.string(),
-              value: z.string(),
-              url: z.string().optional(),
-              domain: z.string().optional(),
-              path: z.string().optional(),
-              secure: z.boolean().optional(),
-              httpOnly: z.boolean().optional(),
-              sameSite: z.enum(['Strict', 'Lax', 'None']).optional(),
-              expires: z.number().optional(),
-            }),
-          ),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Set one or more browser cookies with full attribute control',
+        inputSchema: SessionSchemas.SessionCookiesSetInputSchema.shape,
+        outputSchema: SessionSchemas.SessionCookiesSetOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.session.setCookies(input)),
     );
@@ -586,11 +385,9 @@ export class BrowserAutomationServer {
       'session_state_get',
       {
         title: 'Get Session State',
-        description: 'Get session state',
-        inputSchema: {},
-        outputSchema: {
-          state: z.any(),
-        },
+        description: 'Get complete session state including URL, cookies, and localStorage',
+        inputSchema: SessionSchemas.SessionStateGetInputSchema.shape,
+        outputSchema: SessionSchemas.SessionStateGetOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.session.getState(input)),
     );
@@ -600,19 +397,9 @@ export class BrowserAutomationServer {
       'session_state_set',
       {
         title: 'Set Session State',
-        description: 'Restore session state',
-        inputSchema: {
-          state: z.object({
-            url: z.string(),
-            title: z.string().optional(),
-            cookies: z.array(z.any()),
-            localStorage: z.record(z.string()),
-            timestamp: z.number(),
-          }),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Restore complete session state from a previous snapshot',
+        inputSchema: SessionSchemas.SessionStateSetInputSchema.shape,
+        outputSchema: SessionSchemas.SessionStateSetOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.session.setState(input)),
     );
@@ -622,13 +409,9 @@ export class BrowserAutomationServer {
       'session_close',
       {
         title: 'Close Session',
-        description: 'Close browser session',
-        inputSchema: {
-          saveState: z.boolean().optional(),
-        },
-        outputSchema: {
-          success: z.boolean(),
-        },
+        description: 'Close the browser session, optionally saving state first',
+        inputSchema: SessionSchemas.SessionCloseInputSchema.shape,
+        outputSchema: SessionSchemas.SessionCloseOutputSchema.shape,
       },
       async (input) => wrapOutput(await this.handlers.session.close(input)),
     );
