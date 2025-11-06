@@ -1,5 +1,10 @@
 # Browser Automation MCP Server
 
+[![CI](https://github.com/lespaceman/athena-browser-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lespaceman/athena-browser-mcp/actions/workflows/ci.yml)
+[![npm version](https://badge.fury.io/js/browser-automation-mcp-server.svg)](https://www.npmjs.com/package/browser-automation-mcp-server)
+[![codecov](https://codecov.io/gh/lespaceman/athena-browser-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/lespaceman/athena-browser-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A comprehensive Model Context Protocol (MCP) server that exposes browser automation capabilities for AI agents through Qt + CEF (Chromium Embedded Framework).
 
 ## Overview

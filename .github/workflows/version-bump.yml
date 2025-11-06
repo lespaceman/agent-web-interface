@@ -1,0 +1,158 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prepatch
+          - preminor
+          - premajor
+          - prerelease
+      preid:
+        description: 'Pre-release identifier (alpha, beta, rc) - only for pre-release versions'
+        required: false
+        type: string
+        default: 'beta'
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get current version
+        id: current_version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT"
+
+      - name: Bump version
+        id: bump
+        run: |
+          VERSION_TYPE="${{ github.event.inputs.version_type }}"
+
+          # Check if it's a pre-release version
+          if [[ "$VERSION_TYPE" == pre* ]]; then
+            PREID="${{ github.event.inputs.preid }}"
+            if [ -z "$PREID" ]; then
+              echo "Error: Pre-release identifier required for pre-release versions"
+              exit 1
+            fi
+            NEW_VERSION=$(npm version $VERSION_TYPE --preid=$PREID --no-git-tag-version)
+          else
+            NEW_VERSION=$(npm version $VERSION_TYPE --no-git-tag-version)
+          fi
+
+          # Remove 'v' prefix from npm version output
+          NEW_VERSION=${NEW_VERSION#v}
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumped version to: $NEW_VERSION"
+
+      - name: Update package-lock.json
+        run: npm install --package-lock-only
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --abbrev=0 --tags 2>/dev/null || echo "")
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "First release, getting all commits"
+            CHANGELOG=$(git log --pretty=format:"- %s" --reverse)
+          else
+            echo "Generating changelog from $PREVIOUS_TAG"
+            CHANGELOG=$(git log --pretty=format:"- %s" $PREVIOUS_TAG..HEAD)
+          fi
+
+          # Save changelog
+          {
+            echo "## [${{ steps.bump.outputs.new_version }}] - $(date +%Y-%m-%d)"
+            echo ""
+            echo "$CHANGELOG"
+            echo ""
+          } > CHANGELOG_NEW.md
+
+          # Append to existing changelog if it exists
+          if [ -f CHANGELOG.md ]; then
+            cat CHANGELOG.md >> CHANGELOG_NEW.md
+            mv CHANGELOG_NEW.md CHANGELOG.md
+          else
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            cat CHANGELOG_NEW.md >> CHANGELOG.md
+            rm CHANGELOG_NEW.md
+          fi
+
+          git add CHANGELOG.md
+
+      - name: Commit version bump
+        run: |
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }}"
+
+      - name: Create and push tag
+        run: |
+          TAG="v${{ steps.bump.outputs.new_version }}"
+          git tag -a $TAG -m "Release $TAG"
+          git push origin main
+          git push origin $TAG
+
+      - name: Create summary
+        run: |
+          echo "## Version Bump Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version**: ${{ steps.current_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version**: ${{ steps.bump.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type**: ${{ github.event.inputs.version_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: v${{ steps.bump.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Version bumped and tag pushed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release workflow will now run automatically." >> $GITHUB_STEP_SUMMARY
+
+  wait-for-release:
+    name: Wait for Release
+    runs-on: ubuntu-latest
+    needs: bump-version
+
+    steps:
+      - name: Wait for release workflow
+        run: |
+          echo "Waiting for release workflow to complete..."
+          echo "Check the release workflow status: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/release.yml"
+          sleep 10
+
+      - name: Post completion message
+        run: |
+          echo "✅ Version bump completed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Monitor the release workflow for npm publishing status." >> $GITHUB_STEP_SUMMARY
