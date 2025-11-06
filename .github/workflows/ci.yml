@@ -134,14 +134,15 @@ jobs:
 
       - name: Check for vulnerabilities
         run: |
-          AUDIT_RESULT=$(npm audit --json)
+          # Capture audit result (ignore exit code with || true)
+          AUDIT_RESULT=$(npm audit --json || true)
           CRITICAL=$(echo $AUDIT_RESULT | jq '.metadata.vulnerabilities.critical // 0')
           HIGH=$(echo $AUDIT_RESULT | jq '.metadata.vulnerabilities.high // 0')
 
           if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
             echo "Found $CRITICAL critical and $HIGH high severity vulnerabilities"
             echo "Please review and fix these vulnerabilities"
-            npm audit
+            npm audit || true
             exit 1
           fi
           echo "No critical or high severity vulnerabilities found"
