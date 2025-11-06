@@ -35,6 +35,19 @@
   ],
   "author": "Nadeem",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lespaceman/athena-browser-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lespaceman/athena-browser-mcp/issues"
+  },
+  "homepage": "https://github.com/lespaceman/athena-browser-mcp#readme",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.21.0",
     "chrome-remote-interface": "^0.33.3"
