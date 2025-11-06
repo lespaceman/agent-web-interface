@@ -1,11 +1,11 @@
 {
-  "name": "browser-automation-mcp-server",
+  "name": "athena-browser-mcp",
   "version": "1.0.0",
   "description": "MCP server for browser automation via Qt + CEF",
   "type": "module",
   "main": "dist/src/index.js",
   "bin": {
-    "browser-automation-mcp": "./dist/src/index.js"
+    "athena-browser-mcp": "./dist/src/index.js"
   },
   "scripts": {
     "build": "tsc",

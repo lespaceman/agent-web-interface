@@ -1,7 +1,7 @@
 # Browser Automation MCP Server
 
 [![CI](https://github.com/lespaceman/athena-browser-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/lespaceman/athena-browser-mcp/actions/workflows/ci.yml)
-[![npm version](https://badge.fury.io/js/browser-automation-mcp-server.svg)](https://www.npmjs.com/package/browser-automation-mcp-server)
+[![npm version](https://badge.fury.io/js/athena-browser-mcp.svg)](https://www.npmjs.com/package/athena-browser-mcp)
 [![codecov](https://codecov.io/gh/lespaceman/athena-browser-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/lespaceman/athena-browser-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -89,7 +89,7 @@ Add to your Claude Desktop config file:
   "mcpServers": {
     "browser-automation": {
       "command": "node",
-      "args": ["/path/to/browser-automation-mcp-server/dist/browser-automation-mcp-server.js"],
+      "args": ["/path/to/athena-browser-mcp/dist/src/index.js"],
       "env": {
         "CEF_BRIDGE_HOST": "localhost",
         "CEF_BRIDGE_PORT": "9222",
@@ -305,7 +305,7 @@ npm test
 Enable debug logging:
 
 ```bash
-DEBUG=mcp:* node dist/browser-automation-mcp-server.js
+DEBUG=mcp:* node dist/src/index.js
 ```
 
 Check MCP communication:
@@ -317,9 +317,14 @@ tail -f ~/Library/Logs/Claude/mcp*.log  # macOS
 
 ## API Reference
 
-See [browser-automation-mcp-tools.json](./browser-automation-mcp-tools.json) for complete tool definitions.
+See [src/config/tools.json](./src/config/tools.json) for complete tool definitions.
 
-See [browser-automation-mcp-types.ts](./browser-automation-mcp-types.ts) for TypeScript type definitions.
+See type definitions in:
+
+- [src/domains/interaction/interaction.types.ts](./src/domains/interaction/interaction.types.ts)
+- [src/domains/perception/perception.types.ts](./src/domains/perception/perception.types.ts)
+- [src/domains/navigation/navigation.types.ts](./src/domains/navigation/navigation.types.ts)
+- [src/domains/session/session.types.ts](./src/domains/session/session.types.ts)
 
 ## Design Principles
 
@@ -332,9 +337,9 @@ See [browser-automation-mcp-types.ts](./browser-automation-mcp-types.ts) for Typ
 
 ## Contributing
 
-1. Add new tools to `browser-automation-mcp-tools.json`
-2. Add type definitions to `browser-automation-mcp-types.ts`
-3. Implement handlers in `browser-automation-mcp-server.ts`
+1. Add new tools to `src/config/tools.json`
+2. Add type definitions to appropriate domain type files
+3. Implement handlers in respective domain handler files
 4. Add tests in `tests/`
 5. Update README with examples
 

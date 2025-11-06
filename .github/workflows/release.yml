@@ -163,7 +163,7 @@ jobs:
         run: |
           echo "🎉 Release ${{ needs.validate.outputs.tag }} published successfully!"
           echo ""
-          echo "📦 NPM Package: https://www.npmjs.com/package/browser-automation-mcp-server/v/${{ needs.validate.outputs.version }}"
+          echo "📦 NPM Package: https://www.npmjs.com/package/athena-browser-mcp/v/${{ needs.validate.outputs.version }}"
           echo "🔖 GitHub Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.tag }}"
           echo ""
-          echo "Install with: npm install browser-automation-mcp-server@${{ needs.validate.outputs.version }}"
+          echo "Install with: npm install athena-browser-mcp@${{ needs.validate.outputs.version }}"
