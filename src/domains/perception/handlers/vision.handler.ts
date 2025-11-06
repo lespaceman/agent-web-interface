@@ -87,7 +87,7 @@ export class VisionHandler {
   private findTextSpan(
     ocrResult: VisionOcrResponse,
     text: string,
-    fuzzy: boolean,
+    fuzzy: boolean
   ): { text: string; bbox: BBox; confidence?: number } | null {
     const searchText = fuzzy ? text.toLowerCase() : text;
 

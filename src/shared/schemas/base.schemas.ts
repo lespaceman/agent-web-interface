@@ -66,9 +66,17 @@ export const LocatorHintSchema = z.object({
   role: z.string().optional().describe('ARIA role - prefer combining with css/xpath selector'),
   label: z.string().optional().describe('ARIA label - prefer combining with css/xpath selector'),
   name: z.string().optional().describe('Name attribute - prefer combining with css/xpath selector'),
-  nearText: z.string().optional().describe('Text content nearby - must combine with css/xpath/ax selector'),
+  nearText: z
+    .string()
+    .optional()
+    .describe('Text content nearby - must combine with css/xpath/ax selector'),
   // Selector fields (preferred - most reliable)
-  css: z.string().optional().describe('CSS selector - most reliable option. Avoid implicit attribute selectors like [type="submit"] for elements that don\'t explicitly have that attribute'),
+  css: z
+    .string()
+    .optional()
+    .describe(
+      'CSS selector - most reliable option. Avoid implicit attribute selectors like [type="submit"] for elements that don\'t explicitly have that attribute'
+    ),
   xpath: z.string().optional().describe('XPath selector - reliable option'),
   ax: z.string().optional().describe('Accessibility selector'),
   // BBox field
@@ -115,7 +123,7 @@ export const DomTreeNodeSchema: z.ZodType<DomTreeNodeType> = z.lazy(() =>
     attrs: z.array(z.string()).optional().describe('Attributes as [key, value, key, value, ...]'),
     text: z.string().optional().describe('Text content for text nodes'),
     children: z.array(DomTreeNodeSchema).optional().describe('Child nodes'),
-  }),
+  })
 );
 
 export type DomTreeNode = z.infer<typeof DomTreeNodeSchema>;
@@ -138,7 +146,7 @@ export const AxTreeNodeSchema = z.object({
       z.object({
         name: z.string(),
         value: z.unknown(),
-      }),
+      })
     )
     .optional()
     .describe('Additional properties'),
@@ -190,7 +198,12 @@ export type SessionState = z.infer<typeof SessionStateSchema>;
 
 // ===== NAVIGATION WAIT CONDITION =====
 
-export const NavWaitConditionSchema = z.enum(['network-idle', 'selector', 'ax-role', 'route-change']);
+export const NavWaitConditionSchema = z.enum([
+  'network-idle',
+  'selector',
+  'ax-role',
+  'route-change',
+]);
 
 export type NavWaitCondition = z.infer<typeof NavWaitConditionSchema>;
 

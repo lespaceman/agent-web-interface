@@ -32,7 +32,7 @@ interface CdpDomTreeResponse {
 export class DomTreeHandler {
   constructor(
     private readonly cdpBridge: CdpBridge,
-    private readonly domTransformer: DomTransformerService,
+    private readonly domTransformer: DomTransformerService
   ) {}
 
   /**
@@ -56,7 +56,7 @@ export class DomTreeHandler {
       {
         depth: cdpDepth >= 0 ? cdpDepth + 1 : cdpDepth, // CDP depth is 0-based, +1 to include specified level
         pierce: true, // Pierce through shadow DOM and iframes
-      },
+      }
     );
 
     // Transform CDP response to our DomTreeNode format

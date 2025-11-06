@@ -49,7 +49,7 @@ export class ActionHandler {
     private readonly elementResolver: ElementResolver,
     accessibilityStrategy: AccessibilityClickStrategy,
     domStrategy: DomClickStrategy,
-    bboxStrategy: BBoxClickStrategy,
+    bboxStrategy: BBoxClickStrategy
   ) {
     // Order matters: try more reliable strategies first
     this.clickStrategies = [domStrategy, accessibilityStrategy, bboxStrategy];
@@ -66,7 +66,10 @@ export class ActionHandler {
       const normalizedParams = this.deserializeParams(params);
 
       // Step 1: Resolve the target element
-      const target = await this.elementResolver.resolve(normalizedParams.target, normalizedParams.frameId);
+      const target = await this.elementResolver.resolve(
+        normalizedParams.target,
+        normalizedParams.frameId
+      );
 
       // Step 2: Find a suitable click strategy
       const strategy = this.clickStrategies.find((s) => s.canHandle(target));
@@ -110,7 +113,10 @@ export class ActionHandler {
       const normalizedParams = this.deserializeParams(params);
 
       // Step 1: Resolve the target element
-      const target = await this.elementResolver.resolve(normalizedParams.target, normalizedParams.frameId);
+      const target = await this.elementResolver.resolve(
+        normalizedParams.target,
+        normalizedParams.frameId
+      );
 
       // Step 2: Focus the element first
       if (target.nodeId) {
@@ -207,7 +213,10 @@ export class ActionHandler {
       const normalizedParams = this.deserializeParams(params);
 
       // Step 1: Resolve the target element
-      const target = await this.elementResolver.resolve(normalizedParams.target, normalizedParams.frameId);
+      const target = await this.elementResolver.resolve(
+        normalizedParams.target,
+        normalizedParams.frameId
+      );
 
       // Step 2: Scroll into view
       if (target.nodeId) {
@@ -265,7 +274,10 @@ export class ActionHandler {
       }
 
       // Step 2: Resolve the target element
-      const target = await this.elementResolver.resolve(normalizedParams.target, normalizedParams.frameId);
+      const target = await this.elementResolver.resolve(
+        normalizedParams.target,
+        normalizedParams.frameId
+      );
 
       // Step 3: Verify it's a file input
       if (target.nodeId) {

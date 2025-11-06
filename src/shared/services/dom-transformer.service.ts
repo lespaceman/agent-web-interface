@@ -60,7 +60,7 @@ export class DomTransformerService {
     currentDepth: number,
     maxDepth: number,
     nodes: DomTreeNode[],
-    visibleOnly: boolean,
+    visibleOnly: boolean
   ): void {
     // For document nodes (nodeType === 9), just process children
     if (cdpNode.nodeType === 9) {
@@ -229,11 +229,7 @@ export class DomTransformerService {
   /**
    * Find nodes by attribute
    */
-  findByAttribute(
-    nodes: DomTreeNode[],
-    attrName: string,
-    attrValue?: string,
-  ): DomTreeNode[] {
+  findByAttribute(nodes: DomTreeNode[], attrName: string, attrValue?: string): DomTreeNode[] {
     const results: DomTreeNode[] = [];
 
     for (const node of nodes) {

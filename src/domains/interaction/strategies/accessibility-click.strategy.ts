@@ -34,9 +34,7 @@ export class AccessibilityClickStrategy implements ClickStrategy {
 
     if (target.selectors.ax) {
       // Parse accessibility selector (e.g., "role=button[label="Submit"]")
-      conditions.push(
-        `node.getAttribute('aria-label') === ${JSON.stringify(target.selectors.ax)}`,
-      );
+      conditions.push(`node.getAttribute('aria-label') === ${JSON.stringify(target.selectors.ax)}`);
     } else {
       if (target.role) {
         conditions.push(`node.getAttribute('role') === ${JSON.stringify(target.role)}`);

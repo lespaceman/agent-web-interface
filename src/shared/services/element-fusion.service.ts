@@ -7,7 +7,13 @@
  * that returned Promise.resolve([])
  */
 
-import type { ElementRef, AxTreeNode, DomTreeNode, LocatorHint, Selectors } from '../types/index.js';
+import type {
+  ElementRef,
+  AxTreeNode,
+  DomTreeNode,
+  LocatorHint,
+  Selectors,
+} from '../types/index.js';
 
 /**
  * Interactive roles that should be discovered
@@ -57,7 +63,7 @@ interface SelectorBuilder {
 export class ElementFusionService {
   constructor(
     private readonly elementResolver: ElementResolver,
-    private readonly selectorBuilder: SelectorBuilder,
+    private readonly selectorBuilder: SelectorBuilder
   ) {}
 
   /**
@@ -66,7 +72,7 @@ export class ElementFusionService {
   async discover(
     axTree: { nodes: AxTreeNode[] },
     domTree: { nodes: DomTreeNode[] },
-    scope?: LocatorHint,
+    scope?: LocatorHint
   ): Promise<ElementRef[]> {
     const elements: ElementRef[] = [];
 
@@ -146,7 +152,7 @@ export class ElementFusionService {
 
       // Check for elements with click handlers (onclick, @click, etc.)
       const hasClickHandler = ['onclick', '@click', 'v-on:click', 'ng-click'].some(
-        (attribute) => this.getAttr(node, attribute) !== undefined,
+        (attribute) => this.getAttr(node, attribute) !== undefined
       );
 
       if (hasClickHandler) {
@@ -294,7 +300,6 @@ export class ElementFusionService {
       return labelMatches || nameMatches || axMatches;
     });
   }
-
 
   /**
    * Parse CDP attributes array to object

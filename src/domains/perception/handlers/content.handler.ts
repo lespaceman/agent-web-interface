@@ -46,7 +46,7 @@ export class ContentHandler {
       'DOM.getOuterHTML',
       {
         nodeId: result.nodeId,
-      },
+      }
     );
 
     const sourceHtml = html.outerHTML ?? '';
@@ -74,7 +74,7 @@ export class ContentHandler {
       'DOM.getOuterHTML',
       {
         nodeId: 1, // document node
-      },
+      }
     );
 
     const sourceHtml = html.outerHTML ?? '';
@@ -103,7 +103,7 @@ export class ContentHandler {
    */
   private extractMainContent(
     html: string,
-    _mode: 'readability' | 'trafilatura',
+    _mode: 'readability' | 'trafilatura'
   ): ContentExtractMainResponse {
     // This is a placeholder implementation
     // In production, you would:

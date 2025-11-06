@@ -42,7 +42,7 @@ export class SessionHandler {
 
   constructor(
     private readonly cdpBridge: CdpBridge,
-    private readonly navigationHandler: NavigationHandler,
+    private readonly navigationHandler: NavigationHandler
   ) {}
 
   /**

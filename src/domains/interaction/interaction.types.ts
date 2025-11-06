@@ -153,7 +153,18 @@ export interface KbPressResponse {
 }
 
 export interface KbHotkeyParams {
-  hotkey: 'copy' | 'paste' | 'cut' | 'selectAll' | 'undo' | 'redo' | 'save' | 'find' | 'refresh' | 'newTab' | 'closeTab';
+  hotkey:
+    | 'copy'
+    | 'paste'
+    | 'cut'
+    | 'selectAll'
+    | 'undo'
+    | 'redo'
+    | 'save'
+    | 'find'
+    | 'refresh'
+    | 'newTab'
+    | 'closeTab';
 }
 
 export interface KbHotkeyResponse {

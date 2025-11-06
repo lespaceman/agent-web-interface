@@ -34,7 +34,7 @@ interface NodeAttributesResult {
 export class ElementResolverService {
   constructor(
     private readonly cdpBridge: CdpBridge,
-    private readonly selectorBuilder: SelectorBuilderService,
+    private readonly selectorBuilder: SelectorBuilderService
   ) {}
 
   /**
@@ -50,12 +50,13 @@ export class ElementResolverService {
   async resolve(hint: ElementRef | LocatorHint, frameId = 'main'): Promise<ElementRef> {
     // Write to file for debugging since stderr isn't visible through MCP
     try {
-      await import('fs/promises').then(fs =>
-        fs.appendFile('/tmp/mcp-debug.log',
+      await import('fs/promises').then((fs) =>
+        fs.appendFile(
+          '/tmp/mcp-debug.log',
           `[${new Date().toISOString()}] ElementResolver.resolve\n` +
-          `  hint: ${JSON.stringify(hint, null, 2)}\n` +
-          `  type: ${typeof hint}\n` +
-          `  keys: ${JSON.stringify(Object.keys(hint || {}))}\n\n`
+            `  hint: ${JSON.stringify(hint, null, 2)}\n` +
+            `  type: ${typeof hint}\n` +
+            `  keys: ${JSON.stringify(Object.keys(hint || {}))}\n\n`
         )
       );
     } catch {
@@ -135,7 +136,7 @@ export class ElementResolverService {
         {
           nodeId: await this.getDocumentNodeId(),
           selector: css,
-        },
+        }
       );
       return result.nodeId ?? null;
     } catch {
@@ -171,7 +172,7 @@ export class ElementResolverService {
         // Get nodeId from objectId
         const nodeInfo = await this.cdpBridge.executeDevToolsMethod<{ node: { nodeId: number } }>(
           'DOM.describeNode',
-          { objectId: result.result.objectId },
+          { objectId: result.result.objectId }
         );
         return nodeInfo.node.nodeId;
       }
@@ -187,10 +188,7 @@ export class ElementResolverService {
    * Uses the Accessibility tree API to find elements by their computed accessible
    * name and role, which is more reliable than DOM attribute matching.
    */
-  private async queryByAccessibility(
-    hint: LocatorHint,
-    _frameId: string,
-  ): Promise<number | null> {
+  private async queryByAccessibility(hint: LocatorHint, _frameId: string): Promise<number | null> {
     try {
       // First, get the full accessibility tree
       // CDP returns role and name as either string or {type, value} objects
@@ -263,20 +261,20 @@ export class ElementResolverService {
 
       if ('label' in hint && hint.label) {
         conditions.push(
-          `(element.getAttribute('aria-label') === ${JSON.stringify(hint.label)} || element.textContent?.trim() === ${JSON.stringify(hint.label)})`,
+          `(element.getAttribute('aria-label') === ${JSON.stringify(hint.label)} || element.textContent?.trim() === ${JSON.stringify(hint.label)})`
         );
       }
 
       if ('name' in hint && hint.name) {
         conditions.push(
-          `(element.getAttribute('name') === ${JSON.stringify(hint.name)} || element.getAttribute('aria-label') === ${JSON.stringify(hint.name)})`,
+          `(element.getAttribute('name') === ${JSON.stringify(hint.name)} || element.getAttribute('aria-label') === ${JSON.stringify(hint.name)})`
         );
       }
 
       if ('nearText' in hint && hint.nearText) {
         // Match elements that contain or are near the specified text
         conditions.push(
-          `(element.textContent?.includes(${JSON.stringify(hint.nearText)}) || element.getAttribute('aria-label')?.includes(${JSON.stringify(hint.nearText)}))`,
+          `(element.textContent?.includes(${JSON.stringify(hint.nearText)}) || element.getAttribute('aria-label')?.includes(${JSON.stringify(hint.nearText)}))`
         );
       }
 
@@ -302,7 +300,7 @@ export class ElementResolverService {
       if (result.result.objectId) {
         const nodeInfo = await this.cdpBridge.executeDevToolsMethod<{ node: { nodeId: number } }>(
           'DOM.describeNode',
-          { objectId: result.result.objectId },
+          { objectId: result.result.objectId }
         );
         return nodeInfo.node.nodeId;
       }
@@ -330,7 +328,7 @@ export class ElementResolverService {
       if (result.result.objectId) {
         const nodeInfo = await this.cdpBridge.executeDevToolsMethod<{ node: { nodeId: number } }>(
           'DOM.describeNode',
-          { objectId: result.result.objectId },
+          { objectId: result.result.objectId }
         );
         return nodeInfo.node.nodeId;
       }
@@ -346,7 +344,7 @@ export class ElementResolverService {
   private async buildSelectors(
     nodeId: number,
     hint: LocatorHint,
-    frameId: string,
+    frameId: string
   ): Promise<Selectors> {
     // Start with any selectors provided in the hint
     const selectors: Selectors = {};
@@ -376,10 +374,9 @@ export class ElementResolverService {
    */
   private async getBoundingBox(nodeId: number): Promise<BBox | undefined> {
     try {
-      const result = await this.cdpBridge.executeDevToolsMethod<BoxModelResult>(
-        'DOM.getBoxModel',
-        { nodeId },
-      );
+      const result = await this.cdpBridge.executeDevToolsMethod<BoxModelResult>('DOM.getBoxModel', {
+        nodeId,
+      });
 
       const quad = result.model.content;
       const x = Math.min(quad[0], quad[2], quad[4], quad[6]);
@@ -397,13 +394,13 @@ export class ElementResolverService {
    * Get accessibility metadata (role, label, name)
    */
   private async getAccessibilityMetadata(
-    nodeId: number,
+    nodeId: number
   ): Promise<{ role?: string; label?: string; name?: string }> {
     try {
       // Get element attributes
       const attrResult = await this.cdpBridge.executeDevToolsMethod<NodeAttributesResult>(
         'DOM.getAttributes',
-        { nodeId },
+        { nodeId }
       );
 
       const attributes = this.parseAttributes(attrResult.attributes);
@@ -462,7 +459,7 @@ export class ElementResolverService {
           css: element.selectors.css,
           xpath: element.selectors.xpath,
         },
-        element.frameId,
+        element.frameId
       );
     }
 
@@ -473,7 +470,9 @@ export class ElementResolverService {
    * Extract string value from CDP accessibility value
    * CDP can return values as either string or {type, value} object
    */
-  private extractAxValue(value: string | { type: string; value: string } | undefined): string | undefined {
+  private extractAxValue(
+    value: string | { type: string; value: string } | undefined
+  ): string | undefined {
     if (!value) return undefined;
     if (typeof value === 'string') return value;
     if (typeof value === 'object' && 'value' in value) return value.value;

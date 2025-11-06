@@ -4,7 +4,14 @@
  * Types for DOM, Accessibility, Layout, Vision, Network, and Content extraction tools
  */
 
-import type { BBox, ElementRef, LocatorHint, DomTreeNode, AxTreeNode, NetworkEvent } from '../../shared/types/index.js';
+import type {
+  BBox,
+  ElementRef,
+  LocatorHint,
+  DomTreeNode,
+  AxTreeNode,
+  NetworkEvent,
+} from '../../shared/types/index.js';
 
 // ===== DOM TREE =====
 

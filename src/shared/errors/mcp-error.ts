@@ -17,7 +17,7 @@ export class McpError extends Error {
     public readonly code: ErrorCode = ErrorCode.UNKNOWN_ERROR,
     public readonly severity: ErrorSeverity = ErrorSeverity.ERROR,
     public readonly details?: Record<string, unknown>,
-    public readonly cause?: Error,
+    public readonly cause?: Error
   ) {
     super(message);
     this.name = 'McpError';
@@ -53,7 +53,7 @@ export class McpError extends Error {
   static fromError(
     error: Error,
     code: ErrorCode = ErrorCode.UNKNOWN_ERROR,
-    severity: ErrorSeverity = ErrorSeverity.ERROR,
+    severity: ErrorSeverity = ErrorSeverity.ERROR
   ): McpError {
     return new McpError(error.message, code, severity, undefined, error);
   }
@@ -67,7 +67,7 @@ export class BrowserError extends McpError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.BROWSER_NOT_CONNECTED,
-    details?: Record<string, unknown>,
+    details?: Record<string, unknown>
   ) {
     super(message, code, ErrorSeverity.ERROR, details);
     this.name = 'BrowserError';
@@ -78,7 +78,7 @@ export class ElementError extends McpError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.ELEMENT_NOT_FOUND,
-    details?: Record<string, unknown>,
+    details?: Record<string, unknown>
   ) {
     super(message, code, ErrorSeverity.WARNING, details);
     this.name = 'ElementError';
@@ -89,7 +89,7 @@ export class NavigationError extends McpError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.NAVIGATION_FAILED,
-    details?: Record<string, unknown>,
+    details?: Record<string, unknown>
   ) {
     super(message, code, ErrorSeverity.ERROR, details);
     this.name = 'NavigationError';
@@ -100,7 +100,7 @@ export class InteractionError extends McpError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.CLICK_FAILED,
-    details?: Record<string, unknown>,
+    details?: Record<string, unknown>
   ) {
     super(message, code, ErrorSeverity.WARNING, details);
     this.name = 'InteractionError';
@@ -111,7 +111,7 @@ export class FormError extends McpError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.FORM_NOT_FOUND,
-    details?: Record<string, unknown>,
+    details?: Record<string, unknown>
   ) {
     super(message, code, ErrorSeverity.WARNING, details);
     this.name = 'FormError';
@@ -122,7 +122,7 @@ export class SessionError extends McpError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.SESSION_NOT_FOUND,
-    details?: Record<string, unknown>,
+    details?: Record<string, unknown>
   ) {
     super(message, code, ErrorSeverity.ERROR, details);
     this.name = 'SessionError';
@@ -133,7 +133,7 @@ export class TimeoutError extends McpError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.TIMEOUT,
-    details?: Record<string, unknown>,
+    details?: Record<string, unknown>
   ) {
     super(message, code, ErrorSeverity.WARNING, details);
     this.name = 'TimeoutError';

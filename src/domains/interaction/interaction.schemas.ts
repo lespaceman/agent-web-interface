@@ -122,7 +122,7 @@ export const FormDetectOutputSchema = z.object({
         element: ElementRefSchema.describe('Form element reference'),
         fields: z.array(FormFieldSchema).describe('Form fields'),
         submitButton: SubmitButtonSchema.optional().describe('Submit button if found'),
-      }),
+      })
     )
     .describe('Detected forms'),
 });
@@ -142,7 +142,7 @@ export const FormFillOutputSchema = z.object({
         field: z.string().describe('Field name'),
         success: z.boolean().describe('Whether this field was filled successfully'),
         error: z.string().optional().describe('Error message if field fill failed'),
-      }),
+      })
     )
     .optional()
     .describe('Results for each field'),
@@ -178,7 +178,19 @@ export const KeyboardTypeOutputSchema = z.object({
 
 export const KeyboardHotkeyInputSchema = z.object({
   hotkey: z
-    .enum(['copy', 'paste', 'cut', 'selectAll', 'undo', 'redo', 'save', 'find', 'refresh', 'newTab', 'closeTab'])
+    .enum([
+      'copy',
+      'paste',
+      'cut',
+      'selectAll',
+      'undo',
+      'redo',
+      'save',
+      'find',
+      'refresh',
+      'newTab',
+      'closeTab',
+    ])
     .describe('Common hotkey to execute'),
 });
 

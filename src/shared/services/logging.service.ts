@@ -82,11 +82,7 @@ export class LoggingService implements Logger {
     emergency: 7,
   };
 
-  constructor(
-    minLevel: LogLevel = 'info',
-    maxEntries = 1000,
-    loggerName = 'browser-automation',
-  ) {
+  constructor(minLevel: LogLevel = 'info', maxEntries = 1000, loggerName = 'browser-automation') {
     this.minLevel = minLevel;
     this.maxEntries = maxEntries;
     this.loggerName = loggerName;
@@ -169,7 +165,7 @@ export class LoggingService implements Logger {
     level: LogLevel,
     message: string,
     context?: Record<string, unknown>,
-    error?: Error,
+    error?: Error
   ): void {
     // Check if this log level should be logged
     if (!this.shouldLog(level)) {
@@ -246,9 +242,7 @@ export class LoggingService implements Logger {
    * Check if a log level should be logged based on minimum level
    */
   private shouldLog(level: LogLevel): boolean {
-    return (
-      LoggingService.LOG_LEVELS[level] >= LoggingService.LOG_LEVELS[this.minLevel]
-    );
+    return LoggingService.LOG_LEVELS[level] >= LoggingService.LOG_LEVELS[this.minLevel];
   }
 
   /**
@@ -284,9 +278,7 @@ export class LoggingService implements Logger {
     // Filter by minimum level if specified
     if (minLevel) {
       const minLevelValue = LoggingService.LOG_LEVELS[minLevel];
-      logs = logs.filter(
-        (entry) => LoggingService.LOG_LEVELS[entry.level] >= minLevelValue,
-      );
+      logs = logs.filter((entry) => LoggingService.LOG_LEVELS[entry.level] >= minLevelValue);
     }
 
     // Return most recent N entries
@@ -344,9 +336,7 @@ let globalLogger: LoggingService | null = null;
  * Get or create global logger instance
  */
 export function getLogger(): LoggingService {
-  globalLogger ??= new LoggingService(
-    (process.env.LOG_LEVEL as LogLevel) || 'info',
-  );
+  globalLogger ??= new LoggingService((process.env.LOG_LEVEL as LogLevel) || 'info');
   return globalLogger;
 }
 

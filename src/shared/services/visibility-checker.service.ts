@@ -105,12 +105,9 @@ export class VisibilityCheckerService {
    */
   async getBoundingBox(nodeId: number): Promise<BBox | null> {
     try {
-      const result = await this.cdpBridge.executeDevToolsMethod<BoxModelResult>(
-        'DOM.getBoxModel',
-        {
-          nodeId,
-        },
-      );
+      const result = await this.cdpBridge.executeDevToolsMethod<BoxModelResult>('DOM.getBoxModel', {
+        nodeId,
+      });
 
       const quad = result.model.content;
       const x = Math.min(quad[0], quad[2], quad[4], quad[6]);
@@ -127,13 +124,11 @@ export class VisibilityCheckerService {
   /**
    * Get computed style for an element
    */
-  async getComputedStyle(
-    nodeId: number,
-  ): Promise<Record<string, string> | null> {
+  async getComputedStyle(nodeId: number): Promise<Record<string, string> | null> {
     try {
       const result = await this.cdpBridge.executeDevToolsMethod<ComputedStyleResult>(
         'CSS.getComputedStyleForNode',
-        { nodeId },
+        { nodeId }
       );
 
       const styles: Record<string, string> = {};
@@ -243,13 +238,11 @@ export class VisibilityCheckerService {
       // Calculate visible area
       const visibleX = Math.max(
         0,
-        Math.min(element.bbox.x + element.bbox.w, viewport.width) -
-          Math.max(element.bbox.x, 0),
+        Math.min(element.bbox.x + element.bbox.w, viewport.width) - Math.max(element.bbox.x, 0)
       );
       const visibleY = Math.max(
         0,
-        Math.min(element.bbox.y + element.bbox.h, viewport.height) -
-          Math.max(element.bbox.y, 0),
+        Math.min(element.bbox.y + element.bbox.h, viewport.height) - Math.max(element.bbox.y, 0)
       );
 
       const visibleArea = visibleX * visibleY;

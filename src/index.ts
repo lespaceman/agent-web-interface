@@ -75,7 +75,7 @@ function initializeServer(): BrowserAutomationServer {
     elementResolver,
     accessibilityStrategy,
     domStrategy,
-    bboxStrategy,
+    bboxStrategy
   );
   const formHandler = new FormHandler(formDetector, domTreeHandler, axTreeHandler, actionHandler);
   const keyboardHandler = new KeyboardHandler(cdpBridge);
@@ -119,7 +119,7 @@ function initializeServer(): BrowserAutomationServer {
         logging: {}, // Enable logging capability for observability
       },
     },
-    handlers,
+    handlers
   );
 
   return server;

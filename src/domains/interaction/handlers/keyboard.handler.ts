@@ -6,7 +6,12 @@
  * - kb_hotkey: Execute common hotkeys (Ctrl+C, Ctrl+V, etc.)
  */
 
-import type { KbPressParams, KbPressResponse, KbHotkeyParams, KbHotkeyResponse } from '../interaction.types.js';
+import type {
+  KbPressParams,
+  KbPressResponse,
+  KbHotkeyParams,
+  KbHotkeyResponse,
+} from '../interaction.types.js';
 
 interface CdpBridge {
   executeDevToolsMethod<T>(method: string, params?: unknown): Promise<T>;

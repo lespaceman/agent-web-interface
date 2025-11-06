@@ -25,7 +25,7 @@ export interface McpToolResponse {
  */
 export function createErrorResponse(
   error: unknown,
-  includeStack: boolean = process.env.NODE_ENV !== 'production',
+  includeStack: boolean = process.env.NODE_ENV !== 'production'
 ): McpToolResponse {
   // Convert to McpError if not already
   let mcpError: McpError;
@@ -81,7 +81,7 @@ export function createErrorResponse(
  * @returns Wrapped handler that returns McpToolResponse
  */
 export function withErrorHandling<TInput, TOutput>(
-  handler: (input: TInput) => Promise<TOutput>,
+  handler: (input: TInput) => Promise<TOutput>
 ): (input: TInput) => Promise<McpToolResponse> {
   return async (input: TInput): Promise<McpToolResponse> => {
     try {
@@ -116,9 +116,7 @@ export function createSuccessResponse(output: unknown): McpToolResponse {
  * @param fn - Function to execute
  * @returns McpToolResponse (success or error)
  */
-export async function safeExecute<T>(
-  fn: () => Promise<T>,
-): Promise<McpToolResponse> {
+export async function safeExecute<T>(fn: () => Promise<T>): Promise<McpToolResponse> {
   try {
     const result = await fn();
     return createSuccessResponse(result);
@@ -136,7 +134,7 @@ export async function safeExecute<T>(
  */
 export function createPartialErrorResponse(
   results: { success: boolean; error?: string; [key: string]: unknown }[],
-  message: string,
+  message: string
 ): McpToolResponse {
   const hasErrors = results.some((r) => !r.success);
   const allFailed = results.every((r) => !r.success);

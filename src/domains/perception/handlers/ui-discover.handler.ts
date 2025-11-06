@@ -14,7 +14,7 @@ export class UiDiscoverHandler {
   constructor(
     private readonly domTreeHandler: DomTreeHandler,
     private readonly axTreeHandler: AxTreeHandler,
-    private readonly elementFusion: ElementFusionService,
+    private readonly elementFusion: ElementFusionService
   ) {}
 
   /**

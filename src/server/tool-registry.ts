@@ -15,7 +15,11 @@ import type {
   ContentHandler,
   NetworkHandler,
 } from '../domains/perception/handlers/index.js';
-import type { ActionHandler, FormHandler, KeyboardHandler } from '../domains/interaction/handlers/index.js';
+import type {
+  ActionHandler,
+  FormHandler,
+  KeyboardHandler,
+} from '../domains/interaction/handlers/index.js';
 import type { NavigationHandler } from '../domains/navigation/handlers/index.js';
 import type { SessionHandler } from '../domains/session/handlers/index.js';
 
@@ -53,7 +57,7 @@ export interface Handlers {
 export class ToolRegistry {
   constructor(private readonly handlers: Handlers) {
     console.warn(
-      'ToolRegistry is deprecated. Tool registration is now handled by BrowserAutomationServer.',
+      'ToolRegistry is deprecated. Tool registration is now handled by BrowserAutomationServer.'
     );
   }
 

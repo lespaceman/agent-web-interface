@@ -41,7 +41,7 @@ export class AxTreeHandler {
 
     const result = await this.cdpBridge.executeDevToolsMethod<{ nodes?: CdpAxTreeNode[] }>(
       'Accessibility.getFullAXTree',
-      {}, // Empty params for main frame
+      {} // Empty params for main frame
     );
 
     // Normalize nodes to ensure role and name are strings
@@ -62,17 +62,21 @@ export class AxTreeHandler {
       ...node,
       role: this.extractStringValue(node.role),
       name: this.extractStringValue(node.name),
-      value: node.value ? {
-        type: node.value.type,
-        value: String(node.value.value), // Ensure value is always a string
-      } : undefined,
+      value: node.value
+        ? {
+            type: node.value.type,
+            value: String(node.value.value), // Ensure value is always a string
+          }
+        : undefined,
     };
   }
 
   /**
    * Extract string value from CDP value that can be string or {type, value} object
    */
-  private extractStringValue(value: string | { type: string; value: string } | undefined): string | undefined {
+  private extractStringValue(
+    value: string | { type: string; value: string } | undefined
+  ): string | undefined {
     if (!value) return undefined;
     if (typeof value === 'string') return value;
     if (typeof value === 'object' && 'value' in value) return value.value;

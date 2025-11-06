@@ -78,7 +78,7 @@ export const VisionOcrOutputSchema = z.object({
         text: z.string().describe('Text content'),
         bbox: BBoxSchema.describe('Bounding box of text span'),
         confidence: z.number().optional().describe('OCR confidence score (0-1)'),
-      }),
+      })
     )
     .describe('Text spans with locations'),
 });
@@ -134,7 +134,7 @@ export const ContentGetLinksOutputSchema = z.object({
         href: z.string().describe('Link URL'),
         text: z.string().describe('Link text'),
         element: ElementRefSchema.describe('Link element reference'),
-      }),
+      })
     )
     .describe('Extracted links'),
 });
@@ -144,12 +144,6 @@ export const ContentGetMetadataInputSchema = z.object({});
 export const ContentGetMetadataOutputSchema = z.object({
   title: z.string().describe('Page title'),
   description: z.string().optional().describe('Meta description'),
-  og: z
-    .record(z.string())
-    .optional()
-    .describe('Open Graph metadata'),
-  twitter: z
-    .record(z.string())
-    .optional()
-    .describe('Twitter Card metadata'),
+  og: z.record(z.string()).optional().describe('Open Graph metadata'),
+  twitter: z.record(z.string()).optional().describe('Twitter Card metadata'),
 });

@@ -222,7 +222,9 @@ export class NavigationHandler {
    *
    * Wait for navigation to complete
    */
-  async waitForNavigation(params: NavWaitForNavigationParams): Promise<NavWaitForNavigationResponse> {
+  async waitForNavigation(
+    params: NavWaitForNavigationParams
+  ): Promise<NavWaitForNavigationResponse> {
     try {
       const waitUntil = params.waitUntil ?? 'load';
       const timeout = params.timeout ?? 30000;

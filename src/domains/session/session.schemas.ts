@@ -30,9 +30,13 @@ export const SessionCookiesSetInputSchema = z.object({
         path: z.string().optional().default('/').describe('Cookie path'),
         secure: z.boolean().optional().default(false).describe('Secure flag'),
         httpOnly: z.boolean().optional().default(false).describe('HttpOnly flag'),
-        sameSite: z.enum(['Strict', 'Lax', 'None']).optional().default('Lax').describe('SameSite attribute'),
+        sameSite: z
+          .enum(['Strict', 'Lax', 'None'])
+          .optional()
+          .default('Lax')
+          .describe('SameSite attribute'),
         expires: z.number().optional().describe('Expiration timestamp'),
-      }),
+      })
     )
     .describe('Cookies to set'),
 });

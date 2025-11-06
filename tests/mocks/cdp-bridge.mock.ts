@@ -13,10 +13,7 @@ export class MockCefBridge {
   /**
    * Mock implementation of executeDevToolsMethod
    */
-  executeDevToolsMethod<T = CdpMethodResult>(
-    method: string,
-    params?: unknown,
-  ): Promise<T> {
+  executeDevToolsMethod<T = CdpMethodResult>(method: string, params?: unknown): Promise<T> {
     this.methodCalls.push({ method, params });
 
     const mockResponse = this.mockResponses.get(method);

@@ -42,7 +42,7 @@ function wrapOutput(output: unknown): McpToolResponse {
  */
 async function executeWithLogging<T>(
   toolName: string,
-  handler: () => Promise<T>,
+  handler: () => Promise<T>
 ): Promise<McpToolResponse> {
   const logger = getLogger();
   const startTime = Date.now();
@@ -62,7 +62,7 @@ async function executeWithLogging<T>(
     logger.error(
       `Tool ${toolName} failed after ${executionTime}ms`,
       error instanceof Error ? error : undefined,
-      { toolName },
+      { toolName }
     );
     return createErrorResponse(error);
   }
@@ -80,15 +80,18 @@ export class BrowserAutomationServer implements McpNotificationSender {
 
   constructor(
     private readonly config: ServerConfig,
-    private readonly handlers: Handlers,
+    private readonly handlers: Handlers
   ) {
     // Create modern MCP server instance with capabilities
-    this.server = new McpServer({
-      name: config.name,
-      version: config.version,
-    }, {
-      capabilities: config.capabilities,
-    });
+    this.server = new McpServer(
+      {
+        name: config.name,
+        version: config.version,
+      },
+      {
+        capabilities: config.capabilities,
+      }
+    );
 
     // Create stdio transport
     this.transport = new StdioServerTransport();
@@ -129,16 +132,13 @@ export class BrowserAutomationServer implements McpNotificationSender {
    */
   private registerLoggingHandlers(): void {
     // Handle logging/setLevel requests
-    this.server.server.setRequestHandler(
-      SetLevelRequestSchema,
-      (request) => {
-        const logger = getLogger();
-        const { level } = request.params;
-        logger.setMinLevel(level as LogLevel);
-        logger.info(`Log level set to: ${level}`);
-        return {}; // Empty result as per spec
-      },
-    );
+    this.server.server.setRequestHandler(SetLevelRequestSchema, (request) => {
+      const logger = getLogger();
+      const { level } = request.params;
+      logger.setMinLevel(level as LogLevel);
+      logger.info(`Log level set to: ${level}`);
+      return {}; // Empty result as per spec
+    });
   }
 
   /**
@@ -167,11 +167,12 @@ export class BrowserAutomationServer implements McpNotificationSender {
       'dom_get_tree',
       {
         title: 'Get DOM Tree',
-        description: 'Retrieve the DOM tree structure with configurable depth and visibility filtering',
+        description:
+          'Retrieve the DOM tree structure with configurable depth and visibility filtering',
         inputSchema: PerceptionSchemas.DomGetTreeInputSchema.shape,
         outputSchema: PerceptionSchemas.DomGetTreeOutputSchema.shape,
       },
-      async (input) => executeWithLogging('dom_get_tree', () => this.handlers.domTree.handle(input)),
+      async (input) => executeWithLogging('dom_get_tree', () => this.handlers.domTree.handle(input))
     );
 
     // ax_get_tree
@@ -183,7 +184,7 @@ export class BrowserAutomationServer implements McpNotificationSender {
         inputSchema: PerceptionSchemas.AxGetTreeInputSchema.shape,
         outputSchema: PerceptionSchemas.AxGetTreeOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.axTree.handle(input)),
+      async (input) => wrapOutput(await this.handlers.axTree.handle(input))
     );
 
     // ui_discover
@@ -191,11 +192,12 @@ export class BrowserAutomationServer implements McpNotificationSender {
       'ui_discover',
       {
         title: 'Discover UI Elements',
-        description: 'Discover interactive UI elements by fusing DOM, accessibility, and layout information',
+        description:
+          'Discover interactive UI elements by fusing DOM, accessibility, and layout information',
         inputSchema: PerceptionSchemas.UiDiscoverInputSchema.shape,
         outputSchema: PerceptionSchemas.UiDiscoverOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.uiDiscover.handle(input)),
+      async (input) => wrapOutput(await this.handlers.uiDiscover.handle(input))
     );
 
     // layout_get_box_model
@@ -207,7 +209,7 @@ export class BrowserAutomationServer implements McpNotificationSender {
         inputSchema: PerceptionSchemas.LayoutGetBoxModelInputSchema.shape,
         outputSchema: PerceptionSchemas.LayoutGetBoxModelOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.layout.getBoxModel(input)),
+      async (input) => wrapOutput(await this.handlers.layout.getBoxModel(input))
     );
 
     // layout_is_visible
@@ -219,7 +221,7 @@ export class BrowserAutomationServer implements McpNotificationSender {
         inputSchema: PerceptionSchemas.LayoutIsVisibleInputSchema.shape,
         outputSchema: PerceptionSchemas.LayoutIsVisibleOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.layout.isVisible(input)),
+      async (input) => wrapOutput(await this.handlers.layout.isVisible(input))
     );
 
     // vision_find_by_text
@@ -231,7 +233,7 @@ export class BrowserAutomationServer implements McpNotificationSender {
         inputSchema: PerceptionSchemas.VisionFindByTextInputSchema.shape,
         outputSchema: PerceptionSchemas.VisionFindByTextOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.vision.findByText(input)),
+      async (input) => wrapOutput(await this.handlers.vision.findByText(input))
     );
 
     // content_extract
@@ -243,7 +245,7 @@ export class BrowserAutomationServer implements McpNotificationSender {
         inputSchema: PerceptionSchemas.ContentGetTextInputSchema.shape,
         outputSchema: PerceptionSchemas.ContentGetTextOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.content.extract(input)),
+      async (input) => wrapOutput(await this.handlers.content.extract(input))
     );
 
     // network_observe
@@ -255,7 +257,7 @@ export class BrowserAutomationServer implements McpNotificationSender {
         inputSchema: PerceptionSchemas.NetObserveInputSchema.shape,
         outputSchema: PerceptionSchemas.NetObserveOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.network.observe(input)),
+      async (input) => wrapOutput(await this.handlers.network.observe(input))
     );
   }
 
@@ -284,7 +286,7 @@ Examples:
         inputSchema: InteractionSchemas.TargetsResolveInputSchema.shape,
         outputSchema: InteractionSchemas.TargetsResolveOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.action.resolve(input)),
+      async (input) => wrapOutput(await this.handlers.action.resolve(input))
     );
 
     // act_click
@@ -307,7 +309,7 @@ Examples:
         inputSchema: InteractionSchemas.ActClickInputSchema.shape,
         outputSchema: InteractionSchemas.ActClickOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.action.click(input)),
+      async (input) => wrapOutput(await this.handlers.action.click(input))
     );
 
     // act_type
@@ -330,7 +332,7 @@ Examples:
         inputSchema: InteractionSchemas.ActTypeInputSchema.shape,
         outputSchema: InteractionSchemas.ActTypeOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.action.type(input)),
+      async (input) => wrapOutput(await this.handlers.action.type(input))
     );
 
     // act_scroll_into_view
@@ -352,7 +354,7 @@ Examples:
         inputSchema: InteractionSchemas.ActScrollIntoViewInputSchema.shape,
         outputSchema: InteractionSchemas.ActScrollIntoViewOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.action.scrollIntoView(input)),
+      async (input) => wrapOutput(await this.handlers.action.scrollIntoView(input))
     );
 
     // act_upload
@@ -364,7 +366,7 @@ Examples:
         inputSchema: InteractionSchemas.ActUploadInputSchema.shape,
         outputSchema: InteractionSchemas.ActUploadOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.action.upload(input)),
+      async (input) => wrapOutput(await this.handlers.action.upload(input))
     );
 
     // form_detect
@@ -376,7 +378,7 @@ Examples:
         inputSchema: InteractionSchemas.FormDetectInputSchema.shape,
         outputSchema: InteractionSchemas.FormDetectOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.form.detect(input)),
+      async (input) => wrapOutput(await this.handlers.form.detect(input))
     );
 
     // form_fill
@@ -388,7 +390,7 @@ Examples:
         inputSchema: InteractionSchemas.FormFillInputSchema.shape,
         outputSchema: InteractionSchemas.FormFillOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.form.fill(input)),
+      async (input) => wrapOutput(await this.handlers.form.fill(input))
     );
 
     // kb_press
@@ -400,7 +402,7 @@ Examples:
         inputSchema: InteractionSchemas.KeyboardPressInputSchema.shape,
         outputSchema: InteractionSchemas.KeyboardPressOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.keyboard.press(input)),
+      async (input) => wrapOutput(await this.handlers.keyboard.press(input))
     );
 
     // kb_hotkey
@@ -412,7 +414,7 @@ Examples:
         inputSchema: InteractionSchemas.KeyboardHotkeyInputSchema.shape,
         outputSchema: InteractionSchemas.KeyboardHotkeyOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.keyboard.hotkey(input)),
+      async (input) => wrapOutput(await this.handlers.keyboard.hotkey(input))
     );
   }
 
@@ -429,7 +431,7 @@ Examples:
         inputSchema: NavigationSchemas.NavGotoInputSchema.shape,
         outputSchema: NavigationSchemas.NavGotoOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.navigation.goto(input)),
+      async (input) => wrapOutput(await this.handlers.navigation.goto(input))
     );
 
     // nav_back
@@ -441,7 +443,7 @@ Examples:
         inputSchema: NavigationSchemas.NavBackInputSchema.shape,
         outputSchema: NavigationSchemas.NavBackOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.navigation.back(input)),
+      async (input) => wrapOutput(await this.handlers.navigation.back(input))
     );
 
     // nav_forward
@@ -453,7 +455,7 @@ Examples:
         inputSchema: NavigationSchemas.NavForwardInputSchema.shape,
         outputSchema: NavigationSchemas.NavForwardOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.navigation.forward(input)),
+      async (input) => wrapOutput(await this.handlers.navigation.forward(input))
     );
 
     // nav_reload
@@ -465,7 +467,7 @@ Examples:
         inputSchema: NavigationSchemas.NavReloadInputSchema.shape,
         outputSchema: NavigationSchemas.NavReloadOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.navigation.reload(input)),
+      async (input) => wrapOutput(await this.handlers.navigation.reload(input))
     );
 
     // nav_get_url
@@ -477,7 +479,7 @@ Examples:
         inputSchema: NavigationSchemas.NavGetUrlInputSchema.shape,
         outputSchema: NavigationSchemas.NavGetUrlOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.navigation.getUrl(input)),
+      async (input) => wrapOutput(await this.handlers.navigation.getUrl(input))
     );
   }
 
@@ -494,7 +496,7 @@ Examples:
         inputSchema: SessionSchemas.SessionCookiesGetInputSchema.shape,
         outputSchema: SessionSchemas.SessionCookiesGetOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.session.getCookies(input)),
+      async (input) => wrapOutput(await this.handlers.session.getCookies(input))
     );
 
     // session_cookies_set
@@ -506,7 +508,7 @@ Examples:
         inputSchema: SessionSchemas.SessionCookiesSetInputSchema.shape,
         outputSchema: SessionSchemas.SessionCookiesSetOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.session.setCookies(input)),
+      async (input) => wrapOutput(await this.handlers.session.setCookies(input))
     );
 
     // session_state_get
@@ -518,7 +520,7 @@ Examples:
         inputSchema: SessionSchemas.SessionStateGetInputSchema.shape,
         outputSchema: SessionSchemas.SessionStateGetOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.session.getState(input)),
+      async (input) => wrapOutput(await this.handlers.session.getState(input))
     );
 
     // session_state_set
@@ -530,7 +532,7 @@ Examples:
         inputSchema: SessionSchemas.SessionStateSetInputSchema.shape,
         outputSchema: SessionSchemas.SessionStateSetOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.session.setState(input)),
+      async (input) => wrapOutput(await this.handlers.session.setState(input))
     );
 
     // session_close
@@ -542,7 +544,7 @@ Examples:
         inputSchema: SessionSchemas.SessionCloseInputSchema.shape,
         outputSchema: SessionSchemas.SessionCloseOutputSchema.shape,
       },
-      async (input) => wrapOutput(await this.handlers.session.close(input)),
+      async (input) => wrapOutput(await this.handlers.session.close(input))
     );
   }
 

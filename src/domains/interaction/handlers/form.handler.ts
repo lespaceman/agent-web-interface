@@ -49,7 +49,7 @@ export class FormHandler {
     private readonly formDetector: FormDetectorService,
     private readonly domTreeHandler: DomTreeHandler,
     private readonly axTreeHandler: AxTreeHandler,
-    private readonly actionHandler: ActionHandler,
+    private readonly actionHandler: ActionHandler
   ) {}
 
   /**
@@ -62,13 +62,16 @@ export class FormHandler {
 
     try {
       // Write to file for debugging
-      await import('fs/promises').then(fs =>
-        fs.appendFile('/tmp/mcp-debug.log',
-          `[${new Date().toISOString()}] FormHandler.detect\n` +
-          `  params: ${JSON.stringify(params, null, 2)}\n\n`
-        ).catch(() => {
-          /* ignore file write errors */
-        })
+      await import('fs/promises').then((fs) =>
+        fs
+          .appendFile(
+            '/tmp/mcp-debug.log',
+            `[${new Date().toISOString()}] FormHandler.detect\n` +
+              `  params: ${JSON.stringify(params, null, 2)}\n\n`
+          )
+          .catch(() => {
+            /* ignore file write errors */
+          })
       );
 
       logger.debug('Starting form detection', { scope: params.scope });
@@ -89,7 +92,7 @@ export class FormHandler {
         domTree,
         axTree,
         params.scope,
-        params.visibleOnly,
+        params.visibleOnly
       );
 
       logger.info('Form detection completed', {
@@ -116,14 +119,10 @@ export class FormHandler {
       });
 
       // Throw structured error instead of returning empty result
-      throw new FormError(
-        'Failed to detect form fields',
-        ErrorCode.FORM_NOT_FOUND,
-        {
-          scope: params.scope,
-          originalError: error instanceof Error ? error.message : String(error),
-        },
-      );
+      throw new FormError('Failed to detect form fields', ErrorCode.FORM_NOT_FOUND, {
+        scope: params.scope,
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -165,7 +164,7 @@ export class FormHandler {
             f.name === fieldKey ||
             f.label === fieldKey ||
             f.placeholder === fieldKey ||
-            f.element.selectors.css?.includes(fieldKey),
+            f.element.selectors.css?.includes(fieldKey)
         );
 
         if (!field) {
@@ -216,11 +215,9 @@ export class FormHandler {
 
       // Throw error if all fields failed
       if (results.length > 0 && failedCount === results.length) {
-        throw new FormError(
-          'All form fields failed to fill',
-          ErrorCode.FORM_FILL_FAILED,
-          { results },
-        );
+        throw new FormError('All form fields failed to fill', ErrorCode.FORM_FILL_FAILED, {
+          results,
+        });
       }
 
       return {
@@ -236,14 +233,10 @@ export class FormHandler {
       }
 
       // Otherwise, throw a new FormError
-      throw new FormError(
-        'Failed to fill form',
-        ErrorCode.FORM_FILL_FAILED,
-        {
-          results,
-          originalError: error instanceof Error ? error.message : String(error),
-        },
-      );
+      throw new FormError('Failed to fill form', ErrorCode.FORM_FILL_FAILED, {
+        results,
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

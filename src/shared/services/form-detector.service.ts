@@ -19,7 +19,7 @@ interface CdpBridge {
 interface SelectorBuilder {
   buildSelectors(
     nodeId: number,
-    frameId: string,
+    frameId: string
   ): Promise<{ css?: string; xpath?: string; ax?: string }>;
 }
 
@@ -67,7 +67,7 @@ export class FormDetectorService {
   constructor(
     private readonly cdpBridge: CdpBridge,
     private readonly selectorBuilder: SelectorBuilder,
-    private readonly visibilityChecker: VisibilityChecker,
+    private readonly visibilityChecker: VisibilityChecker
   ) {}
 
   /**
@@ -82,7 +82,7 @@ export class FormDetectorService {
     domTree: { nodes: DomTreeNode[] },
     axTree: { nodes: AxTreeNode[] },
     scope?: LocatorHint,
-    visibleOnly = true,
+    visibleOnly = true
   ): Promise<FormDetectionResult> {
     // Step 1: Find all form elements
     const formElements = this.findFormElements(domTree.nodes);
@@ -217,7 +217,7 @@ export class FormDetectorService {
   private async buildFormFields(
     inputElements: DomTreeNode[],
     axNodes: AxTreeNode[],
-    visibleOnly: boolean,
+    visibleOnly: boolean
   ): Promise<FormField[]> {
     const fields: FormField[] = [];
 
@@ -271,7 +271,7 @@ export class FormDetectorService {
    */
   private async buildSubmitButtons(
     buttonElements: DomTreeNode[],
-    visibleOnly: boolean,
+    visibleOnly: boolean
   ): Promise<SubmitButton[]> {
     const buttons: SubmitButton[] = [];
 
@@ -322,7 +322,7 @@ export class FormDetectorService {
       const label = axNodes.find(
         (n) =>
           n.role === 'LabelText' &&
-          n.properties?.some((p) => p.name === 'for' && p.value === inputId),
+          n.properties?.some((p) => p.name === 'for' && p.value === inputId)
       );
       if (label) {
         return label.name;
@@ -383,7 +383,10 @@ export class FormDetectorService {
 
     const textNodes = node.children.filter((child) => child.tag === '#text');
     if (textNodes.length > 0) {
-      return textNodes.map((n) => n.text ?? '').join(' ').trim();
+      return textNodes
+        .map((n) => n.text ?? '')
+        .join(' ')
+        .trim();
     }
 
     return undefined;

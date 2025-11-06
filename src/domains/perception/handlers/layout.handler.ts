@@ -10,7 +10,10 @@ import type {
   LayoutIsVisibleParams,
   LayoutIsVisibleResponse,
 } from '../perception.types.js';
-import type { ElementResolverService, VisibilityCheckerService } from '../../../shared/services/index.js';
+import type {
+  ElementResolverService,
+  VisibilityCheckerService,
+} from '../../../shared/services/index.js';
 import type { BBox } from '../../../shared/types/index.js';
 
 interface CdpBridge {
@@ -32,7 +35,7 @@ export class LayoutHandler {
   constructor(
     private readonly cdpBridge: CdpBridge,
     private readonly elementResolver: ElementResolverService,
-    private readonly visibilityChecker: VisibilityCheckerService,
+    private readonly visibilityChecker: VisibilityCheckerService
   ) {}
 
   /**

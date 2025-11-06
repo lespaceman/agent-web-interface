@@ -38,14 +38,12 @@ export class NetworkHandler {
   /**
    * Get response body for a specific network request
    */
-  async getResponseBody(
-    params: NetGetResponseBodyParams,
-  ): Promise<NetGetResponseBodyResponse> {
+  async getResponseBody(params: NetGetResponseBodyParams): Promise<NetGetResponseBodyResponse> {
     const result = await this.cdpBridge.executeDevToolsMethod<NetGetResponseBodyResponse>(
       'Network.getResponseBody',
       {
         requestId: params.requestId,
-      },
+      }
     );
 
     return result;
@@ -54,9 +52,7 @@ export class NetworkHandler {
   /**
    * Create an async iterable of network events
    */
-  private async *observeNetworkEvents(
-    patterns?: string[],
-  ): AsyncIterable<NetworkEvent> {
+  private async *observeNetworkEvents(patterns?: string[]): AsyncIterable<NetworkEvent> {
     // This is a simplified implementation
     // In production, you would:
     // 1. Set up event listeners on the CDP client
