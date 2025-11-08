@@ -190,35 +190,35 @@ export class SelectorBuilderService {
    */
   private async getParentNode(nodeId: number): Promise<number | null> {
     try {
-      const result = await this.cdpBridge.executeDevToolsMethod<{
-        node: { parentId?: number };
-      }>('DOM.requestNode', { objectId: nodeId.toString() });
-
-      return result.node.parentId ?? null;
-    } catch {
-      // Alternative approach: use Runtime.evaluate
-      try {
-        const evalResult = await this.cdpBridge.executeDevToolsMethod<{
-          result: { objectId?: string };
-        }>('Runtime.evaluate', {
-          expression: `(function() {
-            const node = document.querySelector('[data-node-id="${nodeId}"]');
-            return node ? node.parentElement : null;
-          })()`,
-          returnByValue: false,
-        });
-
-        if (evalResult.result.objectId) {
-          const nodeInfo = await this.cdpBridge.executeDevToolsMethod<{
-            node: { nodeId: number };
-          }>('DOM.describeNode', {
-            objectId: evalResult.result.objectId,
-          });
-          return nodeInfo.node.nodeId;
-        }
-      } catch {
-        // Fallback failed
+      const resolved = await this.cdpBridge.executeDevToolsMethod<{
+        object: { objectId?: string };
+      }>('DOM.resolveNode', { nodeId });
+      const objectId = resolved.object?.objectId;
+      if (!objectId) {
+        return null;
       }
+
+      const parentResult = await this.cdpBridge.executeDevToolsMethod<{
+        result: { objectId?: string };
+      }>('Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: 'function() { return this.parentElement; }',
+        returnByValue: false,
+      });
+
+      const parentObjectId = parentResult.result.objectId;
+      if (!parentObjectId) {
+        return null;
+      }
+
+      const parentNode = await this.cdpBridge.executeDevToolsMethod<{
+        node: { nodeId: number };
+      }>('DOM.describeNode', {
+        objectId: parentObjectId,
+      });
+
+      return parentNode.node.nodeId;
+    } catch {
       return null;
     }
   }
@@ -226,17 +226,30 @@ export class SelectorBuilderService {
   /**
    * Get the nth-child position of a node among its siblings
    */
-  private async getNthChildPosition(_nodeId: number): Promise<number> {
+  private async getNthChildPosition(nodeId: number): Promise<number> {
     try {
-      // Use Runtime.evaluate to calculate position
+      const resolved = await this.cdpBridge.executeDevToolsMethod<{
+        object: { objectId?: string };
+      }>('DOM.resolveNode', { nodeId });
+      const objectId = resolved.object?.objectId;
+      if (!objectId) return 1;
+
       const result = await this.cdpBridge.executeDevToolsMethod<{
         result: { value?: number };
-      }>('Runtime.evaluate', {
-        expression: `(function() {
-          // This is a simplified version - in production you'd need to inject
-          // a data attribute or use a different strategy
-          return 1;
-        })()`,
+      }>('Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: `
+          function() {
+            if (!this.parentElement) {
+              return 1;
+            }
+            const siblings = Array.from(this.parentElement.children).filter(
+              (child) => child.tagName === this.tagName
+            );
+            const index = siblings.indexOf(this);
+            return index === -1 ? 1 : index + 1;
+          }
+        `,
         returnByValue: true,
       });
 

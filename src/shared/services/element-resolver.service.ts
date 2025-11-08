@@ -102,7 +102,7 @@ export class ElementResolverService {
   private async findNodeId(hint: LocatorHint, frameId: string): Promise<number | null> {
     // Strategy 1: Direct selector (CSS, XPath)
     if ('css' in hint && hint.css) {
-      const result = await this.queryByCss(hint.css, frameId);
+      const result = await this.queryByCssWithFilters(hint.css, hint, frameId);
       if (result) return result;
     }
 
@@ -127,9 +127,84 @@ export class ElementResolverService {
   }
 
   /**
-   * Query element by CSS selector
+   * Query element by CSS selector with optional fuzzy filters
    */
-  private async queryByCss(css: string, _frameId: string): Promise<number | null> {
+  private async queryByCssWithFilters(
+    css: string,
+    hint: LocatorHint,
+    _frameId: string
+  ): Promise<number | null> {
+    const requiresFiltering =
+      ('nearText' in hint && !!hint.nearText) ||
+      ('label' in hint && !!hint.label) ||
+      ('name' in hint && !!hint.name);
+
+    if (!requiresFiltering) {
+      return this.queryByCss(css);
+    }
+
+    try {
+      const expression = `
+        (function() {
+          const matches = Array.from(document.querySelectorAll(${JSON.stringify(css)}));
+          const normalize = (value) => (value || '').trim().toLowerCase();
+          return matches.find((node) => {
+            const text = normalize(node.textContent);
+            const ariaLabel = normalize(node.getAttribute('aria-label'));
+            const nameAttr = normalize(node.getAttribute('name'));
+
+            ${
+              'nearText' in hint && hint.nearText
+                ? `if (!text.includes(${JSON.stringify(hint.nearText.trim().toLowerCase())})) return false;`
+                : ''
+            }
+            ${
+              'label' in hint && hint.label
+                ? `{
+                     const label = ${JSON.stringify(hint.label.trim().toLowerCase())};
+                     if (!(ariaLabel.includes(label) || text.includes(label))) return false;
+                   }`
+                : ''
+            }
+            ${
+              'name' in hint && hint.name
+                ? `{
+                     const nameFilter = ${JSON.stringify(hint.name.trim().toLowerCase())};
+                     if (!(nameAttr.includes(nameFilter) || ariaLabel.includes(nameFilter))) return false;
+                   }`
+                : ''
+            }
+            return true;
+          }) || null;
+        })()
+      `;
+
+      const result = await this.cdpBridge.executeDevToolsMethod<{
+        result: { objectId?: string };
+      }>('Runtime.evaluate', {
+        expression,
+        returnByValue: false,
+      });
+
+      if (result.result.objectId) {
+        const nodeInfo = await this.cdpBridge.executeDevToolsMethod<{ node: { nodeId: number } }>(
+          'DOM.describeNode',
+          { objectId: result.result.objectId }
+        );
+        return nodeInfo.node.nodeId;
+      }
+    } catch {
+      // Fall back to basic CSS query
+      return this.queryByCss(css);
+    }
+
+    return null;
+  }
+
+  /**
+   * Basic CSS query without filters
+   */
+  private async queryByCss(css: string): Promise<number | null> {
     try {
       const result = await this.cdpBridge.executeDevToolsMethod<DomQueryResult>(
         'DOM.querySelector',
@@ -205,10 +280,10 @@ export class ElementResolverService {
       for (const node of axTree.nodes) {
         let matches = true;
 
-        // Check role match - extract string value from CDP format
+        // Check role match - allow case-insensitive equality
         if ('role' in hint && hint.role) {
           const nodeRole = this.extractAxValue(node.role);
-          if (!nodeRole || nodeRole !== hint.role) {
+          if (!nodeRole || !this.matchesRole(hint.role, nodeRole)) {
             matches = false;
           }
         }
@@ -216,7 +291,7 @@ export class ElementResolverService {
         // Check name match (accessible name from ui_discover)
         if ('name' in hint && hint.name && matches) {
           const nodeName = this.extractAxValue(node.name);
-          if (!nodeName || nodeName !== hint.name) {
+          if (!this.matchesAccessibleValue(hint.name, nodeName)) {
             matches = false;
           }
         }
@@ -224,7 +299,7 @@ export class ElementResolverService {
         // Check label match (similar to name)
         if ('label' in hint && hint.label && matches) {
           const nodeName = this.extractAxValue(node.name);
-          if (!nodeName || nodeName !== hint.label) {
+          if (!this.matchesAccessibleValue(hint.label, nodeName)) {
             matches = false;
           }
         }
@@ -244,6 +319,12 @@ export class ElementResolverService {
       // Fallback to DOM-based query if accessibility tree is not available
       return this.queryByAccessibilityFallback(hint);
     }
+
+    // If we have fuzzy fields like nearText/label/name, try DOM fallback as an extra attempt
+    if (this.requiresFuzzyMatching(hint)) {
+      return this.queryByAccessibilityFallback(hint);
+    }
+
     return null;
   }
 
@@ -272,9 +353,13 @@ export class ElementResolverService {
       }
 
       if ('nearText' in hint && hint.nearText) {
-        // Match elements that contain or are near the specified text
+        const normalizedNearText = hint.nearText.toLowerCase();
         conditions.push(
-          `(element.textContent?.includes(${JSON.stringify(hint.nearText)}) || element.getAttribute('aria-label')?.includes(${JSON.stringify(hint.nearText)}))`
+          `(element.textContent?.toLowerCase().includes(${JSON.stringify(
+            normalizedNearText
+          )}) || element.getAttribute('aria-label')?.toLowerCase().includes(${JSON.stringify(
+            normalizedNearText
+          )}))`
         );
       }
 
@@ -484,5 +569,38 @@ export class ElementResolverService {
    */
   private isElementRef(value: ElementRef | LocatorHint): value is ElementRef {
     return (value as ElementRef).selectors !== undefined;
+  }
+  /**
+   * Determine if hint relies on fuzzy matching helpers
+   */
+  private requiresFuzzyMatching(hint: LocatorHint): boolean {
+    return (
+      ('nearText' in hint && !!hint.nearText) ||
+      ('label' in hint && !!hint.label) ||
+      ('name' in hint && !!hint.name)
+    );
+  }
+
+  /**
+   * Case-insensitive role comparison
+   */
+  private matchesRole(expected: string, actual: string | undefined): boolean {
+    if (!actual) return false;
+    return actual.trim().toLowerCase() === expected.trim().toLowerCase();
+  }
+
+  /**
+   * Fuzzy comparison for accessible names/labels
+   */
+  private matchesAccessibleValue(expected: string, actual?: string): boolean {
+    if (!actual) return false;
+    const normalizedExpected = expected.trim().toLowerCase();
+    const normalizedActual = actual.trim().toLowerCase();
+
+    return (
+      normalizedActual === normalizedExpected ||
+      normalizedActual.includes(normalizedExpected) ||
+      normalizedExpected.includes(normalizedActual)
+    );
   }
 }

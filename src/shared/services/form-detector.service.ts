@@ -58,6 +58,17 @@ export interface FormDetectionResult {
   formElement?: ElementRef; // the form element itself, if found
 }
 
+const ARIA_INPUT_ROLES = new Set([
+  'radio',
+  'checkbox',
+  'switch',
+  'combobox',
+  'option',
+  'menuitemradio',
+  'menuitemcheckbox',
+  'tab',
+]);
+
 /**
  * Form Detector Service
  *
@@ -156,7 +167,7 @@ export class FormDetectorService {
     const inputTags = ['input', 'textarea', 'select'];
 
     const traverse = (node: DomTreeNode) => {
-      if (inputTags.includes(node.tag)) {
+      if (inputTags.includes(node.tag) || this.isAriaInput(node)) {
         inputs.push(node);
       }
       if (node.children) {
@@ -171,6 +182,24 @@ export class FormDetectorService {
     }
 
     return inputs;
+  }
+
+  /**
+   * Determine if a DOM node behaves like an input via ARIA role or data attributes
+   */
+  private isAriaInput(node: DomTreeNode): boolean {
+    const role = this.getAttribute(node, 'role')?.toLowerCase();
+    const dataAutom = this.getAttribute(node, 'data-autom')?.toLowerCase();
+
+    if (role && ARIA_INPUT_ROLES.has(role)) {
+      return true;
+    }
+
+    if (dataAutom?.startsWith('dimension')) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -228,14 +257,20 @@ export class FormDetectorService {
       const selectors = await this.selectorBuilder.buildSelectors(node.nodeId, 'main');
 
       // Get attributes
-      const type = this.getAttribute(node, 'type') ?? 'text';
-      const name = this.getAttribute(node, 'name');
+      const type = this.inferFieldType(node);
+      const name =
+        this.getAttribute(node, 'name') ??
+        this.getAttribute(node, 'data-autom') ??
+        this.getAttribute(node, 'id');
       const placeholder = this.getAttribute(node, 'placeholder');
       const required = this.hasAttribute(node, 'required');
       const value = this.getAttribute(node, 'value');
 
-      // Find associated label from accessibility tree
-      const label = this.findLabelForInput(node, axNodes);
+      // Find associated label from accessibility tree or fallback to aria-label
+      const label =
+        this.findLabelForInput(node, axNodes) ??
+        this.findAccessibleNameForNode(node, axNodes) ??
+        this.getAttribute(node, 'aria-label');
 
       // Create ElementRef
       const element: ElementRef = {
@@ -338,6 +373,41 @@ export class FormDetectorService {
     // Try to find parent label
     // Note: This requires DOM parent traversal which we'll skip for now
     return undefined;
+  }
+
+  /**
+   * Use accessibility tree to find computed name for custom controls
+   */
+  private findAccessibleNameForNode(node: DomTreeNode, axNodes: AxTreeNode[]): string | undefined {
+    if (!node.nodeId) return undefined;
+    const match = axNodes.find((axNode) => axNode.backendDOMNodeId === node.nodeId);
+    return match?.name;
+  }
+
+  /**
+   * Infer an input "type" for non-standard controls
+   */
+  private inferFieldType(node: DomTreeNode): string {
+    const explicitType = this.getAttribute(node, 'type');
+    if (explicitType) {
+      return explicitType;
+    }
+
+    const role = this.getAttribute(node, 'role');
+    if (role && ARIA_INPUT_ROLES.has(role.toLowerCase())) {
+      return role;
+    }
+
+    const dataAutom = this.getAttribute(node, 'data-autom');
+    if (dataAutom?.includes('dimensioncolor') || dataAutom?.includes('dimensioncapacity')) {
+      return 'radio';
+    }
+
+    if (node.tag === 'button') {
+      return 'button';
+    }
+
+    return 'text';
   }
 
   /**

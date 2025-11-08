@@ -55,6 +55,9 @@ export class ContentHandler {
     let text = '';
     if (format === 'text') {
       text = this.htmlToText(sourceHtml, 'html-text');
+      if (!text) {
+        text = await this.getInnerText(selector);
+      }
     } else if (format === 'html') {
       text = sourceHtml;
     } else if (format === 'markdown') {
@@ -187,6 +190,23 @@ export class ContentHandler {
         .replace(/\s+/g, ' ')
         .trim()
     );
+  }
+
+  /**
+   * Fallback to the element's innerText for selector-specific extraction
+   */
+  private async getInnerText(selector: string): Promise<string> {
+    try {
+      const result = await this.cdpBridge.executeDevToolsMethod<{
+        result: { value?: string };
+      }>('Runtime.evaluate', {
+        expression: `document.querySelector(${JSON.stringify(selector)})?.innerText ?? ''`,
+        returnByValue: true,
+      });
+      return result.result.value ?? '';
+    } catch {
+      return '';
+    }
   }
 
   /**
