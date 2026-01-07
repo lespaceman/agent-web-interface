@@ -79,7 +79,7 @@ export class BrowserAutomationServer implements McpNotificationSender {
       title: string;
       description?: string;
       inputSchema: ZodRawShape;
-      outputSchema: ZodRawShape;
+      outputSchema?: ZodRawShape;
     },
     handler: (input: unknown) => Promise<unknown>
   ): void {
@@ -100,6 +100,15 @@ export class BrowserAutomationServer implements McpNotificationSender {
           const result = await handler(input);
           const executionTime = Date.now() - startTime;
           logger.debug(`Tool ${name} completed in ${executionTime}ms`);
+
+          // When outputSchema is defined, return structuredContent for MCP validation
+          if (definition.outputSchema) {
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+              structuredContent: result as Record<string, unknown>,
+            };
+          }
+
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(result) }],
           };

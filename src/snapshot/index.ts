@@ -26,3 +26,12 @@ export type {
 
 // Type guards
 export { isInteractiveNode, isReadableNode, isStructuralNode } from './snapshot.types.js';
+
+// Store
+export { SnapshotStore } from './snapshot-store.js';
+
+// Element resolver
+export { resolveLocator, parseLocatorString, type ParsedLocator } from './element-resolver.js';
+
+// Snapshot extractor
+export { extractSnapshot, mapAxRoleToNodeKind } from './snapshot-extractor.js';
