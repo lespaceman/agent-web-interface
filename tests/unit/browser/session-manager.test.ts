@@ -13,6 +13,7 @@ import {
   createLinkedMocks,
   createMockPage,
   createMockCDPSession,
+  createMockBrowserContext,
   type MockBrowser,
   type MockBrowserContext,
   type MockPage,
@@ -25,6 +26,7 @@ vi.mock('playwright', () => ({
   chromium: {
     launch: vi.fn(),
     connectOverCDP: vi.fn(),
+    launchPersistentContext: vi.fn(),
   },
 }));
 
@@ -608,6 +610,163 @@ describe('SessionManager', () => {
 
       expect(page1.close).toHaveBeenCalled();
       expect(page2.close).toHaveBeenCalled();
+    });
+  });
+
+  describe('storage state', () => {
+    it('should launch with storage state file path', async () => {
+      const storageStatePath = '/path/to/state.json';
+
+      await sessionManager.launch({ storageState: storageStatePath });
+
+      expect(vi.mocked(mockBrowser.newContext)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storageState: storageStatePath,
+        })
+      );
+    });
+
+    it('should launch with inline storage state object', async () => {
+      const storageState = {
+        cookies: [
+          {
+            name: 'session',
+            value: 'abc123',
+            domain: 'example.com',
+            path: '/',
+            expires: -1,
+            httpOnly: false,
+            secure: false,
+            sameSite: 'Lax' as const,
+          },
+        ],
+        origins: [
+          {
+            origin: 'https://example.com',
+            localStorage: [{ name: 'token', value: 'xyz' }],
+          },
+        ],
+      };
+
+      await sessionManager.launch({ storageState });
+
+      expect(vi.mocked(mockBrowser.newContext)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storageState,
+        })
+      );
+    });
+
+    it('should save storage state to file', async () => {
+      const mockStorageState = {
+        cookies: [{ name: 'test', value: 'value', domain: 'test.com', path: '/' }],
+        origins: [],
+      };
+      mockContext.storageState = vi.fn().mockResolvedValue(mockStorageState);
+
+      await sessionManager.launch();
+      const result = await sessionManager.saveStorageState();
+
+      expect(mockContext.storageState).toHaveBeenCalled();
+      expect(result).toEqual(mockStorageState);
+    });
+
+    it('should save storage state to file path when provided', async () => {
+      const savePath = '/path/to/save.json';
+      mockContext.storageState = vi.fn().mockResolvedValue({});
+
+      await sessionManager.launch();
+      await sessionManager.saveStorageState(savePath);
+
+      expect(mockContext.storageState).toHaveBeenCalledWith({ path: savePath });
+    });
+
+    it('should throw when saving storage state without running browser', async () => {
+      await expect(sessionManager.saveStorageState()).rejects.toThrow('Browser not running');
+    });
+  });
+
+  describe('persistent profile (userDataDir)', () => {
+    it('should use launchPersistentContext when userDataDir provided', async () => {
+      const userDataDir = '/path/to/profile';
+      const persistentContext = createMockBrowserContext({
+        pages: [mockPage],
+        cdpSession: mockCdpSession,
+      });
+      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
+
+      await sessionManager.launch({ userDataDir });
+
+      expect(vi.mocked(chromium.launchPersistentContext)).toHaveBeenCalledWith(
+        userDataDir,
+        expect.objectContaining({
+          headless: true,
+        })
+      );
+      expect(vi.mocked(chromium.launch)).not.toHaveBeenCalled();
+    });
+
+    it('should apply viewport to persistent context', async () => {
+      const userDataDir = '/path/to/profile';
+      const viewport = { width: 1920, height: 1080 };
+      const persistentContext = createMockBrowserContext({
+        pages: [mockPage],
+        cdpSession: mockCdpSession,
+      });
+      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
+
+      await sessionManager.launch({ userDataDir, viewport });
+
+      expect(vi.mocked(chromium.launchPersistentContext)).toHaveBeenCalledWith(
+        userDataDir,
+        expect.objectContaining({
+          viewport,
+        })
+      );
+    });
+
+    it('should close context on shutdown for persistent profile', async () => {
+      const userDataDir = '/path/to/profile';
+      const persistentContext = createMockBrowserContext({
+        pages: [mockPage],
+        cdpSession: mockCdpSession,
+      });
+      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
+
+      await sessionManager.launch({ userDataDir });
+      await sessionManager.shutdown();
+
+      // For persistent context, we close context directly (no browser.close)
+      expect(persistentContext.close).toHaveBeenCalled();
+    });
+
+    it('should track isPersistentContext flag', async () => {
+      const userDataDir = '/path/to/profile';
+      const persistentContext = createMockBrowserContext({
+        pages: [mockPage],
+        cdpSession: mockCdpSession,
+      });
+      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
+
+      await sessionManager.launch({ userDataDir });
+
+      // Session manager should recognize this is a persistent context
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+
+    it('should create pages in persistent context', async () => {
+      const userDataDir = '/path/to/profile';
+      const persistentContext = createMockBrowserContext({
+        pages: [mockPage],
+        cdpSession: mockCdpSession,
+      });
+      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
+
+      await sessionManager.launch({ userDataDir });
+      const handle = await sessionManager.createPage('https://example.com');
+
+      expectPageId(handle.page_id);
+      expect(persistentContext.newPage).toHaveBeenCalled();
     });
   });
 });

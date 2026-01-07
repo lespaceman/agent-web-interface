@@ -26,6 +26,12 @@ export interface ConnectionStateChangeEvent {
 }
 
 /**
+ * Storage state for cookies and localStorage.
+ * Re-exports Playwright's BrowserContext storageState return type for convenience.
+ */
+export type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
+
+/**
  * Options for launching a new browser
  */
 export interface LaunchOptions {
@@ -43,6 +49,12 @@ export interface LaunchOptions {
 
   /** Timezone ID (e.g., 'America/New_York') */
   timezone?: string;
+
+  /** Path to storage state file or storage state object (cookies, localStorage) */
+  storageState?: string | StorageState;
+
+  /** Directory for persistent browser profile (user data dir) */
+  userDataDir?: string;
 }
 
 /** Default CDP port for Athena Browser */
@@ -100,6 +112,8 @@ export class SessionManager {
   private readonly registry: PageRegistry;
   private readonly logger = getLogger();
   private isExternalBrowser = false;
+  /** Whether context was launched with userDataDir (persistent profile) */
+  private isPersistentContext = false;
   /** Connection state machine */
   private _connectionState: ConnectionState = 'idle';
   /** State change listeners */
@@ -166,18 +180,29 @@ export class SessionManager {
     }
 
     this.transitionTo('connecting');
-    const { headless = true, viewport, userAgent, locale, timezone } = options;
+    const {
+      headless = true,
+      viewport,
+      userAgent,
+      locale,
+      timezone,
+      storageState,
+      userDataDir,
+    } = options;
 
-    this.logger.info('Launching browser', { headless, viewport, locale, timezone });
+    this.logger.info('Launching browser', {
+      headless,
+      viewport,
+      locale,
+      timezone,
+      hasPersistentProfile: !!userDataDir,
+    });
 
     let browser: Browser | null = null;
-    try {
-      // Launch browser
-      browser = await chromium.launch({
-        headless,
-      });
+    let context: BrowserContext | null = null;
 
-      // Create shared context with options
+    try {
+      // Build context options (used for both regular and persistent contexts)
       const contextOptions: Parameters<Browser['newContext']>[0] = {};
 
       if (viewport) {
@@ -192,13 +217,37 @@ export class SessionManager {
       if (timezone) {
         contextOptions.timezoneId = timezone;
       }
+      if (storageState) {
+        contextOptions.storageState = storageState;
+      }
 
-      this.context = await browser.newContext(contextOptions);
-      this.browser = browser;
-      this.isExternalBrowser = false;
+      if (userDataDir) {
+        // Persistent context mode - use launchPersistentContext
+        // This returns a BrowserContext directly (no separate Browser instance)
+        context = await chromium.launchPersistentContext(userDataDir, {
+          headless,
+          ...contextOptions,
+        });
+        this.context = context;
+        this.browser = null; // No separate browser for persistent context
+        this.isPersistentContext = true;
+        this.isExternalBrowser = false;
+      } else {
+        // Regular mode - launch browser then create context
+        browser = await chromium.launch({
+          headless,
+        });
 
-      // Setup disconnect listener
-      this.setupBrowserListeners();
+        this.context = await browser.newContext(contextOptions);
+        this.browser = browser;
+        this.isPersistentContext = false;
+        this.isExternalBrowser = false;
+      }
+
+      // Setup disconnect listener (only for non-persistent contexts with browser)
+      if (this.browser) {
+        this.setupBrowserListeners();
+      }
 
       this.transitionTo('connected');
       this.logger.info('Browser launched successfully');
@@ -206,6 +255,11 @@ export class SessionManager {
       // Cleanup on failure - ignore close errors as browser may be in bad state
       if (browser) {
         await browser.close().catch(() => {
+          /* Intentionally empty - cleanup is best-effort */
+        });
+      }
+      if (context && this.isPersistentContext) {
+        await context.close().catch(() => {
           /* Intentionally empty - cleanup is best-effort */
         });
       }
@@ -482,15 +536,18 @@ export class SessionManager {
    *
    * For launched browsers: closes all pages, context, and browser.
    * For connected browsers: detaches CDP sessions but does NOT close the browser.
+   * For persistent contexts: closes context (which closes pages and browser).
    */
   async shutdown(): Promise<void> {
-    if (!this.browser || this._connectionState === 'disconnecting') {
+    // Check if there's anything to shut down (browser or persistent context)
+    if ((!this.browser && !this.isPersistentContext) || this._connectionState === 'disconnecting') {
       return;
     }
 
     this.transitionTo('disconnecting');
     this.logger.info('Shutting down browser session', {
       isExternalBrowser: this.isExternalBrowser,
+      isPersistentContext: this.isPersistentContext,
     });
 
     // Remove browser disconnect listener to prevent duplicate handling
@@ -509,6 +566,17 @@ export class SessionManager {
     if (this.isExternalBrowser) {
       // For external browser: just disconnect, don't close pages or browser
       this.logger.info('Disconnecting from external browser (not closing it)');
+    } else if (this.isPersistentContext) {
+      // For persistent context: closing context is sufficient
+      // (it handles pages and browser internally)
+      if (this.context) {
+        try {
+          await this.context.close();
+        } catch {
+          // Context may already be closed
+        }
+      }
+      this.logger.info('Persistent context closed');
     } else {
       // For launched browser: close everything
       for (const page of pages) {
@@ -529,16 +597,19 @@ export class SessionManager {
       }
 
       // Close browser
-      try {
-        await this.browser.close();
-      } catch {
-        // Browser may already be closed
+      if (this.browser) {
+        try {
+          await this.browser.close();
+        } catch {
+          // Browser may already be closed
+        }
       }
     }
 
     this.browser = null;
     this.context = null;
     this.isExternalBrowser = false;
+    this.isPersistentContext = false;
     this.registry.clear();
 
     this.transitionTo('idle');
@@ -551,7 +622,29 @@ export class SessionManager {
    * @returns true if browser is active
    */
   isRunning(): boolean {
+    // For persistent contexts, we don't have a browser object
+    if (this.isPersistentContext) {
+      return this.context !== null && this._connectionState === 'connected';
+    }
     return this.browser?.isConnected() ?? false;
+  }
+
+  /**
+   * Save the current storage state (cookies, localStorage).
+   *
+   * @param path - Optional file path to save state to. If not provided, returns the state object.
+   * @returns The storage state object
+   * @throws Error if browser not running
+   */
+  async saveStorageState(path?: string): Promise<StorageState> {
+    if (!this.context) {
+      throw new Error('Browser not running');
+    }
+
+    if (path) {
+      return await this.context.storageState({ path });
+    }
+    return await this.context.storageState();
   }
 
   /**

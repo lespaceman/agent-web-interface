@@ -38,6 +38,7 @@ export interface MockBrowserContext {
   newCDPSession: Mock;
   close: Mock;
   pages: Mock;
+  storageState: Mock;
 }
 
 /**
@@ -124,6 +125,7 @@ export function createMockBrowserContext(
     newCDPSession: newCDPSessionMock,
     close: vi.fn().mockResolvedValue(undefined),
     pages: vi.fn().mockImplementation(() => pages),
+    storageState: vi.fn().mockResolvedValue({ cookies: [], origins: [] }),
   };
 }
 
