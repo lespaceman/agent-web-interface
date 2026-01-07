@@ -2,10 +2,30 @@
  * Session Store
  *
  * Tracks active sessions per MCP client (tenant isolation).
- * Simple in-memory storage with no TTL auto-cleanup.
+ * Supports optional TTL-based auto-cleanup of expired sessions.
  */
 
 import { randomUUID } from 'crypto';
+
+/** Default TTL in milliseconds (30 minutes) */
+const DEFAULT_TTL_MS = 30 * 60 * 1000;
+
+/** Cleanup interval in milliseconds (5 minutes) */
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Options for session store configuration
+ */
+export interface SessionStoreOptions {
+  /** Session TTL in milliseconds (default: 30 minutes, 0 = no expiry) */
+  ttlMs?: number;
+
+  /** Maximum sessions allowed (default: unlimited) */
+  maxSessions?: number;
+
+  /** Enable automatic cleanup of expired sessions (default: false) */
+  autoCleanup?: boolean;
+}
 
 /**
  * Represents a tenant session
@@ -22,6 +42,12 @@ export interface TenantSession {
 
   /** When the session was created */
   created_at: Date;
+
+  /** When the session was last accessed */
+  last_accessed_at: Date;
+
+  /** When the session expires (null = never) */
+  expires_at: Date | null;
 }
 
 /**
@@ -29,21 +55,42 @@ export interface TenantSession {
  */
 export class SessionStore {
   private readonly sessions = new Map<string, TenantSession>();
+  private readonly ttlMs: number;
+  private readonly maxSessions: number;
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
+  constructor(options: SessionStoreOptions = {}) {
+    this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
+    this.maxSessions = options.maxSessions ?? Infinity;
+
+    if (options.autoCleanup && this.ttlMs > 0) {
+      this.startAutoCleanup();
+    }
+  }
 
   /**
    * Create a new session for a tenant
    *
    * @param tenant_id - The tenant/client identifier
    * @returns The new session_id
+   * @throws Error if max sessions limit reached
    */
   createSession(tenant_id: string): string {
+    // Check max sessions limit
+    if (this.sessions.size >= this.maxSessions) {
+      throw new Error(`Maximum sessions limit reached: ${this.maxSessions}`);
+    }
+
     const session_id = `session-${randomUUID()}`;
+    const now = new Date();
 
     const session: TenantSession = {
       session_id,
       tenant_id,
       page_ids: new Set(),
-      created_at: new Date(),
+      created_at: now,
+      last_accessed_at: now,
+      expires_at: this.ttlMs > 0 ? new Date(now.getTime() + this.ttlMs) : null,
     };
 
     this.sessions.set(session_id, session);
@@ -52,13 +99,25 @@ export class SessionStore {
   }
 
   /**
-   * Get a session by its ID
+   * Get a session by its ID.
+   * Automatically refreshes TTL and checks for expiration.
    *
    * @param session_id - The session identifier
-   * @returns TenantSession if found, undefined otherwise
+   * @returns TenantSession if found and not expired, undefined otherwise
    */
   getSession(session_id: string): TenantSession | undefined {
-    return this.sessions.get(session_id);
+    const session = this.sessions.get(session_id);
+    if (!session) return undefined;
+
+    // Check if expired
+    if (this.isExpired(session)) {
+      this.sessions.delete(session_id);
+      return undefined;
+    }
+
+    // Touch session to refresh TTL
+    this.touchSession(session);
+    return session;
   }
 
   /**
@@ -153,5 +212,80 @@ export class SessionStore {
    */
   clear(): void {
     this.sessions.clear();
+  }
+
+  /**
+   * Stop automatic cleanup timer
+   */
+  stopAutoCleanup(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+
+  /**
+   * Start automatic cleanup of expired sessions
+   */
+  startAutoCleanup(): void {
+    this.stopAutoCleanup();
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupExpired();
+    }, CLEANUP_INTERVAL_MS);
+
+    // Don't keep the process alive just for cleanup
+    this.cleanupInterval.unref();
+  }
+
+  /**
+   * Manually clean up all expired sessions
+   *
+   * @returns Number of sessions removed
+   */
+  cleanupExpired(): number {
+    let removed = 0;
+    const now = new Date();
+
+    for (const [session_id, session] of this.sessions) {
+      if (session.expires_at && session.expires_at <= now) {
+        this.sessions.delete(session_id);
+        removed++;
+      }
+    }
+
+    return removed;
+  }
+
+  /**
+   * Check if a session is expired
+   */
+  private isExpired(session: TenantSession): boolean {
+    if (!session.expires_at) return false;
+    return session.expires_at <= new Date();
+  }
+
+  /**
+   * Touch a session to refresh its TTL
+   */
+  private touchSession(session: TenantSession): void {
+    const now = new Date();
+    session.last_accessed_at = now;
+    if (this.ttlMs > 0) {
+      session.expires_at = new Date(now.getTime() + this.ttlMs);
+    }
+  }
+
+  /**
+   * Get the configured TTL in milliseconds
+   */
+  getTtlMs(): number {
+    return this.ttlMs;
+  }
+
+  /**
+   * Get the configured max sessions limit
+   */
+  getMaxSessions(): number {
+    return this.maxSessions;
   }
 }

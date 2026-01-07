@@ -56,6 +56,10 @@ async function main(): Promise<void> {
       console.error(`Shutting down... (${signal})`);
       void (async () => {
         try {
+          // Shutdown browser session first (if initialized)
+          if (sessionManager) {
+            await sessionManager.shutdown();
+          }
           await server.stop();
           process.exit(0);
         } catch (shutdownError) {

@@ -48,6 +48,8 @@ export interface MockBrowser {
   close: Mock;
   isConnected: Mock;
   contexts: Mock;
+  on: Mock;
+  off: Mock;
 }
 
 /**
@@ -78,7 +80,12 @@ export function createMockPage(options: { url?: string; title?: string } = {}): 
 }
 
 /**
- * Creates a mock BrowserContext with preconfigured page and CDP session
+ * Creates a mock BrowserContext with preconfigured page and CDP session.
+ *
+ * For multi-page scenarios:
+ * - `pages()` returns all pages in the array
+ * - `newPage()` cycles through pages (creates new mock if exhausted)
+ * - `newCDPSession()` creates a new CDP session per call
  */
 export function createMockBrowserContext(
   options: {
@@ -86,14 +93,37 @@ export function createMockBrowserContext(
     cdpSession?: MockCDPSession;
   } = {}
 ): MockBrowserContext {
-  const mockPage = options.pages?.[0] ?? createMockPage();
-  const mockCdpSession = options.cdpSession ?? createMockCDPSession();
+  const initialPages = options.pages ?? [createMockPage()];
+  const pages = [...initialPages];
+  let newPageIndex = 0;
+
+  // newPage cycles through provided pages, then creates new ones
+  const newPageMock = vi.fn().mockImplementation(() => {
+    if (newPageIndex < initialPages.length) {
+      return Promise.resolve(initialPages[newPageIndex++]);
+    }
+    // Create a new page if we've exhausted the initial set
+    const newPage = createMockPage();
+    pages.push(newPage);
+    return Promise.resolve(newPage);
+  });
+
+  // newCDPSession creates a fresh session each call (or uses provided one for first call)
+  let cdpCallCount = 0;
+  const newCDPSessionMock = vi.fn().mockImplementation(() => {
+    if (cdpCallCount === 0 && options.cdpSession) {
+      cdpCallCount++;
+      return Promise.resolve(options.cdpSession);
+    }
+    cdpCallCount++;
+    return Promise.resolve(createMockCDPSession());
+  });
 
   return {
-    newPage: vi.fn().mockResolvedValue(mockPage),
-    newCDPSession: vi.fn().mockResolvedValue(mockCdpSession),
+    newPage: newPageMock,
+    newCDPSession: newCDPSessionMock,
     close: vi.fn().mockResolvedValue(undefined),
-    pages: vi.fn().mockReturnValue(options.pages ?? [mockPage]),
+    pages: vi.fn().mockImplementation(() => pages),
   };
 }
 
@@ -112,6 +142,8 @@ export function createMockBrowser(
     close: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
     contexts: vi.fn().mockReturnValue(options.contexts ?? [mockContext]),
+    on: vi.fn(),
+    off: vi.fn(),
   };
 }
 

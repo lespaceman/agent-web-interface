@@ -6,10 +6,102 @@
  * the underlying CDP transport (Playwright, chrome-remote-interface, etc.).
  */
 
+import type { Protocol } from 'devtools-protocol';
+
 /**
  * Handler function for CDP events
  */
-export type CdpEventHandler = (params: Record<string, unknown>) => void;
+export type CdpEventHandler<T = Record<string, unknown>> = (params: T) => void;
+
+/**
+ * Common CDP method signatures for type-safe usage.
+ * Extend this map to add more typed methods.
+ */
+export interface CdpMethodMap {
+  // DOM methods
+  'DOM.getDocument': {
+    params: Protocol.DOM.GetDocumentRequest;
+    result: Protocol.DOM.GetDocumentResponse;
+  };
+  'DOM.describeNode': {
+    params: Protocol.DOM.DescribeNodeRequest;
+    result: Protocol.DOM.DescribeNodeResponse;
+  };
+  'DOM.querySelector': {
+    params: Protocol.DOM.QuerySelectorRequest;
+    result: Protocol.DOM.QuerySelectorResponse;
+  };
+  'DOM.querySelectorAll': {
+    params: Protocol.DOM.QuerySelectorAllRequest;
+    result: Protocol.DOM.QuerySelectorAllResponse;
+  };
+  'DOM.getBoxModel': {
+    params: Protocol.DOM.GetBoxModelRequest;
+    result: Protocol.DOM.GetBoxModelResponse;
+  };
+  'DOM.getOuterHTML': {
+    params: Protocol.DOM.GetOuterHTMLRequest;
+    result: Protocol.DOM.GetOuterHTMLResponse;
+  };
+
+  // Page methods
+  'Page.navigate': {
+    params: Protocol.Page.NavigateRequest;
+    result: Protocol.Page.NavigateResponse;
+  };
+  'Page.captureScreenshot': {
+    params: Protocol.Page.CaptureScreenshotRequest;
+    result: Protocol.Page.CaptureScreenshotResponse;
+  };
+  'Page.getLayoutMetrics': {
+    params: undefined;
+    result: Protocol.Page.GetLayoutMetricsResponse;
+  };
+
+  // Accessibility methods
+  'Accessibility.getFullAXTree': {
+    params: Protocol.Accessibility.GetFullAXTreeRequest;
+    result: Protocol.Accessibility.GetFullAXTreeResponse;
+  };
+
+  // Runtime methods
+  'Runtime.evaluate': {
+    params: Protocol.Runtime.EvaluateRequest;
+    result: Protocol.Runtime.EvaluateResponse;
+  };
+  'Runtime.callFunctionOn': {
+    params: Protocol.Runtime.CallFunctionOnRequest;
+    result: Protocol.Runtime.CallFunctionOnResponse;
+  };
+
+  // Input methods
+  'Input.dispatchMouseEvent': {
+    params: Protocol.Input.DispatchMouseEventRequest;
+    result: void;
+  };
+  'Input.dispatchKeyEvent': {
+    params: Protocol.Input.DispatchKeyEventRequest;
+    result: void;
+  };
+  'Input.insertText': {
+    params: Protocol.Input.InsertTextRequest;
+    result: void;
+  };
+}
+
+/**
+ * Common CDP event signatures for type-safe event handling.
+ */
+export interface CdpEventMap {
+  'Page.loadEventFired': Protocol.Page.LoadEventFiredEvent;
+  'Page.domContentEventFired': Protocol.Page.DomContentEventFiredEvent;
+  'Page.frameNavigated': Protocol.Page.FrameNavigatedEvent;
+  'DOM.documentUpdated': undefined;
+  'DOM.childNodeInserted': Protocol.DOM.ChildNodeInsertedEvent;
+  'DOM.childNodeRemoved': Protocol.DOM.ChildNodeRemovedEvent;
+  'Network.requestWillBeSent': Protocol.Network.RequestWillBeSentEvent;
+  'Network.responseReceived': Protocol.Network.ResponseReceivedEvent;
+}
 
 /**
  * Generic interface for CDP communication.
@@ -26,9 +118,17 @@ export interface CdpClient {
    *
    * @example
    * ```typescript
-   * const doc = await cdp.send<DOM.GetDocumentResponse>('DOM.getDocument', { depth: -1 });
+   * // Type-safe usage with mapped methods
+   * const doc = await cdp.send('DOM.getDocument', { depth: -1 });
+   *
+   * // Generic usage with explicit type
+   * const result = await cdp.send<CustomResponse>('Custom.method', { param: 'value' });
    * ```
    */
+  send<M extends keyof CdpMethodMap>(
+    method: M,
+    params?: CdpMethodMap[M]['params']
+  ): Promise<CdpMethodMap[M]['result']>;
   send<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
 
   /**
@@ -89,4 +189,6 @@ export interface CdpClient {
 export interface CdpClientOptions {
   /** Timeout for CDP commands in milliseconds (default: 30000) */
   timeout?: number;
+  /** List of CDP domains that don't require explicit .enable() calls */
+  domainsWithoutEnable?: string[];
 }

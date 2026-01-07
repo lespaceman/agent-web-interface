@@ -9,11 +9,26 @@ import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { PlaywrightCdpClient } from '../cdp/playwright-cdp-client.js';
 import { PageRegistry, type PageHandle } from './page-registry.js';
 import { getLogger } from '../shared/services/logging.service.js';
+import { BrowserSessionError } from '../shared/errors/browser-session.error.js';
 
 /**
- * Options for launching the browser session
+ * Connection state machine states
  */
-export interface SessionManagerOptions {
+export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'failed';
+
+/**
+ * Event emitted on connection state changes
+ */
+export interface ConnectionStateChangeEvent {
+  previousState: ConnectionState;
+  currentState: ConnectionState;
+  timestamp: Date;
+}
+
+/**
+ * Options for launching a new browser
+ */
+export interface LaunchOptions {
   /** Run browser in headless mode (default: true) */
   headless?: boolean;
 
@@ -30,58 +45,321 @@ export interface SessionManagerOptions {
   timezone?: string;
 }
 
+/** Default CDP port for Athena Browser */
+const DEFAULT_CDP_PORT = 9223;
+/** Default CDP host */
+const DEFAULT_CDP_HOST = '127.0.0.1';
+/** Default connection timeout in ms */
+const DEFAULT_CONNECTION_TIMEOUT = 10000;
+
 /**
- * Manages browser lifecycle and page creation
+ * Options for connecting to an existing browser via CDP
+ */
+export interface ConnectOptions {
+  /** CDP endpoint URL (default: http://127.0.0.1:9223) */
+  endpointUrl?: string;
+
+  /** CDP host (default: 127.0.0.1) - used if endpointUrl not provided */
+  host?: string;
+
+  /** CDP port (default: 9223) - used if endpointUrl not provided */
+  port?: number;
+
+  /** Connection timeout in ms (default: 10000) */
+  timeout?: number;
+}
+
+/** @deprecated Use LaunchOptions instead */
+export type SessionManagerOptions = LaunchOptions;
+
+/**
+ * Validates that a URL is a valid HTTP/HTTPS endpoint URL.
+ *
+ * @param urlString - URL string to validate
+ * @returns true if valid http(s) URL
+ */
+function isValidHttpUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Manages browser lifecycle and page creation.
+ *
+ * Supports two modes:
+ * - launch(): Start a new browser instance
+ * - connect(): Connect to an existing browser via CDP (e.g., Athena Browser)
  */
 export class SessionManager {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private readonly registry: PageRegistry;
   private readonly logger = getLogger();
+  private isExternalBrowser = false;
+  /** Connection state machine */
+  private _connectionState: ConnectionState = 'idle';
+  /** State change listeners */
+  private readonly stateChangeListeners = new Set<(event: ConnectionStateChangeEvent) => void>();
+  /** Browser disconnect handler reference for cleanup */
+  private browserDisconnectHandler: (() => void) | null = null;
 
   constructor() {
     this.registry = new PageRegistry();
   }
 
   /**
-   * Launch browser with optional configuration
+   * Get current connection state
+   */
+  get connectionState(): ConnectionState {
+    return this._connectionState;
+  }
+
+  /**
+   * Transition to a new connection state
+   */
+  private transitionTo(newState: ConnectionState): void {
+    const previousState = this._connectionState;
+    if (previousState === newState) return;
+
+    this._connectionState = newState;
+    this.logger.debug('Connection state changed', { previousState, currentState: newState });
+
+    // Notify listeners
+    const event: ConnectionStateChangeEvent = {
+      previousState,
+      currentState: newState,
+      timestamp: new Date(),
+    };
+    for (const listener of this.stateChangeListeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        this.logger.error(
+          'State change listener error',
+          error instanceof Error ? error : undefined
+        );
+      }
+    }
+  }
+
+  /**
+   * Subscribe to connection state changes
+   */
+  onStateChange(listener: (event: ConnectionStateChangeEvent) => void): () => void {
+    this.stateChangeListeners.add(listener);
+    return () => this.stateChangeListeners.delete(listener);
+  }
+
+  /**
+   * Launch a new browser with optional configuration.
    *
    * @param options - Browser launch options
-   * @throws Error if browser is already running
+   * @throws BrowserSessionError if browser is already running or connection in progress
    */
-  async launch(options: SessionManagerOptions = {}): Promise<void> {
-    if (this.browser) {
-      throw new Error('Browser already running');
+  async launch(options: LaunchOptions = {}): Promise<void> {
+    if (this._connectionState !== 'idle' && this._connectionState !== 'failed') {
+      throw BrowserSessionError.invalidState(this._connectionState, 'launch');
     }
 
+    this.transitionTo('connecting');
     const { headless = true, viewport, userAgent, locale, timezone } = options;
 
     this.logger.info('Launching browser', { headless, viewport, locale, timezone });
 
-    // Launch browser
-    this.browser = await chromium.launch({
-      headless,
+    let browser: Browser | null = null;
+    try {
+      // Launch browser
+      browser = await chromium.launch({
+        headless,
+      });
+
+      // Create shared context with options
+      const contextOptions: Parameters<Browser['newContext']>[0] = {};
+
+      if (viewport) {
+        contextOptions.viewport = viewport;
+      }
+      if (userAgent) {
+        contextOptions.userAgent = userAgent;
+      }
+      if (locale) {
+        contextOptions.locale = locale;
+      }
+      if (timezone) {
+        contextOptions.timezoneId = timezone;
+      }
+
+      this.context = await browser.newContext(contextOptions);
+      this.browser = browser;
+      this.isExternalBrowser = false;
+
+      // Setup disconnect listener
+      this.setupBrowserListeners();
+
+      this.transitionTo('connected');
+      this.logger.info('Browser launched successfully');
+    } catch (error) {
+      // Cleanup on failure - ignore close errors as browser may be in bad state
+      if (browser) {
+        await browser.close().catch(() => {
+          /* Intentionally empty - cleanup is best-effort */
+        });
+      }
+      this.transitionTo('failed');
+      throw BrowserSessionError.connectionFailed(
+        error instanceof Error ? error : new Error(String(error)),
+        { operation: 'launch' }
+      );
+    }
+  }
+
+  /**
+   * Connect to an existing browser via CDP.
+   *
+   * Use this to connect to Athena Browser or any Chromium with remote debugging enabled.
+   *
+   * @param options - Connection options (host/port or endpointUrl)
+   * @throws BrowserSessionError if browser is already running, connection in progress, or URL is invalid
+   *
+   * @example
+   * ```typescript
+   * // Connect to Athena Browser on default port
+   * await session.connect();
+   *
+   * // Connect to custom endpoint
+   * await session.connect({ port: 9222 });
+   * await session.connect({ endpointUrl: 'http://localhost:9223' });
+   * ```
+   */
+  async connect(options: ConnectOptions = {}): Promise<void> {
+    if (this._connectionState !== 'idle' && this._connectionState !== 'failed') {
+      throw BrowserSessionError.invalidState(this._connectionState, 'connect');
+    }
+
+    const host = options.host ?? process.env.CEF_BRIDGE_HOST ?? DEFAULT_CDP_HOST;
+    const port = options.port ?? Number(process.env.CEF_BRIDGE_PORT ?? DEFAULT_CDP_PORT);
+    const endpointUrl = options.endpointUrl ?? `http://${host}:${port}`;
+    const timeout = options.timeout ?? DEFAULT_CONNECTION_TIMEOUT;
+
+    // Validate endpoint URL
+    if (!isValidHttpUrl(endpointUrl)) {
+      throw BrowserSessionError.invalidUrl(endpointUrl);
+    }
+
+    this.transitionTo('connecting');
+    this.logger.info('Connecting to browser via CDP', { endpointUrl, timeout });
+
+    let browser: Browser | null = null;
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    try {
+      // Connect with timeout
+      const connectionPromise = chromium.connectOverCDP(endpointUrl);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(BrowserSessionError.connectionTimeout(endpointUrl, timeout));
+        }, timeout);
+      });
+
+      browser = await Promise.race([connectionPromise, timeoutPromise]);
+
+      // Get the default context (existing browser's context)
+      const contexts = browser.contexts();
+      if (contexts.length > 0) {
+        this.context = contexts[0];
+      } else {
+        // If no context exists, create one (shouldn't happen with Athena)
+        this.context = await browser.newContext();
+      }
+
+      this.browser = browser;
+      this.isExternalBrowser = true;
+
+      // Setup disconnect listener
+      this.setupBrowserListeners();
+
+      this.transitionTo('connected');
+      this.logger.info('Connected to browser successfully', {
+        contexts: contexts.length,
+        pages: this.context.pages().length,
+      });
+    } catch (error) {
+      // Cleanup on failure - ignore close errors as browser may be in bad state
+      if (browser) {
+        await browser.close().catch(() => {
+          /* Intentionally empty - cleanup is best-effort */
+        });
+      }
+      this.transitionTo('failed');
+      this.logger.error('Failed to connect', error instanceof Error ? error : undefined, {
+        endpointUrl,
+      });
+
+      // Re-throw BrowserSessionError as-is, wrap others
+      if (BrowserSessionError.isBrowserSessionError(error)) {
+        throw error;
+      }
+      throw BrowserSessionError.connectionFailed(
+        error instanceof Error ? error : new Error(String(error)),
+        { endpointUrl }
+      );
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+
+  /**
+   * Adopt an existing page from the connected browser.
+   *
+   * When connecting to an external browser (like Athena), use this to
+   * register existing pages instead of creating new ones.
+   *
+   * This method is idempotent - calling it twice on the same page
+   * returns the existing handle without creating a new CDP session.
+   *
+   * @param index - Page index (default: 0 for first/active page)
+   * @returns PageHandle for the adopted page
+   * @throws Error if browser not connected or page index invalid
+   */
+  async adoptPage(index = 0): Promise<PageHandle> {
+    if (!this.context) {
+      throw new Error('Browser not running');
+    }
+
+    const pages = this.context.pages();
+    if (index < 0 || index >= pages.length) {
+      throw new Error(`Invalid page index: ${index}. Browser has ${pages.length} pages.`);
+    }
+
+    const page = pages[index];
+
+    // Check if already adopted (idempotent behavior)
+    const existing = this.registry.findByPage(page);
+    if (existing) {
+      this.logger.debug('Page already adopted', { page_id: existing.page_id });
+      return existing;
+    }
+
+    // Create CDP session for this page
+    const cdpSession = await this.context.newCDPSession(page);
+    const cdpClient = new PlaywrightCdpClient(cdpSession);
+
+    // Register page
+    const handle = this.registry.register(page, cdpClient);
+
+    this.registry.updateMetadata(handle.page_id, {
+      url: page.url(),
     });
 
-    // Create shared context with options
-    const contextOptions: Parameters<Browser['newContext']>[0] = {};
+    this.logger.debug('Adopted page', { page_id: handle.page_id, url: page.url() });
 
-    if (viewport) {
-      contextOptions.viewport = viewport;
-    }
-    if (userAgent) {
-      contextOptions.userAgent = userAgent;
-    }
-    if (locale) {
-      contextOptions.locale = locale;
-    }
-    if (timezone) {
-      contextOptions.timezoneId = timezone;
-    }
-
-    this.context = await this.browser.newContext(contextOptions);
-
-    this.logger.info('Browser launched successfully');
+    return handle;
   }
 
   /**
@@ -174,7 +452,7 @@ export class SessionManager {
    *
    * @param page_id - The page identifier
    * @param url - URL to navigate to
-   * @throws Error if page not found
+   * @throws Error if page not found or navigation fails
    */
   async navigateTo(page_id: string, url: string): Promise<void> {
     const handle = this.registry.get(page_id);
@@ -182,52 +460,89 @@ export class SessionManager {
       throw new Error('Page not found');
     }
 
-    await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
+    try {
+      await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
 
-    this.registry.updateMetadata(page_id, {
-      url: handle.page.url(),
-    });
+      this.registry.updateMetadata(page_id, {
+        url: handle.page.url(),
+      });
 
-    this.logger.debug('Navigated page', { page_id, url });
+      this.logger.debug('Navigated page', { page_id, url });
+    } catch (error) {
+      this.logger.error('Navigation failed', error instanceof Error ? error : undefined, {
+        page_id,
+        url,
+      });
+      throw error;
+    }
   }
 
   /**
-   * Shutdown the browser and all pages
+   * Shutdown the browser session.
+   *
+   * For launched browsers: closes all pages, context, and browser.
+   * For connected browsers: detaches CDP sessions but does NOT close the browser.
    */
   async shutdown(): Promise<void> {
-    if (!this.browser) {
+    if (!this.browser || this._connectionState === 'disconnecting') {
       return;
     }
 
-    this.logger.info('Shutting down browser');
+    this.transitionTo('disconnecting');
+    this.logger.info('Shutting down browser session', {
+      isExternalBrowser: this.isExternalBrowser,
+    });
 
-    // Close all pages
+    // Remove browser disconnect listener to prevent duplicate handling
+    this.removeBrowserListeners();
+
+    // Close/detach all CDP sessions
     const pages = this.registry.list();
     for (const page of pages) {
-      await this.closePage(page.page_id);
-    }
-
-    // Close context
-    if (this.context) {
       try {
-        await this.context.close();
+        await page.cdp.close();
       } catch {
-        // Context may already be closed
+        // CDP session may already be closed
       }
-      this.context = null;
     }
 
-    // Close browser
-    try {
-      await this.browser.close();
-    } catch {
-      // Browser may already be closed
+    if (this.isExternalBrowser) {
+      // For external browser: just disconnect, don't close pages or browser
+      this.logger.info('Disconnecting from external browser (not closing it)');
+    } else {
+      // For launched browser: close everything
+      for (const page of pages) {
+        try {
+          await page.page.close();
+        } catch {
+          // Page may already be closed
+        }
+      }
+
+      // Close context
+      if (this.context) {
+        try {
+          await this.context.close();
+        } catch {
+          // Context may already be closed
+        }
+      }
+
+      // Close browser
+      try {
+        await this.browser.close();
+      } catch {
+        // Browser may already be closed
+      }
     }
+
     this.browser = null;
-
+    this.context = null;
+    this.isExternalBrowser = false;
     this.registry.clear();
 
-    this.logger.info('Browser shutdown complete');
+    this.transitionTo('idle');
+    this.logger.info('Browser session shutdown complete');
   }
 
   /**
@@ -255,5 +570,38 @@ export class SessionManager {
    */
   pageCount(): number {
     return this.registry.size();
+  }
+
+  /**
+   * Setup browser event listeners for disconnect detection.
+   * Called after successful browser launch or connect.
+   */
+  private setupBrowserListeners(): void {
+    if (!this.browser) return;
+
+    // Store reference for cleanup
+    this.browserDisconnectHandler = () => {
+      // Only handle if we're in connected state (not during intentional shutdown)
+      if (this._connectionState === 'connected') {
+        this.logger.warning('Browser disconnected unexpectedly');
+        this.browser = null;
+        this.context = null;
+        this.registry.clear();
+        this.transitionTo('failed');
+      }
+    };
+
+    this.browser.on('disconnected', this.browserDisconnectHandler);
+  }
+
+  /**
+   * Remove browser event listeners.
+   * Called during shutdown to prevent duplicate handling.
+   */
+  private removeBrowserListeners(): void {
+    if (this.browser && this.browserDisconnectHandler) {
+      this.browser.off('disconnected', this.browserDisconnectHandler);
+      this.browserDisconnectHandler = null;
+    }
   }
 }
