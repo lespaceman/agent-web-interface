@@ -1,0 +1,91 @@
+{
+  "nodes": [
+    {
+      "nodeId": "ax-1",
+      "ignored": false,
+      "role": { "type": "role", "value": "WebArea" },
+      "name": { "type": "computedString", "value": "Login - Example.com" },
+      "properties": [],
+      "childIds": ["ax-2"],
+      "backendDOMNodeId": 2
+    },
+    {
+      "nodeId": "ax-2",
+      "ignored": false,
+      "role": { "type": "role", "value": "main" },
+      "name": { "type": "computedString", "value": "" },
+      "properties": [],
+      "childIds": ["ax-3"],
+      "backendDOMNodeId": 7
+    },
+    {
+      "nodeId": "ax-3",
+      "ignored": false,
+      "role": { "type": "role", "value": "form" },
+      "name": { "type": "computedString", "value": "Sign In" },
+      "properties": [],
+      "childIds": ["ax-4", "ax-5", "ax-6", "ax-7", "ax-8"],
+      "backendDOMNodeId": 8
+    },
+    {
+      "nodeId": "ax-4",
+      "ignored": false,
+      "role": { "type": "role", "value": "heading" },
+      "name": { "type": "computedString", "value": "Sign In" },
+      "properties": [
+        { "name": "level", "value": { "type": "integer", "value": 1 } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 9
+    },
+    {
+      "nodeId": "ax-5",
+      "ignored": false,
+      "role": { "type": "role", "value": "textbox" },
+      "name": { "type": "computedString", "value": "Email" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } },
+        { "name": "editable", "value": { "type": "string", "value": "plaintext" } },
+        { "name": "required", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 14
+    },
+    {
+      "nodeId": "ax-6",
+      "ignored": false,
+      "role": { "type": "role", "value": "textbox" },
+      "name": { "type": "computedString", "value": "Password" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } },
+        { "name": "editable", "value": { "type": "string", "value": "plaintext" } },
+        { "name": "required", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 18
+    },
+    {
+      "nodeId": "ax-7",
+      "ignored": false,
+      "role": { "type": "role", "value": "checkbox" },
+      "name": { "type": "computedString", "value": "Remember me" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } },
+        { "name": "checked", "value": { "type": "tristate", "value": "false" } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 20
+    },
+    {
+      "nodeId": "ax-8",
+      "ignored": false,
+      "role": { "type": "role", "value": "button" },
+      "name": { "type": "computedString", "value": "Sign In" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 23
+    }
+  ]
+}

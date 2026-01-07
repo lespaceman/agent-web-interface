@@ -58,6 +58,12 @@ export interface CdpMethodMap {
     result: Protocol.Page.GetLayoutMetricsResponse;
   };
 
+  // CSS methods
+  'CSS.getComputedStyleForNode': {
+    params: Protocol.CSS.GetComputedStyleForNodeRequest;
+    result: Protocol.CSS.GetComputedStyleForNodeResponse;
+  };
+
   // Accessibility methods
   'Accessibility.getFullAXTree': {
     params: Protocol.Accessibility.GetFullAXTreeRequest;

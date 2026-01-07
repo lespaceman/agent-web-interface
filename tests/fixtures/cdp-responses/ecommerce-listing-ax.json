@@ -1,0 +1,220 @@
+{
+  "nodes": [
+    {
+      "nodeId": "ax-1",
+      "ignored": false,
+      "role": { "type": "role", "value": "WebArea" },
+      "name": { "type": "computedString", "value": "Products | Shop" },
+      "properties": [],
+      "childIds": ["ax-2", "ax-3", "ax-4"],
+      "backendDOMNodeId": 2
+    },
+    {
+      "nodeId": "ax-2",
+      "ignored": false,
+      "role": { "type": "role", "value": "banner" },
+      "name": { "type": "computedString", "value": "" },
+      "properties": [],
+      "childIds": ["ax-5"],
+      "backendDOMNodeId": 7
+    },
+    {
+      "nodeId": "ax-5",
+      "ignored": false,
+      "role": { "type": "role", "value": "navigation" },
+      "name": { "type": "computedString", "value": "Main navigation" },
+      "properties": [],
+      "childIds": ["ax-6", "ax-7"],
+      "backendDOMNodeId": 8
+    },
+    {
+      "nodeId": "ax-6",
+      "ignored": false,
+      "role": { "type": "role", "value": "link" },
+      "name": { "type": "computedString", "value": "Shop Logo" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 9
+    },
+    {
+      "nodeId": "ax-7",
+      "ignored": false,
+      "role": { "type": "role", "value": "menubar" },
+      "name": { "type": "computedString", "value": "" },
+      "properties": [],
+      "childIds": ["ax-8", "ax-9"],
+      "backendDOMNodeId": 11
+    },
+    {
+      "nodeId": "ax-8",
+      "ignored": false,
+      "role": { "type": "role", "value": "menuitem" },
+      "name": { "type": "computedString", "value": "Products" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 13
+    },
+    {
+      "nodeId": "ax-9",
+      "ignored": false,
+      "role": { "type": "role", "value": "menuitem" },
+      "name": { "type": "computedString", "value": "Cart" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 16
+    },
+    {
+      "nodeId": "ax-3",
+      "ignored": false,
+      "role": { "type": "role", "value": "main" },
+      "name": { "type": "computedString", "value": "" },
+      "properties": [],
+      "childIds": ["ax-10", "ax-11"],
+      "backendDOMNodeId": 18
+    },
+    {
+      "nodeId": "ax-10",
+      "ignored": false,
+      "role": { "type": "role", "value": "heading" },
+      "name": { "type": "computedString", "value": "Our Products" },
+      "properties": [
+        { "name": "level", "value": { "type": "integer", "value": 1 } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 19
+    },
+    {
+      "nodeId": "ax-11",
+      "ignored": false,
+      "role": { "type": "role", "value": "list" },
+      "name": { "type": "computedString", "value": "Product list" },
+      "properties": [],
+      "childIds": ["ax-12", "ax-17"],
+      "backendDOMNodeId": 21
+    },
+    {
+      "nodeId": "ax-12",
+      "ignored": false,
+      "role": { "type": "role", "value": "article" },
+      "name": { "type": "computedString", "value": "Blue T-Shirt" },
+      "properties": [],
+      "childIds": ["ax-13", "ax-14", "ax-15", "ax-16"],
+      "backendDOMNodeId": 22
+    },
+    {
+      "nodeId": "ax-13",
+      "ignored": false,
+      "role": { "type": "role", "value": "image" },
+      "name": { "type": "computedString", "value": "Blue T-Shirt" },
+      "properties": [],
+      "childIds": [],
+      "backendDOMNodeId": 23
+    },
+    {
+      "nodeId": "ax-14",
+      "ignored": false,
+      "role": { "type": "role", "value": "heading" },
+      "name": { "type": "computedString", "value": "Blue T-Shirt" },
+      "properties": [
+        { "name": "level", "value": { "type": "integer", "value": 2 } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 24
+    },
+    {
+      "nodeId": "ax-15",
+      "ignored": false,
+      "role": { "type": "role", "value": "paragraph" },
+      "name": { "type": "computedString", "value": "$29.99" },
+      "properties": [],
+      "childIds": [],
+      "backendDOMNodeId": 26
+    },
+    {
+      "nodeId": "ax-16",
+      "ignored": false,
+      "role": { "type": "role", "value": "button" },
+      "name": { "type": "computedString", "value": "Add to Cart" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 28
+    },
+    {
+      "nodeId": "ax-17",
+      "ignored": false,
+      "role": { "type": "role", "value": "article" },
+      "name": { "type": "computedString", "value": "Red Sneakers" },
+      "properties": [],
+      "childIds": ["ax-18", "ax-19", "ax-20", "ax-21"],
+      "backendDOMNodeId": 30
+    },
+    {
+      "nodeId": "ax-18",
+      "ignored": false,
+      "role": { "type": "role", "value": "image" },
+      "name": { "type": "computedString", "value": "Red Sneakers" },
+      "properties": [],
+      "childIds": [],
+      "backendDOMNodeId": 31
+    },
+    {
+      "nodeId": "ax-19",
+      "ignored": false,
+      "role": { "type": "role", "value": "heading" },
+      "name": { "type": "computedString", "value": "Red Sneakers" },
+      "properties": [
+        { "name": "level", "value": { "type": "integer", "value": 2 } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 32
+    },
+    {
+      "nodeId": "ax-20",
+      "ignored": false,
+      "role": { "type": "role", "value": "paragraph" },
+      "name": { "type": "computedString", "value": "$89.99" },
+      "properties": [],
+      "childIds": [],
+      "backendDOMNodeId": 34
+    },
+    {
+      "nodeId": "ax-21",
+      "ignored": false,
+      "role": { "type": "role", "value": "button" },
+      "name": { "type": "computedString", "value": "Add to Cart" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 36
+    },
+    {
+      "nodeId": "ax-4",
+      "ignored": false,
+      "role": { "type": "role", "value": "contentinfo" },
+      "name": { "type": "computedString", "value": "" },
+      "properties": [],
+      "childIds": ["ax-22"],
+      "backendDOMNodeId": 38
+    },
+    {
+      "nodeId": "ax-22",
+      "ignored": false,
+      "role": { "type": "role", "value": "link" },
+      "name": { "type": "computedString", "value": "Contact Us" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 39
+    }
+  ]
+}

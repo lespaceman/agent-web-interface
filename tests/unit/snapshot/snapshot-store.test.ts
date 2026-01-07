@@ -153,4 +153,86 @@ describe('SnapshotStore', () => {
       expect(store.removeByPageId('non-existent')).toBe(false);
     });
   });
+
+  describe('TTL support', () => {
+    it('should store timestamp with snapshot', () => {
+      const snapshot = createTestSnapshot('snap-1');
+      store.store('page-1', snapshot);
+
+      const entry = store.getEntry('snap-1');
+      expect(entry).toBeDefined();
+      expect(entry?.storedAt).toBeDefined();
+      expect(typeof entry?.storedAt).toBe('number');
+    });
+
+    it('should cleanup expired snapshots', async () => {
+      // Create store with 50ms TTL
+      const shortTtlStore = new SnapshotStore({ ttlMs: 50 });
+
+      const snapshot = createTestSnapshot('snap-1');
+      shortTtlStore.store('page-1', snapshot);
+
+      // Wait for expiration
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Manual cleanup
+      shortTtlStore.cleanupExpired();
+
+      expect(shortTtlStore.get('snap-1')).toBeUndefined();
+    });
+
+    it('should not cleanup non-expired snapshots', () => {
+      // Create store with long TTL
+      const longTtlStore = new SnapshotStore({ ttlMs: 60000 });
+
+      const snapshot = createTestSnapshot('snap-1');
+      longTtlStore.store('page-1', snapshot);
+
+      longTtlStore.cleanupExpired();
+
+      expect(longTtlStore.get('snap-1')).toBe(snapshot);
+    });
+
+    it('should not expire snapshots when TTL is undefined', () => {
+      const noTtlStore = new SnapshotStore(); // No TTL
+
+      const snapshot = createTestSnapshot('snap-1');
+      noTtlStore.store('page-1', snapshot);
+
+      noTtlStore.cleanupExpired();
+
+      expect(noTtlStore.get('snap-1')).toBe(snapshot);
+    });
+  });
+
+  describe('statistics', () => {
+    it('should track store statistics', () => {
+      const snapshot1 = createTestSnapshot('snap-1', [
+        { node_id: 'n1' },
+        { node_id: 'n2' },
+      ]);
+      const snapshot2 = createTestSnapshot('snap-2', [
+        { node_id: 'n3' },
+      ]);
+
+      store.store('page-1', snapshot1);
+      store.store('page-2', snapshot2);
+
+      const stats = store.getStats();
+
+      expect(stats.snapshotCount).toBe(2);
+      expect(stats.totalNodes).toBe(3);
+    });
+
+    it('should update statistics on remove', () => {
+      const snapshot = createTestSnapshot('snap-1', [{ node_id: 'n1' }]);
+      store.store('page-1', snapshot);
+      store.removeByPageId('page-1');
+
+      const stats = store.getStats();
+
+      expect(stats.snapshotCount).toBe(0);
+      expect(stats.totalNodes).toBe(0);
+    });
+  });
 });

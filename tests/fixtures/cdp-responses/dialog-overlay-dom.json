@@ -1,0 +1,227 @@
+{
+  "root": {
+    "nodeId": 1,
+    "backendNodeId": 1,
+    "nodeType": 9,
+    "nodeName": "#document",
+    "localName": "",
+    "nodeValue": "",
+    "childNodeCount": 1,
+    "documentURL": "https://example.com/page",
+    "baseURL": "https://example.com/page",
+    "children": [
+      {
+        "nodeId": 2,
+        "backendNodeId": 2,
+        "nodeType": 1,
+        "nodeName": "HTML",
+        "localName": "html",
+        "nodeValue": "",
+        "childNodeCount": 2,
+        "attributes": ["lang", "en"],
+        "children": [
+          {
+            "nodeId": 3,
+            "backendNodeId": 3,
+            "nodeType": 1,
+            "nodeName": "HEAD",
+            "localName": "head",
+            "nodeValue": "",
+            "childNodeCount": 1,
+            "attributes": [],
+            "children": [
+              {
+                "nodeId": 4,
+                "backendNodeId": 4,
+                "nodeType": 1,
+                "nodeName": "TITLE",
+                "localName": "title",
+                "nodeValue": "",
+                "childNodeCount": 1,
+                "attributes": [],
+                "children": [
+                  {
+                    "nodeId": 5,
+                    "backendNodeId": 5,
+                    "nodeType": 3,
+                    "nodeName": "#text",
+                    "localName": "",
+                    "nodeValue": "Page with Dialog"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "nodeId": 6,
+            "backendNodeId": 6,
+            "nodeType": 1,
+            "nodeName": "BODY",
+            "localName": "body",
+            "nodeValue": "",
+            "childNodeCount": 2,
+            "attributes": [],
+            "children": [
+              {
+                "nodeId": 7,
+                "backendNodeId": 7,
+                "nodeType": 1,
+                "nodeName": "MAIN",
+                "localName": "main",
+                "nodeValue": "",
+                "childNodeCount": 2,
+                "attributes": [],
+                "children": [
+                  {
+                    "nodeId": 8,
+                    "backendNodeId": 8,
+                    "nodeType": 1,
+                    "nodeName": "H1",
+                    "localName": "h1",
+                    "nodeValue": "",
+                    "childNodeCount": 1,
+                    "attributes": [],
+                    "children": [
+                      {
+                        "nodeId": 9,
+                        "backendNodeId": 9,
+                        "nodeType": 3,
+                        "nodeName": "#text",
+                        "localName": "",
+                        "nodeValue": "Main Content"
+                      }
+                    ]
+                  },
+                  {
+                    "nodeId": 10,
+                    "backendNodeId": 10,
+                    "nodeType": 1,
+                    "nodeName": "BUTTON",
+                    "localName": "button",
+                    "nodeValue": "",
+                    "childNodeCount": 1,
+                    "attributes": ["id", "open-dialog-btn"],
+                    "children": [
+                      {
+                        "nodeId": 11,
+                        "backendNodeId": 11,
+                        "nodeType": 3,
+                        "nodeName": "#text",
+                        "localName": "",
+                        "nodeValue": "Open Dialog"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "nodeId": 12,
+                "backendNodeId": 12,
+                "nodeType": 1,
+                "nodeName": "DIALOG",
+                "localName": "dialog",
+                "nodeValue": "",
+                "childNodeCount": 3,
+                "attributes": ["open", "", "aria-labelledby", "dialog-title", "aria-modal", "true"],
+                "children": [
+                  {
+                    "nodeId": 13,
+                    "backendNodeId": 13,
+                    "nodeType": 1,
+                    "nodeName": "H2",
+                    "localName": "h2",
+                    "nodeValue": "",
+                    "childNodeCount": 1,
+                    "attributes": ["id", "dialog-title"],
+                    "children": [
+                      {
+                        "nodeId": 14,
+                        "backendNodeId": 14,
+                        "nodeType": 3,
+                        "nodeName": "#text",
+                        "localName": "",
+                        "nodeValue": "Confirm Action"
+                      }
+                    ]
+                  },
+                  {
+                    "nodeId": 15,
+                    "backendNodeId": 15,
+                    "nodeType": 1,
+                    "nodeName": "P",
+                    "localName": "p",
+                    "nodeValue": "",
+                    "childNodeCount": 1,
+                    "attributes": [],
+                    "children": [
+                      {
+                        "nodeId": 16,
+                        "backendNodeId": 16,
+                        "nodeType": 3,
+                        "nodeName": "#text",
+                        "localName": "",
+                        "nodeValue": "Are you sure you want to proceed?"
+                      }
+                    ]
+                  },
+                  {
+                    "nodeId": 17,
+                    "backendNodeId": 17,
+                    "nodeType": 1,
+                    "nodeName": "DIV",
+                    "localName": "div",
+                    "nodeValue": "",
+                    "childNodeCount": 2,
+                    "attributes": ["class", "dialog-buttons"],
+                    "children": [
+                      {
+                        "nodeId": 18,
+                        "backendNodeId": 18,
+                        "nodeType": 1,
+                        "nodeName": "BUTTON",
+                        "localName": "button",
+                        "nodeValue": "",
+                        "childNodeCount": 1,
+                        "attributes": ["class", "btn-secondary", "data-testid", "cancel-btn"],
+                        "children": [
+                          {
+                            "nodeId": 19,
+                            "backendNodeId": 19,
+                            "nodeType": 3,
+                            "nodeName": "#text",
+                            "localName": "",
+                            "nodeValue": "Cancel"
+                          }
+                        ]
+                      },
+                      {
+                        "nodeId": 20,
+                        "backendNodeId": 20,
+                        "nodeType": 1,
+                        "nodeName": "BUTTON",
+                        "localName": "button",
+                        "nodeValue": "",
+                        "childNodeCount": 1,
+                        "attributes": ["class", "btn-primary", "data-testid", "confirm-btn"],
+                        "children": [
+                          {
+                            "nodeId": 21,
+                            "backendNodeId": 21,
+                            "nodeType": 3,
+                            "nodeName": "#text",
+                            "localName": "",
+                            "nodeValue": "Confirm"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

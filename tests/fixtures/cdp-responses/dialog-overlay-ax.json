@@ -1,0 +1,97 @@
+{
+  "nodes": [
+    {
+      "nodeId": "ax-1",
+      "ignored": false,
+      "role": { "type": "role", "value": "WebArea" },
+      "name": { "type": "computedString", "value": "Page with Dialog" },
+      "properties": [],
+      "childIds": ["ax-2", "ax-3"],
+      "backendDOMNodeId": 2
+    },
+    {
+      "nodeId": "ax-2",
+      "ignored": false,
+      "role": { "type": "role", "value": "main" },
+      "name": { "type": "computedString", "value": "" },
+      "properties": [],
+      "childIds": ["ax-4", "ax-5"],
+      "backendDOMNodeId": 7
+    },
+    {
+      "nodeId": "ax-4",
+      "ignored": false,
+      "role": { "type": "role", "value": "heading" },
+      "name": { "type": "computedString", "value": "Main Content" },
+      "properties": [
+        { "name": "level", "value": { "type": "integer", "value": 1 } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 8
+    },
+    {
+      "nodeId": "ax-5",
+      "ignored": false,
+      "role": { "type": "role", "value": "button" },
+      "name": { "type": "computedString", "value": "Open Dialog" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 10
+    },
+    {
+      "nodeId": "ax-3",
+      "ignored": false,
+      "role": { "type": "role", "value": "dialog" },
+      "name": { "type": "computedString", "value": "Confirm Action" },
+      "properties": [
+        { "name": "modal", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": ["ax-6", "ax-7", "ax-8", "ax-9"],
+      "backendDOMNodeId": 12
+    },
+    {
+      "nodeId": "ax-6",
+      "ignored": false,
+      "role": { "type": "role", "value": "heading" },
+      "name": { "type": "computedString", "value": "Confirm Action" },
+      "properties": [
+        { "name": "level", "value": { "type": "integer", "value": 2 } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 13
+    },
+    {
+      "nodeId": "ax-7",
+      "ignored": false,
+      "role": { "type": "role", "value": "paragraph" },
+      "name": { "type": "computedString", "value": "Are you sure you want to proceed?" },
+      "properties": [],
+      "childIds": [],
+      "backendDOMNodeId": 15
+    },
+    {
+      "nodeId": "ax-8",
+      "ignored": false,
+      "role": { "type": "role", "value": "button" },
+      "name": { "type": "computedString", "value": "Cancel" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 18
+    },
+    {
+      "nodeId": "ax-9",
+      "ignored": false,
+      "role": { "type": "role", "value": "button" },
+      "name": { "type": "computedString", "value": "Confirm" },
+      "properties": [
+        { "name": "focusable", "value": { "type": "booleanOrUndefined", "value": true } }
+      ],
+      "childIds": [],
+      "backendDOMNodeId": 20
+    }
+  ]
+}
