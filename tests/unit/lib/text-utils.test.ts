@@ -227,6 +227,52 @@ describe('escapeAttrSelectorValue', () => {
   it('should NOT normalize whitespace', () => {
     expect(escapeAttrSelectorValue('foo  bar')).toBe('foo  bar');
   });
+
+  describe('control character escaping (CSS string spec)', () => {
+    it('should replace null (U+0000) with replacement char', () => {
+      expect(escapeAttrSelectorValue('foo\0bar')).toBe('foo\uFFFDbar');
+    });
+
+    it('should escape newline (U+000A) with hex notation', () => {
+      expect(escapeAttrSelectorValue('foo\nbar')).toBe('foo\\a bar');
+    });
+
+    it('should escape carriage return (U+000D)', () => {
+      expect(escapeAttrSelectorValue('foo\rbar')).toBe('foo\\d bar');
+    });
+
+    it('should escape form feed (U+000C)', () => {
+      expect(escapeAttrSelectorValue('foo\fbar')).toBe('foo\\c bar');
+    });
+
+    it('should escape tab (U+0009)', () => {
+      expect(escapeAttrSelectorValue('foo\tbar')).toBe('foo\\9 bar');
+    });
+
+    it('should escape DEL (U+007F)', () => {
+      expect(escapeAttrSelectorValue('foo\x7Fbar')).toBe('foo\\7f bar');
+    });
+
+    it('should escape SOH (U+0001)', () => {
+      expect(escapeAttrSelectorValue('foo\x01bar')).toBe('foo\\1 bar');
+    });
+
+    it('should escape US (U+001F)', () => {
+      expect(escapeAttrSelectorValue('foo\x1Fbar')).toBe('foo\\1f bar');
+    });
+
+    it('should handle multiple control characters', () => {
+      expect(escapeAttrSelectorValue('line1\nline2\ttab')).toBe('line1\\a line2\\9 tab');
+    });
+
+    it('should handle control chars with quotes and backslashes', () => {
+      expect(escapeAttrSelectorValue('a"b\\c\nd')).toBe('a\\"b\\\\c\\a d');
+    });
+
+    it('should handle CRLF sequence', () => {
+      expect(escapeAttrSelectorValue('line1\r\nline2')).toBe('line1\\d \\a line2');
+    });
+  });
 });
 
 describe('escapeAttributeValue (for display)', () => {

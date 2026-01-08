@@ -305,5 +305,135 @@ describe('Locator Builder', () => {
         expect(result.alternates.every((alt) => alt.length > 0)).toBe(true);
       }
     });
+
+    describe('raw accessible name handling for role locators', () => {
+      it('should use raw axNode.name for role locator (not normalized label)', () => {
+        const domNode: RawDomNode = {
+          nodeId: 1,
+          backendNodeId: 100,
+          nodeName: 'BUTTON',
+          nodeType: 1,
+        };
+
+        const axNode: RawAxNode = {
+          nodeId: 'ax-1',
+          backendDOMNodeId: 100,
+          role: 'button',
+          name: '  Submit  Form  ', // Raw name with extra whitespace
+        };
+
+        // Label is normalized version
+        const result = buildLocators(domNode, axNode, 'Submit Form');
+
+        // Role locator should use raw name from axNode.name, preserving whitespace
+        expect(result.primary).toBe('role=button[name="  Submit  Form  "]');
+      });
+
+      it('should not truncate long accessible names in role locators', () => {
+        const longName = 'A'.repeat(200);
+        const domNode: RawDomNode = {
+          nodeId: 1,
+          backendNodeId: 100,
+          nodeName: 'BUTTON',
+          nodeType: 1,
+        };
+
+        const axNode: RawAxNode = {
+          nodeId: 'ax-1',
+          backendDOMNodeId: 100,
+          role: 'button',
+          name: longName,
+        };
+
+        const result = buildLocators(domNode, axNode, 'normalized');
+
+        // Should contain the full 200-character name
+        expect(result.primary).toBe(`role=button[name="${longName}"]`);
+      });
+
+      it('should fall back to aria-label when axNode.name is missing', () => {
+        const domNode: RawDomNode = {
+          nodeId: 1,
+          backendNodeId: 100,
+          nodeName: 'BUTTON',
+          nodeType: 1,
+          attributes: { 'aria-label': 'Close Dialog' },
+        };
+
+        const axNode: RawAxNode = {
+          nodeId: 'ax-1',
+          backendDOMNodeId: 100,
+          role: 'button',
+          // No name property
+        };
+
+        const result = buildLocators(domNode, axNode, 'Close Dialog');
+
+        expect(result.primary).toBe('role=button[name="Close Dialog"]');
+      });
+
+      it('should emit bare role locator when no name available', () => {
+        const domNode: RawDomNode = {
+          nodeId: 1,
+          backendNodeId: 100,
+          nodeName: 'BUTTON',
+          nodeType: 1,
+        };
+
+        const axNode: RawAxNode = {
+          nodeId: 'ax-1',
+          backendDOMNodeId: 100,
+          role: 'button',
+          // No name
+        };
+
+        const result = buildLocators(domNode, axNode, '');
+
+        expect(result.primary).toBe('role=button');
+      });
+
+      it('should escape control characters in raw accessible name', () => {
+        const domNode: RawDomNode = {
+          nodeId: 1,
+          backendNodeId: 100,
+          nodeName: 'BUTTON',
+          nodeType: 1,
+        };
+
+        const axNode: RawAxNode = {
+          nodeId: 'ax-1',
+          backendDOMNodeId: 100,
+          role: 'button',
+          name: 'Line1\nLine2', // Name with newline
+        };
+
+        const result = buildLocators(domNode, axNode, 'Line1 Line2');
+
+        // Newline should be escaped as \a with trailing space
+        expect(result.primary).toBe('role=button[name="Line1\\a Line2"]');
+      });
+
+      it('should prefer axNode.name over domNode aria-label', () => {
+        const domNode: RawDomNode = {
+          nodeId: 1,
+          backendNodeId: 100,
+          nodeName: 'BUTTON',
+          nodeType: 1,
+          attributes: { 'aria-label': 'DOM Label' },
+        };
+
+        const axNode: RawAxNode = {
+          nodeId: 'ax-1',
+          backendDOMNodeId: 100,
+          role: 'button',
+          name: 'AX Computed Name',
+        };
+
+        const result = buildLocators(domNode, axNode, 'AX Computed Name');
+
+        // Should use axNode.name, not aria-label
+        expect(result.primary).toBe('role=button[name="AX Computed Name"]');
+      });
+    });
   });
 });

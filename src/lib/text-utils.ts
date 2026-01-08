@@ -57,14 +57,47 @@ export function escapeAttributeValue(value: string, maxLength = 120): string {
 
 /**
  * Escape a value for use inside CSS attribute selector quotes.
- * Only escapes quotes and backslashes - does NOT truncate or normalize.
- * Use for exact-match selectors like [attr="value"].
+ * Follows CSS string serialization spec:
+ * - Null (U+0000) -> U+FFFD replacement character
+ * - Control chars (U+0001-U+001F, U+007F) -> hex escape with trailing space
+ * - Quotes and backslashes -> backslash escape
+ *
+ * Does NOT truncate or normalize. Use for exact-match selectors like [attr="value"].
  *
  * @param value - Raw attribute value
  * @returns String safe for use in [attr="value"] selectors
  */
 export function escapeAttrSelectorValue(value: string): string {
-  return value.replace(/["\\]/g, '\\$&');
+  if (!value) return '';
+
+  const result: string[] = [];
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value.charAt(i);
+    const codeUnit = value.charCodeAt(i);
+
+    // Null character -> replacement character
+    if (codeUnit === 0) {
+      result.push('\uFFFD');
+      continue;
+    }
+
+    // Control characters (U+0001 to U+001F, U+007F) -> hex escape with trailing space
+    if ((codeUnit >= 0x0001 && codeUnit <= 0x001f) || codeUnit === 0x007f) {
+      result.push('\\' + codeUnit.toString(16) + ' ');
+      continue;
+    }
+
+    // Quotes and backslashes -> backslash escape
+    if (char === '"' || char === '\\') {
+      result.push('\\' + char);
+      continue;
+    }
+
+    result.push(char);
+  }
+
+  return result.join('');
 }
 
 /**

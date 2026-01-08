@@ -16,11 +16,7 @@
 
 import type { NodeLocators } from '../snapshot.types.js';
 import type { RawDomNode, RawAxNode } from './types.js';
-import {
-  escapeAttributeValue,
-  escapeAttrSelectorValue,
-  cssEscape,
-} from '../../lib/text-utils.js';
+import { escapeAttrSelectorValue, cssEscape } from '../../lib/text-utils.js';
 
 /**
  * Test ID attributes to check (in priority order)
@@ -40,15 +36,16 @@ function attrSelector(attr: string, value: string): string {
 }
 
 /**
- * Build a role-based locator.
+ * Build a role-based locator using raw accessible name.
+ * Uses escapeAttrSelectorValue for proper CSS string escaping without truncation.
  *
  * @param role - AX role
- * @param name - Accessible name (optional)
+ * @param name - Raw accessible name (not normalized/truncated)
  * @returns Role locator string
  */
 function roleLocator(role: string, name?: string): string {
   if (name) {
-    return `role=${role}[name="${escapeAttributeValue(name)}"]`;
+    return `role=${role}[name="${escapeAttrSelectorValue(name)}"]`;
   }
   return `role=${role}`;
 }
@@ -103,7 +100,7 @@ function getFirstMeaningfulClass(classList: string | undefined): string | undefi
 export function buildLocators(
   domNode: RawDomNode | undefined,
   axNode: RawAxNode | undefined,
-  label: string
+  _label: string
 ): NodeLocators {
   const attributes = domNode?.attributes ?? {};
   const role = axNode?.role;
@@ -125,14 +122,23 @@ export function buildLocators(
     }
   }
 
-  // 2. Role + name locator
+  // 2. Role + name locator - use RAW accessible name (not normalized label)
   if (role) {
-    const roleSelector = roleLocator(role, label || undefined);
-    if (!primary) {
-      primary = roleSelector;
-    } else if (label) {
-      // Only add as alternate if it has a name (more specific)
-      alternates.push(roleSelector);
+    // Prefer axNode.name (raw computed name from AX tree),
+    // fall back to aria-label attribute (also raw)
+    const rawName = axNode?.name ?? attributes['aria-label'];
+
+    if (rawName) {
+      const roleSelector = roleLocator(role, rawName);
+      if (!primary) {
+        primary = roleSelector;
+      } else {
+        // Add as alternate since it has a specific name
+        alternates.push(roleSelector);
+      }
+    } else {
+      // No name available - emit bare role locator as fallback (not specific enough for alternate)
+      primary ??= roleLocator(role);
     }
   }
 
