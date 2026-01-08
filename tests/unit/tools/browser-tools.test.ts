@@ -428,4 +428,171 @@ describe('BrowserTools', () => {
       expect(result.clicked_element).toBe('Yes');
     });
   });
+
+  describe('findElements()', () => {
+    it('should find elements by kind', async () => {
+      // First capture a snapshot
+      await browserTools.snapshotCapture({ page_id: 'page-123' });
+
+      const result = browserTools.findElements({
+        page_id: 'page-123',
+        kind: 'link',
+      });
+
+      expect(result.page_id).toBe('page-123');
+      expect(result.snapshot_id).toBe('snap-123');
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0]).toEqual({
+        node_id: 'n1',
+        kind: 'link',
+        label: 'More information...',
+        selector: 'role=link[name="More information..."]',
+        region: 'main',
+        group_id: undefined,
+        heading_context: undefined,
+      });
+      expect(result.stats.total_matched).toBe(1);
+    });
+
+    it('should find elements by label', async () => {
+      await browserTools.snapshotCapture({ page_id: 'page-123' });
+
+      const result = browserTools.findElements({
+        page_id: 'page-123',
+        label: 'More information',
+      });
+
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0].label).toBe('More information...');
+    });
+
+    it('should find elements by region', async () => {
+      await browserTools.snapshotCapture({ page_id: 'page-123' });
+
+      const result = browserTools.findElements({
+        page_id: 'page-123',
+        region: 'main',
+      });
+
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0].region).toBe('main');
+    });
+
+    it('should return empty matches for non-matching filter', async () => {
+      await browserTools.snapshotCapture({ page_id: 'page-123' });
+
+      const result = browserTools.findElements({
+        page_id: 'page-123',
+        kind: 'button', // No buttons in the mock snapshot
+      });
+
+      expect(result.matches).toHaveLength(0);
+      expect(result.stats.total_matched).toBe(0);
+    });
+
+    it('should throw error if no snapshot exists', () => {
+      expect(() =>
+        browserTools.findElements({ page_id: 'page-123', kind: 'link' })
+      ).toThrow('No snapshot for page page-123');
+    });
+
+    it('should support label filter with exact mode', async () => {
+      await browserTools.snapshotCapture({ page_id: 'page-123' });
+
+      const result = browserTools.findElements({
+        page_id: 'page-123',
+        label: {
+          text: 'More information...',
+          mode: 'exact',
+        },
+      });
+
+      expect(result.matches).toHaveLength(1);
+    });
+
+    it('should support multiple kinds', async () => {
+      // Create a snapshot with multiple node types
+      const multiNodeSnapshot: BaseSnapshot = {
+        snapshot_id: 'snap-multi',
+        url: 'https://example.com',
+        title: 'Example',
+        captured_at: new Date().toISOString(),
+        viewport: { width: 1280, height: 720 },
+        nodes: [
+          {
+            node_id: 'n1',
+            backend_node_id: 1,
+            kind: 'button',
+            label: 'Submit',
+            where: { region: 'main' },
+            layout: { bbox: { x: 0, y: 0, w: 100, h: 40 } },
+            find: { primary: 'role=button[name="Submit"]' },
+          },
+          {
+            node_id: 'n2',
+            backend_node_id: 2,
+            kind: 'link',
+            label: 'Home',
+            where: { region: 'nav' },
+            layout: { bbox: { x: 0, y: 0, w: 100, h: 40 } },
+            find: { primary: 'role=link[name="Home"]' },
+          },
+          {
+            node_id: 'n3',
+            backend_node_id: 3,
+            kind: 'input',
+            label: 'Email',
+            where: { region: 'main' },
+            layout: { bbox: { x: 0, y: 0, w: 200, h: 40 } },
+            find: { primary: 'role=textbox[name="Email"]' },
+          },
+        ],
+        meta: { node_count: 3, interactive_count: 3 },
+      };
+
+      compileSnapshotMock.mockResolvedValueOnce(multiNodeSnapshot);
+      await browserTools.snapshotCapture({ page_id: 'page-123' });
+
+      const result = browserTools.findElements({
+        page_id: 'page-123',
+        kind: ['button', 'link'],
+      });
+
+      expect(result.matches).toHaveLength(2);
+      expect(result.matches.map((m) => m.kind).sort()).toEqual(['button', 'link']);
+    });
+
+    it('should respect limit parameter', async () => {
+      // Create a snapshot with many nodes
+      const manyNodesSnapshot: BaseSnapshot = {
+        snapshot_id: 'snap-many',
+        url: 'https://example.com',
+        title: 'Example',
+        captured_at: new Date().toISOString(),
+        viewport: { width: 1280, height: 720 },
+        nodes: Array.from({ length: 20 }, (_, i) => ({
+          node_id: `n${i}`,
+          backend_node_id: i,
+          kind: 'link' as const,
+          label: `Link ${i}`,
+          where: { region: 'main' as const },
+          layout: { bbox: { x: 0, y: i * 30, w: 100, h: 25 } },
+          find: { primary: `role=link[name="Link ${i}"]` },
+        })),
+        meta: { node_count: 20, interactive_count: 20 },
+      };
+
+      compileSnapshotMock.mockResolvedValueOnce(manyNodesSnapshot);
+      await browserTools.snapshotCapture({ page_id: 'page-123' });
+
+      const result = browserTools.findElements({
+        page_id: 'page-123',
+        kind: 'link',
+        limit: 5,
+      });
+
+      expect(result.matches).toHaveLength(5);
+      expect(result.stats.total_matched).toBe(20);
+    });
+  });
 });

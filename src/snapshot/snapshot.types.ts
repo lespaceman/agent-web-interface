@@ -136,6 +136,7 @@ export type NodeKind =
   // Readable content
   | 'heading'
   | 'paragraph'
+  | 'text'
   | 'list'
   | 'listitem'
   | 'image'
@@ -383,6 +384,7 @@ export function isReadableNode(node: ReadableNode): boolean {
   const readableKinds: NodeKind[] = [
     'heading',
     'paragraph',
+    'text',
     'list',
     'listitem',
     'image',

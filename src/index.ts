@@ -17,6 +17,7 @@ import {
   snapshotCapture,
   actionClick,
   getNodeDetails,
+  findElements,
   BrowserLaunchInputSchema,
   BrowserLaunchOutputSchema,
   BrowserNavigateInputSchema,
@@ -29,6 +30,8 @@ import {
   ActionClickOutputSchema,
   GetNodeDetailsInputSchema,
   GetNodeDetailsOutputSchema,
+  FindElementsInputSchema,
+  FindElementsOutputSchema,
 } from './tools/index.js';
 
 // Singleton session manager (initialized lazily on first tool use)
@@ -139,6 +142,22 @@ function initializeServer(): BrowserAutomationServer {
       outputSchema: GetNodeDetailsOutputSchema.shape,
     },
     (input) => Promise.resolve(getNodeDetails(input))
+  );
+
+  // Register find_elements tool
+  server.registerTool(
+    'find_elements',
+    {
+      title: 'Find Elements',
+      description:
+        'Find elements in the current snapshot using semantic filters. ' +
+        'Supports filtering by kind (button, link, input), label text, ' +
+        'region (header, footer, nav, main), state (visible, enabled, checked), ' +
+        'group_id, and heading_context. Returns matched nodes with their selectors.',
+      inputSchema: FindElementsInputSchema.shape,
+      outputSchema: FindElementsOutputSchema.shape,
+    },
+    (input) => Promise.resolve(findElements(input))
   );
 
   return server;

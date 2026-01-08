@@ -329,8 +329,8 @@ describe('Locator Builder', () => {
         expect(result.primary).toBe('role=button[name="  Submit  Form  "]');
       });
 
-      it('should not truncate long accessible names in role locators', () => {
-        const longName = 'A'.repeat(200);
+      it('should skip overlong accessible names in role locators', () => {
+        const longName = 'A'.repeat(201);
         const domNode: RawDomNode = {
           nodeId: 1,
           backendNodeId: 100,
@@ -347,8 +347,30 @@ describe('Locator Builder', () => {
 
         const result = buildLocators(domNode, axNode, 'normalized');
 
-        // Should contain the full 200-character name
-        expect(result.primary).toBe(`role=button[name="${longName}"]`);
+        // Overlong names should fall back to bare role locator
+        expect(result.primary).toBe('role=button');
+      });
+
+      it('should skip oversized test-id values and fall back to role', () => {
+        const longTestId = 'x'.repeat(201);
+        const domNode: RawDomNode = {
+          nodeId: 1,
+          backendNodeId: 100,
+          nodeName: 'BUTTON',
+          nodeType: 1,
+          attributes: { 'data-testid': longTestId },
+        };
+
+        const axNode: RawAxNode = {
+          nodeId: 'ax-1',
+          backendDOMNodeId: 100,
+          role: 'button',
+          name: 'Click Me',
+        };
+
+        const result = buildLocators(domNode, axNode, 'Click Me');
+
+        expect(result.primary).toBe('role=button[name="Click Me"]');
       });
 
       it('should fall back to aria-label when axNode.name is missing', () => {
@@ -458,7 +480,7 @@ describe('Locator Builder', () => {
         expect(result.primary).toBe('role=button[name="Close Dialog"]');
       });
 
-      it('should keep control characters raw in role locator (Playwright matches raw)', () => {
+      it('should fall back to bare role locator when name has control characters', () => {
         const domNode: RawDomNode = {
           nodeId: 1,
           backendNodeId: 100,
@@ -475,8 +497,8 @@ describe('Locator Builder', () => {
 
         const result = buildLocators(domNode, axNode, 'Line1 Line2');
 
-        // Control chars kept raw for Playwright role matching (not CSS escaped)
-        expect(result.primary).toBe('role=button[name="Line1\nLine2"]');
+        // Control chars should not be embedded in role locator strings
+        expect(result.primary).toBe('role=button');
       });
 
       it('should escape quotes and backslashes in role locator names', () => {

@@ -14,6 +14,7 @@ export {
   snapshotCapture,
   actionClick,
   getNodeDetails,
+  findElements,
 } from './browser-tools.js';
 
 // Schemas
@@ -52,4 +53,9 @@ export {
   type GetNodeDetailsInput,
   type GetNodeDetailsOutput,
   type NodeDetails,
+  // find_elements
+  FindElementsInputSchema,
+  FindElementsOutputSchema,
+  type FindElementsInput,
+  type FindElementsOutput,
 } from './tool-schemas.js';

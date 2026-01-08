@@ -75,7 +75,7 @@ describe('Grouping Resolver', () => {
 
       const result = resolveGrouping(200, domTree, axTree, []);
 
-      expect(result.group_id).toBe('menu-Main Menu');
+      expect(result.group_id).toBe('menu-main-menu');
     });
 
     it('should detect card/article group', () => {
@@ -305,7 +305,7 @@ describe('Grouping Resolver', () => {
 
       const result = resolveGrouping(200, domTree, axTree, []);
 
-      expect(result.group_id).toBe('list-Options');
+      expect(result.group_id).toBe('list-options');
     });
 
     it('should detect fieldset group', () => {
@@ -389,7 +389,233 @@ describe('Grouping Resolver', () => {
 
       const result = resolveGrouping(200, domTree, axTree, []);
 
-      expect(result.group_id).toBe('tablist-Settings Tabs');
+      expect(result.group_id).toBe('tablist-settings-tabs');
+    });
+  });
+
+  describe('semantic group_id naming', () => {
+    it('should slugify group names', () => {
+      const navNode: RawDomNode = {
+        nodeId: 1,
+        backendNodeId: 100,
+        nodeName: 'NAV',
+        nodeType: 1,
+        attributes: { 'aria-label': 'Shop and Learn' },
+        childNodeIds: [200],
+      };
+
+      const linkNode: RawDomNode = {
+        nodeId: 2,
+        backendNodeId: 200,
+        nodeName: 'A',
+        nodeType: 1,
+        parentId: 100,
+      };
+
+      const navAx: RawAxNode = {
+        nodeId: 'ax-1',
+        backendDOMNodeId: 100,
+        role: 'navigation',
+        name: 'Shop and Learn',
+      };
+
+      const domTree = new Map<number, RawDomNode>([
+        [100, navNode],
+        [200, linkNode],
+      ]);
+
+      const axTree = new Map<number, RawAxNode>([[100, navAx]]);
+
+      const result = resolveGrouping(200, domTree, axTree, []);
+
+      // Should be slugified: "Shop and Learn" → "shop-and-learn"
+      expect(result.group_id).toBe('navigation-shop-and-learn');
+    });
+
+    it('should slugify names with special characters', () => {
+      const menuNode: RawDomNode = {
+        nodeId: 1,
+        backendNodeId: 100,
+        nodeName: 'UL',
+        nodeType: 1,
+        childNodeIds: [200],
+      };
+
+      const itemNode: RawDomNode = {
+        nodeId: 2,
+        backendNodeId: 200,
+        nodeName: 'LI',
+        nodeType: 1,
+        parentId: 100,
+      };
+
+      const menuAx: RawAxNode = {
+        nodeId: 'ax-1',
+        backendDOMNodeId: 100,
+        role: 'menu',
+        name: "Women's & Kids' Apparel",
+      };
+
+      const domTree = new Map<number, RawDomNode>([
+        [100, menuNode],
+        [200, itemNode],
+      ]);
+
+      const axTree = new Map<number, RawAxNode>([[100, menuAx]]);
+
+      const result = resolveGrouping(200, domTree, axTree, []);
+
+      // Should be slugified and cleaned: "Women's & Kids' Apparel" → "womens-kids-apparel"
+      expect(result.group_id).toBe('menu-womens-kids-apparel');
+    });
+
+    it('should use heading context as fallback for unnamed groups', () => {
+      const sectionNode: RawDomNode = {
+        nodeId: 1,
+        backendNodeId: 100,
+        nodeName: 'SECTION',
+        nodeType: 1,
+        childNodeIds: [150, 200],
+      };
+
+      const headingNode: RawDomNode = {
+        nodeId: 15,
+        backendNodeId: 150,
+        nodeName: 'H2',
+        nodeType: 1,
+        parentId: 100,
+      };
+
+      const listNode: RawDomNode = {
+        nodeId: 2,
+        backendNodeId: 200,
+        nodeName: 'UL',
+        nodeType: 1,
+        parentId: 100,
+        childNodeIds: [300],
+      };
+
+      const itemNode: RawDomNode = {
+        nodeId: 3,
+        backendNodeId: 300,
+        nodeName: 'LI',
+        nodeType: 1,
+        parentId: 200,
+      };
+
+      const headingAx: RawAxNode = {
+        nodeId: 'ax-15',
+        backendDOMNodeId: 150,
+        role: 'heading',
+        name: 'Featured Products',
+      };
+
+      // List has NO name - should fallback to heading context
+      const listAx: RawAxNode = {
+        nodeId: 'ax-2',
+        backendDOMNodeId: 200,
+        role: 'list',
+        // No name!
+      };
+
+      const domTree = new Map<number, RawDomNode>([
+        [100, sectionNode],
+        [150, headingNode],
+        [200, listNode],
+        [300, itemNode],
+      ]);
+
+      const axTree = new Map<number, RawAxNode>([
+        [150, headingAx],
+        [200, listAx],
+      ]);
+
+      const allNodes: RawNodeData[] = [
+        { backendNodeId: 150, domNode: headingNode, axNode: headingAx },
+        { backendNodeId: 200, domNode: listNode, axNode: listAx },
+        { backendNodeId: 300, domNode: itemNode },
+      ];
+
+      const result = resolveGrouping(300, domTree, axTree, allNodes);
+
+      // Should use heading context "Featured Products" as fallback
+      expect(result.group_id).toBe('list-featured-products');
+    });
+
+    it('should handle empty names gracefully', () => {
+      const listNode: RawDomNode = {
+        nodeId: 1,
+        backendNodeId: 100,
+        nodeName: 'UL',
+        nodeType: 1,
+        childNodeIds: [200],
+      };
+
+      const itemNode: RawDomNode = {
+        nodeId: 2,
+        backendNodeId: 200,
+        nodeName: 'LI',
+        nodeType: 1,
+        parentId: 100,
+      };
+
+      // Name is empty string
+      const listAx: RawAxNode = {
+        nodeId: 'ax-1',
+        backendDOMNodeId: 100,
+        role: 'list',
+        name: '',
+      };
+
+      const domTree = new Map<number, RawDomNode>([
+        [100, listNode],
+        [200, itemNode],
+      ]);
+
+      const axTree = new Map<number, RawAxNode>([[100, listAx]]);
+
+      const result = resolveGrouping(200, domTree, axTree, []);
+
+      // Should fallback to nodeId since name is empty
+      expect(result.group_id).toBe('list-100');
+    });
+
+    it('should truncate very long slugified names', () => {
+      const menuNode: RawDomNode = {
+        nodeId: 1,
+        backendNodeId: 100,
+        nodeName: 'UL',
+        nodeType: 1,
+        childNodeIds: [200],
+      };
+
+      const itemNode: RawDomNode = {
+        nodeId: 2,
+        backendNodeId: 200,
+        nodeName: 'LI',
+        nodeType: 1,
+        parentId: 100,
+      };
+
+      const menuAx: RawAxNode = {
+        nodeId: 'ax-1',
+        backendDOMNodeId: 100,
+        role: 'menu',
+        name: 'This Is A Very Long Menu Name That Should Be Truncated To Keep IDs Reasonable',
+      };
+
+      const domTree = new Map<number, RawDomNode>([
+        [100, menuNode],
+        [200, itemNode],
+      ]);
+
+      const axTree = new Map<number, RawAxNode>([[100, menuAx]]);
+
+      const result = resolveGrouping(200, domTree, axTree, []);
+
+      // Should be truncated to reasonable length
+      expect(result.group_id!.length).toBeLessThanOrEqual(60);
+      expect(result.group_id).toContain('menu-');
     });
   });
 });

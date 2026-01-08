@@ -86,17 +86,19 @@ function getRegionFromDomRole(
  * 1. AX role (most reliable)
  * 2. DOM role attribute
  * 3. HTML5 tag name
- * 4. Ancestor traversal
+ * 4. Ancestor traversal (checks DOM tags, DOM role attrs, AND AX roles)
  *
  * @param domNode - Raw DOM node data (optional)
  * @param axNode - Raw AX node data (optional)
  * @param domTree - Full DOM tree for ancestor lookup
+ * @param axTree - Full AX tree for ancestor AX role lookup (optional)
  * @returns SemanticRegion
  */
 export function resolveRegion(
   domNode: RawDomNode | undefined,
   axNode: RawAxNode | undefined,
-  domTree: Map<number, RawDomNode>
+  domTree: Map<number, RawDomNode>,
+  axTree?: Map<number, RawAxNode>
 ): SemanticRegion {
   // 1. Check AX role (highest priority)
   const axRegion = getRegionFromRole(axNode?.role);
@@ -118,7 +120,7 @@ export function resolveRegion(
 
   // 4. Traverse ancestors to find containing landmark
   if (domNode && domTree.size > 0) {
-    const ancestorRegion = findAncestorRegion(domNode, domTree);
+    const ancestorRegion = findAncestorRegion(domNode, domTree, axTree);
     if (ancestorRegion && ancestorRegion !== 'unknown') {
       return ancestorRegion;
     }
@@ -130,13 +132,20 @@ export function resolveRegion(
 /**
  * Find region by traversing DOM ancestors.
  *
+ * Checks (in priority order):
+ * 1. Parent's AX role (if axTree provided)
+ * 2. Parent's DOM tag name
+ * 3. Parent's DOM role attribute
+ *
  * @param node - Starting node
  * @param domTree - Full DOM tree
+ * @param axTree - Full AX tree (optional)
  * @returns SemanticRegion from nearest ancestor landmark, or undefined
  */
 function findAncestorRegion(
   node: RawDomNode,
-  domTree: Map<number, RawDomNode>
+  domTree: Map<number, RawDomNode>,
+  axTree?: Map<number, RawAxNode>
 ): SemanticRegion | undefined {
   let currentId = node.parentId;
   const visited = new Set<number>();
@@ -155,6 +164,17 @@ function findAncestorRegion(
     const parentNode = domTree.get(currentId);
     if (!parentNode) {
       break;
+    }
+
+    // Check parent's AX role (highest priority if available)
+    if (axTree) {
+      const parentAx = axTree.get(currentId);
+      if (parentAx?.role) {
+        const axRoleRegion = getRegionFromRole(parentAx.role);
+        if (axRoleRegion && axRoleRegion !== 'unknown') {
+          return axRoleRegion;
+        }
+      }
     }
 
     // Check parent's tag for landmark

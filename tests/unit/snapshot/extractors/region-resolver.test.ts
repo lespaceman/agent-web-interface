@@ -326,5 +326,123 @@ describe('Region Resolver', () => {
 
       expect(result).toBe('nav');
     });
+
+    it('should inherit footer region from ancestor with AX contentinfo role', () => {
+      // Create a tree: DIV (contentinfo AX role) > UL > LI > A
+      // The DIV has no footer tag or role attribute, only AX contentinfo role
+      const footerDiv: RawDomNode = {
+        nodeId: 1,
+        backendNodeId: 100,
+        nodeName: 'DIV',
+        nodeType: 1,
+        childNodeIds: [200],
+      };
+
+      const listNode: RawDomNode = {
+        nodeId: 2,
+        backendNodeId: 200,
+        nodeName: 'UL',
+        nodeType: 1,
+        parentId: 100,
+        childNodeIds: [300],
+      };
+
+      const listItemNode: RawDomNode = {
+        nodeId: 3,
+        backendNodeId: 300,
+        nodeName: 'LI',
+        nodeType: 1,
+        parentId: 200,
+        childNodeIds: [400],
+      };
+
+      const linkNode: RawDomNode = {
+        nodeId: 4,
+        backendNodeId: 400,
+        nodeName: 'A',
+        nodeType: 1,
+        parentId: 300,
+      };
+
+      // The footer DIV has contentinfo AX role
+      const footerAxNode: RawAxNode = {
+        nodeId: 'ax-1',
+        backendDOMNodeId: 100,
+        role: 'contentinfo',
+      };
+
+      const domTree = new Map<number, RawDomNode>([
+        [100, footerDiv],
+        [200, listNode],
+        [300, listItemNode],
+        [400, linkNode],
+      ]);
+
+      const axTree = new Map<number, RawAxNode>([[100, footerAxNode]]);
+
+      // The link should inherit footer region from the DIV ancestor
+      // Even though the DIV doesn't have FOOTER tag or role attribute
+      const result = resolveRegion(linkNode, undefined, domTree, axTree);
+
+      expect(result).toBe('footer');
+    });
+
+    it('should detect footer region from deeply nested element in footer', () => {
+      // Create: FOOTER > DIV > DIV > DIV > BUTTON
+      const footerNode: RawDomNode = {
+        nodeId: 1,
+        backendNodeId: 100,
+        nodeName: 'FOOTER',
+        nodeType: 1,
+        childNodeIds: [200],
+      };
+
+      const div1: RawDomNode = {
+        nodeId: 2,
+        backendNodeId: 200,
+        nodeName: 'DIV',
+        nodeType: 1,
+        parentId: 100,
+        childNodeIds: [300],
+      };
+
+      const div2: RawDomNode = {
+        nodeId: 3,
+        backendNodeId: 300,
+        nodeName: 'DIV',
+        nodeType: 1,
+        parentId: 200,
+        childNodeIds: [400],
+      };
+
+      const div3: RawDomNode = {
+        nodeId: 4,
+        backendNodeId: 400,
+        nodeName: 'DIV',
+        nodeType: 1,
+        parentId: 300,
+        childNodeIds: [500],
+      };
+
+      const buttonNode: RawDomNode = {
+        nodeId: 5,
+        backendNodeId: 500,
+        nodeName: 'BUTTON',
+        nodeType: 1,
+        parentId: 400,
+      };
+
+      const domTree = new Map<number, RawDomNode>([
+        [100, footerNode],
+        [200, div1],
+        [300, div2],
+        [400, div3],
+        [500, buttonNode],
+      ]);
+
+      const result = resolveRegion(buttonNode, undefined, domTree);
+
+      expect(result).toBe('footer');
+    });
   });
 });

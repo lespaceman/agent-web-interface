@@ -56,6 +56,53 @@ interface AdjacencyMaps {
   contentDocsByFrame: Map<number, number[]>;
 }
 
+type IdMapsByContext = Map<string, Map<string, RawDomNode>>;
+
+const ROOT_CONTEXT = 'root';
+const LIGHT_DOM_CONTEXT = 'light';
+
+/**
+ * Build a context key based on iframe and shadow ancestry.
+ */
+function buildContextKey(node: RawDomNode): string {
+  const frameKey = node.framePath?.length ? node.framePath.join('/') : ROOT_CONTEXT;
+  const shadowKey = node.shadowPath?.length ? node.shadowPath.join('/') : LIGHT_DOM_CONTEXT;
+  return `${frameKey}|${shadowKey}`;
+}
+
+/**
+ * Build context-scoped ID maps to avoid cross-frame/shadow collisions.
+ */
+function buildIdMapsByContext(domResult: DomExtractionResult): IdMapsByContext {
+  const idMaps = new Map<string, Map<string, RawDomNode>>();
+
+  for (const node of domResult.nodes.values()) {
+    const id = node.attributes?.id;
+    if (!id) continue;
+
+    const contextKey = buildContextKey(node);
+    let map = idMaps.get(contextKey);
+    if (!map) {
+      map = new Map<string, RawDomNode>();
+      idMaps.set(contextKey, map);
+    }
+    map.set(id, node);
+  }
+
+  return idMaps;
+}
+
+/**
+ * Get the ID map scoped to a node's frame/shadow context.
+ */
+function getIdMapForNode(
+  node: RawDomNode | undefined,
+  idMapsByContext: IdMapsByContext
+): Map<string, RawDomNode> | undefined {
+  if (!node) return undefined;
+  return idMapsByContext.get(buildContextKey(node));
+}
+
 /**
  * Build adjacency maps for shadow roots and iframe content documents.
  * Single O(n) pass through all nodes.
@@ -155,7 +202,7 @@ function buildDomOrderIndex(
 function buildHeadingIndex(
   domResult: DomExtractionResult,
   axResult: AxExtractionResult | undefined,
-  idMap: Map<string, RawDomNode>,
+  idMapsByContext: IdMapsByContext,
   adjacencyMaps: AdjacencyMaps
 ): Map<number, string> {
   const headingIndex = new Map<number, string>();
@@ -167,11 +214,13 @@ function buildHeadingIndex(
     const axNode = axResult?.nodes.get(backendNodeId);
 
     // Check AX role first
+    const scopedIdMap = domNode ? getIdMapForNode(domNode, idMapsByContext) : undefined;
+
     if (axNode?.role === 'heading') {
       // Priority: AX name -> resolveLabel -> DOM text content
       let name = axNode.name;
       if (!name && domNode) {
-        const labelResult = resolveLabel(domNode, axNode, idMap);
+        const labelResult = resolveLabel(domNode, axNode, scopedIdMap);
         if (labelResult.source !== 'none') {
           name = labelResult.label;
         }
@@ -185,7 +234,7 @@ function buildHeadingIndex(
       // Priority: AX name -> resolveLabel -> DOM text content
       let name = axNode?.name;
       if (!name) {
-        const labelResult = resolveLabel(domNode, axNode, idMap);
+        const labelResult = resolveLabel(domNode, axNode, scopedIdMap);
         if (labelResult.source !== 'none') {
           name = labelResult.label;
         }
@@ -299,6 +348,8 @@ function mapRoleToKind(role: string | undefined): NodeKind | undefined {
     // Readable
     heading: 'heading',
     paragraph: 'paragraph',
+    text: 'text',
+    statictext: 'text',
     list: 'list',
     listitem: 'listitem',
     tree: 'list',
@@ -410,16 +461,9 @@ export class SnapshotCompiler {
       partial = true;
     }
 
-    // Build ID map for aria-labelledby resolution (needed by buildHeadingIndex)
-    const idMap = new Map<string, RawDomNode>();
-    if (domResult) {
-      for (const node of domResult.nodes.values()) {
-        const id = node.attributes?.id;
-        if (id) {
-          idMap.set(id, node);
-        }
-      }
-    }
+    const idMapsByContext: IdMapsByContext = domResult
+      ? buildIdMapsByContext(domResult)
+      : new Map<string, Map<string, RawDomNode>>();
 
     // Build DOM order index for deterministic ordering
     let domOrderIndex: Map<number, number> | undefined;
@@ -428,7 +472,7 @@ export class SnapshotCompiler {
     if (domResult) {
       const adjacencyMaps = buildAdjacencyMaps(domResult);
       domOrderIndex = buildDomOrderIndex(domResult, adjacencyMaps);
-      headingIndex = buildHeadingIndex(domResult, axResult, idMap, adjacencyMaps);
+      headingIndex = buildHeadingIndex(domResult, axResult, idMapsByContext, adjacencyMaps);
       domOrderAvailable = true;
     } else {
       // Add warning about DOM order fallback
@@ -499,7 +543,7 @@ export class SnapshotCompiler {
     }
 
     // Phase 4: Transform to ReadableNode[]
-    const nodes: ReadableNode[] = [];
+    const transformedNodes: ReadableNode[] = [];
 
     for (const nodeData of limitedNodes) {
       const node = this.transformNode(
@@ -507,15 +551,22 @@ export class SnapshotCompiler {
         domResult?.nodes ?? new Map<number, RawDomNode>(),
         axResult?.nodes ?? new Map<number, RawAxNode>(),
         limitedNodes,
-        idMap,
+        idMapsByContext,
         headingIndex
       );
 
       // Filter by visibility (unless include_hidden)
       if (this.options.include_hidden || node.state?.visible !== false) {
-        nodes.push(node);
+        transformedNodes.push(node);
       }
     }
+
+    // Phase 4.5: Filter noise nodes (empty containers, duplicate text)
+    const nodes = this.filterNoiseNodes(
+      transformedNodes,
+      domResult?.nodes ?? new Map<number, RawDomNode>(),
+      axResult?.nodes ?? new Map<number, RawAxNode>()
+    );
 
     // Phase 5: Build BaseSnapshot
     const duration = Date.now() - startTime;
@@ -587,7 +638,7 @@ export class SnapshotCompiler {
     domTree: Map<number, RawDomNode>,
     axTree: Map<number, RawAxNode>,
     allNodes: RawNodeData[],
-    idMap: Map<string, RawDomNode>,
+    idMapsByContext: IdMapsByContext,
     headingIndex?: Map<number, string>
   ): ReadableNode {
     const { domNode, axNode, layout, backendNodeId } = nodeData;
@@ -602,18 +653,23 @@ export class SnapshotCompiler {
     }
 
     // Resolve label
-    const labelResult = resolveLabel(domNode, axNode, idMap);
+    const scopedIdMap = getIdMapForNode(domNode, idMapsByContext);
+    const labelResult = resolveLabel(domNode, axNode, scopedIdMap);
     const label = labelResult.label;
 
-    // Resolve region
-    const region = resolveRegion(domNode, axNode, domTree);
+    // Resolve region (pass axTree for ancestor AX role lookup)
+    const region = resolveRegion(domNode, axNode, domTree, axTree);
 
     // Resolve grouping (for group_id and group_path only)
-    const grouping = resolveGrouping(backendNodeId, domTree, axTree, allNodes);
+    const grouping = resolveGrouping(backendNodeId, domTree, axTree, allNodes, {
+      includeHeadingContext: !headingIndex,
+    });
 
     // Get heading context from pre-computed heading index (DOM order-based)
     // Fall back to grouping's heading_context if headingIndex not available
-    const headingContext = headingIndex?.get(backendNodeId) ?? grouping.heading_context;
+    const headingContext = headingIndex
+      ? headingIndex.get(backendNodeId)
+      : grouping.heading_context;
 
     // Build location
     const where: NodeLocation = {
@@ -703,6 +759,115 @@ export class SnapshotCompiler {
       NAV: 'navigation',
     };
     return tagMap[tag];
+  }
+
+  /**
+   * Filter out noise nodes to reduce snapshot size.
+   *
+   * Filters:
+   * 1. Empty list/listitem containers with no semantic name AND no interactive descendants
+   * 2. StaticText/text nodes that mirror their parent's label exactly
+   */
+  private filterNoiseNodes(
+    nodes: ReadableNode[],
+    domTree: Map<number, RawDomNode>,
+    axTree: Map<number, RawAxNode>
+  ): ReadableNode[] {
+    // Build set of interactive node backend IDs for descendant checking
+    const interactiveKinds = new Set([
+      'button',
+      'link',
+      'input',
+      'textarea',
+      'select',
+      'combobox',
+      'checkbox',
+      'radio',
+      'switch',
+      'slider',
+      'tab',
+      'menuitem',
+    ]);
+    const interactiveBackendIds = new Set(
+      nodes.filter((n) => interactiveKinds.has(n.kind)).map((n) => n.backend_node_id)
+    );
+
+    // Build parent-child relationship from DOM tree
+    const childToParent = new Map<number, number>();
+    for (const [nodeId, domNode] of domTree) {
+      if (domNode.parentId !== undefined) {
+        childToParent.set(nodeId, domNode.parentId);
+      }
+    }
+
+    // Check if a node has any interactive descendants in the DOM tree
+    const hasInteractiveDescendant = (nodeId: number): boolean => {
+      const domNode = domTree.get(nodeId);
+      if (!domNode) return false;
+
+      // Check direct children
+      if (domNode.childNodeIds) {
+        for (const childId of domNode.childNodeIds) {
+          if (interactiveBackendIds.has(childId)) {
+            return true;
+          }
+          if (hasInteractiveDescendant(childId)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // Get label of parent node in the node list
+    const getParentLabel = (nodeId: number): string | undefined => {
+      const parentId = childToParent.get(nodeId);
+      if (parentId === undefined) return undefined;
+
+      // Look up parent in our node list
+      const parentNode = nodes.find((n) => n.backend_node_id === parentId);
+      if (parentNode) {
+        return parentNode.label;
+      }
+
+      // Parent might be further up - check AX tree for parent's name
+      const parentAx = axTree.get(parentId);
+      return parentAx?.name;
+    };
+
+    // Container kinds that can be noisy when empty
+    const containerKinds = new Set(['list', 'listitem']);
+
+    // Text kinds that can duplicate parent labels
+    const textKinds = new Set(['text']);
+
+    return nodes.filter((node) => {
+      // Rule 1: Filter empty container nodes without interactive descendants
+      if (containerKinds.has(node.kind)) {
+        const hasSemanticName = node.label && node.label.trim().length > 0;
+        if (!hasSemanticName) {
+          const hasInteractive = hasInteractiveDescendant(node.backend_node_id);
+          if (!hasInteractive) {
+            return false; // Filter out empty container without interactive content
+          }
+        }
+      }
+
+      // Rule 2: Filter text nodes that mirror parent's label
+      if (textKinds.has(node.kind)) {
+        const parentLabel = getParentLabel(node.backend_node_id);
+        if (parentLabel && node.label) {
+          // Normalize and compare
+          const normalizedParent = parentLabel.trim().toLowerCase();
+          const normalizedNode = node.label.trim().toLowerCase();
+          if (normalizedNode === normalizedParent) {
+            return false; // Filter out duplicate text
+          }
+        }
+      }
+
+      return true; // Keep the node
+    });
   }
 }
 

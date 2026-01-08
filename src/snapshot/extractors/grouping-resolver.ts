@@ -13,6 +13,9 @@
 
 import type { RawDomNode, RawAxNode, RawNodeData } from './types.js';
 
+/** Maximum length for slugified names in group IDs */
+const MAX_SLUG_LENGTH = 40;
+
 /**
  * Grouping information for a node
  */
@@ -33,6 +36,7 @@ const GROUPING_TAGS = new Set([
   'FIELDSET',
   'ARTICLE',
   'SECTION',
+  'NAV',
   'UL',
   'OL',
   'DL',
@@ -49,6 +53,7 @@ const GROUPING_ROLES = new Set([
   'group',
   'menu',
   'menubar',
+  'navigation',
   'list',
   'listbox',
   'tree',
@@ -89,13 +94,52 @@ function isGroupingContainer(domNode?: RawDomNode, axNode?: RawAxNode): boolean 
 }
 
 /**
+ * Slugify a string for use in group IDs.
+ *
+ * Converts "Shop and Learn" → "shop-and-learn"
+ * Removes special characters, normalizes whitespace.
+ *
+ * @param text - Input text
+ * @returns Slugified string
+ */
+function slugify(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      // Replace common separators with hyphens
+      .replace(/[\s_]+/g, '-')
+      // Remove apostrophes and quotes
+      .replace(/[''"`]/g, '')
+      // Replace & with "and" word or just remove
+      .replace(/&/g, '-')
+      // Remove all non-alphanumeric except hyphens
+      .replace(/[^a-z0-9-]/g, '')
+      // Collapse multiple hyphens
+      .replace(/-+/g, '-')
+      // Trim leading/trailing hyphens
+      .replace(/^-+|-+$/g, '')
+      // Truncate to max length
+      .slice(0, MAX_SLUG_LENGTH)
+      // Remove trailing hyphen if truncated mid-word
+      .replace(/-$/, '')
+  );
+}
+
+/**
  * Generate a group ID from node information.
+ *
+ * Format: {role}-{slugified-name}
  *
  * @param domNode - DOM node
  * @param axNode - AX node
+ * @param headingContext - Optional heading context as fallback name
  * @returns Group ID string
  */
-function generateGroupId(domNode?: RawDomNode, axNode?: RawAxNode): string {
+function generateGroupId(
+  domNode?: RawDomNode,
+  axNode?: RawAxNode,
+  headingContext?: string
+): string {
   const role =
     axNode?.role?.toLowerCase() ??
     domNode?.attributes?.role?.toLowerCase() ??
@@ -103,10 +147,23 @@ function generateGroupId(domNode?: RawDomNode, axNode?: RawAxNode): string {
     'group';
 
   // Use name, aria-label, or id as identifier
-  const name = axNode?.name ?? domNode?.attributes?.['aria-label'] ?? domNode?.attributes?.id ?? '';
+  const rawName =
+    axNode?.name ?? domNode?.attributes?.['aria-label'] ?? domNode?.attributes?.id ?? '';
 
-  if (name) {
-    return `${role}-${name}`;
+  // Only use name if it's not empty after trimming
+  if (rawName?.trim()) {
+    const sluggedName = slugify(rawName);
+    if (sluggedName) {
+      return `${role}-${sluggedName}`;
+    }
+  }
+
+  // Fallback to heading context if available
+  if (headingContext?.trim()) {
+    const sluggedHeading = slugify(headingContext);
+    if (sluggedHeading) {
+      return `${role}-${sluggedHeading}`;
+    }
   }
 
   // Generate a simple ID from backendNodeId
@@ -206,11 +263,17 @@ function findHeadingContext(
  * @param allNodes - All extracted nodes for heading context
  * @returns GroupingInfo
  */
+export interface GroupingOptions {
+  /** Include heading context resolution (default: true) */
+  includeHeadingContext?: boolean;
+}
+
 export function resolveGrouping(
   nodeId: number,
   domTree: Map<number, RawDomNode>,
   axTree: Map<number, RawAxNode>,
-  allNodes: RawNodeData[]
+  allNodes: RawNodeData[],
+  options?: GroupingOptions
 ): GroupingInfo {
   const result: GroupingInfo = {};
 
@@ -234,7 +297,11 @@ export function resolveGrouping(
 
     if (isGroupingContainer(parentDom, parentAx)) {
       // Set group_id to the innermost group
-      groupId ??= generateGroupId(parentDom, parentAx);
+      // Use heading context as fallback for unnamed groups
+      if (groupId === undefined) {
+        const containerHeadingContext = findHeadingContext(currentId, allNodes, domTree);
+        groupId = generateGroupId(parentDom, parentAx, containerHeadingContext);
+      }
 
       // Add to path if named
       const groupName = getGroupName(parentDom, parentAx);
@@ -255,10 +322,12 @@ export function resolveGrouping(
     result.group_path = groupPath;
   }
 
-  // Find heading context
-  const headingContext = findHeadingContext(nodeId, allNodes, domTree);
-  if (headingContext) {
-    result.heading_context = headingContext;
+  if (options?.includeHeadingContext ?? true) {
+    // Find heading context
+    const headingContext = findHeadingContext(nodeId, allNodes, domTree);
+    if (headingContext) {
+      result.heading_context = headingContext;
+    }
   }
 
   return result;

@@ -28,6 +28,27 @@ import {
  */
 const TEST_ID_ATTRS = ['data-testid', 'data-test', 'data-cy', 'data-test-id'];
 
+/** Prevent oversized locators that can bloat snapshots or break consumers. */
+const MAX_LOCATOR_VALUE_LENGTH = 200;
+
+function isLocatorValueWithinLimit(value: string): boolean {
+  return value.length <= MAX_LOCATOR_VALUE_LENGTH;
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const codeUnit = value.charCodeAt(i);
+    if (codeUnit <= 0x1f || codeUnit === 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function canUseRoleName(value: string): boolean {
+  return isLocatorValueWithinLimit(value) && !hasControlCharacters(value);
+}
+
 /**
  * Build a CSS attribute selector for exact match.
  * Uses raw value with only quote escaping (no truncation/normalization).
@@ -118,7 +139,7 @@ export function buildLocators(
   // 1. Test ID (highest priority)
   for (const testIdAttr of TEST_ID_ATTRS) {
     const testId = attributes[testIdAttr];
-    if (testId) {
+    if (testId && isLocatorValueWithinLimit(testId)) {
       if (!primary) {
         primary = attrSelector(testIdAttr, testId);
       } else {
@@ -143,7 +164,7 @@ export function buildLocators(
       rawName = normalized || undefined;
     }
 
-    if (rawName) {
+    if (rawName && canUseRoleName(rawName)) {
       const roleSelector = roleLocator(role, rawName);
       if (!primary) {
         primary = roleSelector;
@@ -159,7 +180,7 @@ export function buildLocators(
 
   // 3. CSS ID selector (use cssEscape for proper escaping of special chars)
   const id = attributes.id;
-  if (id) {
+  if (id && isLocatorValueWithinLimit(id)) {
     const idSelector = `#${cssEscape(id)}`;
     if (!primary) {
       primary = idSelector;
@@ -170,7 +191,7 @@ export function buildLocators(
 
   // 4. aria-label selector
   const ariaLabel = attributes['aria-label'];
-  if (ariaLabel) {
+  if (ariaLabel && isLocatorValueWithinLimit(ariaLabel)) {
     const ariaSelector = attrSelector('aria-label', ariaLabel);
     if (!primary) {
       primary = ariaSelector;
@@ -181,7 +202,11 @@ export function buildLocators(
 
   // 5. Form name attribute (for inputs)
   const nameAttr = attributes.name;
-  if (nameAttr && (nodeName === 'input' || nodeName === 'select' || nodeName === 'textarea')) {
+  if (
+    nameAttr &&
+    isLocatorValueWithinLimit(nameAttr) &&
+    (nodeName === 'input' || nodeName === 'select' || nodeName === 'textarea')
+  ) {
     const nameSelector = attrSelector('name', nameAttr);
     if (!primary) {
       primary = nameSelector;
@@ -192,7 +217,7 @@ export function buildLocators(
 
   // 6. Class-based selector (use cssEscape for proper escaping of special chars)
   const className = getFirstMeaningfulClass(attributes.class);
-  if (className && nodeName) {
+  if (className && nodeName && isLocatorValueWithinLimit(className)) {
     const classSelector = `${nodeName}.${cssEscape(className)}`;
     if (!primary) {
       primary = classSelector;

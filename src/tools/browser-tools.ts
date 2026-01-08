@@ -13,14 +13,19 @@ import {
   SnapshotCaptureInputSchema,
   ActionClickInputSchema,
   GetNodeDetailsInputSchema,
+  FindElementsInputSchema,
   type BrowserLaunchOutput,
   type BrowserNavigateOutput,
   type BrowserCloseOutput,
   type SnapshotCaptureOutput,
   type ActionClickOutput,
   type GetNodeDetailsOutput,
+  type FindElementsOutput,
   type NodeDetails,
 } from './tool-schemas.js';
+import { QueryEngine } from '../query/query-engine.js';
+import type { FindElementsRequest } from '../query/types/query.types.js';
+import type { NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
 import type { BaseSnapshot } from '../snapshot/snapshot.types.js';
 
 // Module-level state
@@ -338,5 +343,79 @@ export function getNodeDetails(rawInput: unknown): GetNodeDetailsOutput {
     page_id: input.page_id,
     snapshot_id: snapshot.snapshot_id,
     nodes: [details],
+  };
+}
+
+/**
+ * Find elements in a snapshot using semantic filters.
+ * Supports filtering by kind, label, region, state, group_id, and heading_context.
+ *
+ * @param rawInput - Query filters (will be validated)
+ * @returns Matched nodes with query statistics
+ */
+export function findElements(rawInput: unknown): FindElementsOutput {
+  const input = FindElementsInputSchema.parse(rawInput);
+
+  // Get snapshot for this page
+  const snapshot = snapshotStore.getByPageId(input.page_id);
+  if (!snapshot) {
+    throw new Error(`No snapshot for page ${input.page_id} - call snapshot_capture first`);
+  }
+
+  // Build query request from input
+  const request: FindElementsRequest = {
+    limit: input.limit,
+  };
+
+  // Cast kind to NodeKind type (schema validates string format)
+  if (input.kind !== undefined) {
+    request.kind = input.kind as NodeKind | NodeKind[];
+  }
+
+  // Label can be string or LabelFilter
+  if (input.label !== undefined) {
+    request.label = input.label;
+  }
+
+  // Cast region to SemanticRegion type (schema validates string format)
+  if (input.region !== undefined) {
+    request.region = input.region as SemanticRegion | SemanticRegion[];
+  }
+
+  // State constraints
+  if (input.state !== undefined) {
+    request.state = input.state;
+  }
+
+  // Group ID (exact match)
+  if (input.group_id !== undefined) {
+    request.group_id = input.group_id;
+  }
+
+  // Heading context (exact match)
+  if (input.heading_context !== undefined) {
+    request.heading_context = input.heading_context;
+  }
+
+  // Create query engine and execute query
+  const engine = new QueryEngine(snapshot);
+  const response = engine.find(request);
+
+  // Build output with simplified node info
+  const matches = response.matches.map((m) => ({
+    node_id: m.node.node_id,
+    kind: m.node.kind,
+    label: m.node.label,
+    selector: m.node.find?.primary ?? '',
+    region: m.node.where.region,
+    group_id: m.node.where.group_id,
+    heading_context: m.node.where.heading_context,
+  }));
+
+  return {
+    page_id: input.page_id,
+    snapshot_id: snapshot.snapshot_id,
+    matches,
+    stats: response.stats,
   };
 }

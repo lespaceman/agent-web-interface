@@ -258,3 +258,93 @@ export const GetNodeDetailsOutputSchema = z.object({
 export type GetNodeDetailsInput = z.infer<typeof GetNodeDetailsInputSchema>;
 export type GetNodeDetailsOutput = z.infer<typeof GetNodeDetailsOutputSchema>;
 export type NodeDetails = z.infer<typeof NodeDetailsSchema>;
+
+// ============================================================================
+// find_elements
+// ============================================================================
+
+/** State constraint for filtering by element state */
+const StateConstraintSchema = z
+  .object({
+    visible: z.boolean().optional(),
+    enabled: z.boolean().optional(),
+    checked: z.boolean().optional(),
+    expanded: z.boolean().optional(),
+    selected: z.boolean().optional(),
+    focused: z.boolean().optional(),
+    required: z.boolean().optional(),
+    invalid: z.boolean().optional(),
+    readonly: z.boolean().optional(),
+  })
+  .optional();
+
+/** Label filter - either a simple string or an object with options */
+const LabelFilterSchema = z.union([
+  z.string(),
+  z.object({
+    text: z.string(),
+    mode: z.enum(['exact', 'contains']).default('contains'),
+    caseSensitive: z.boolean().default(false),
+  }),
+]);
+
+export const FindElementsInputSchema = z.object({
+  /** Page ID to query */
+  page_id: z.string(),
+  /** Filter by NodeKind (single or array) */
+  kind: z
+    .union([
+      z.string(),
+      z.array(z.string()),
+    ])
+    .optional(),
+  /** Filter by label text (string for contains, or object for options) */
+  label: LabelFilterSchema.optional(),
+  /** Filter by semantic region (single or array) */
+  region: z
+    .union([
+      z.string(),
+      z.array(z.string()),
+    ])
+    .optional(),
+  /** Filter by state constraints */
+  state: StateConstraintSchema,
+  /** Filter by group identifier (exact match) */
+  group_id: z.string().optional(),
+  /** Filter by heading context (exact match) */
+  heading_context: z.string().optional(),
+  /** Maximum number of results (default: 10) */
+  limit: z.number().int().min(1).max(100).default(10),
+});
+
+/** Matched node in find_elements response */
+const MatchedNodeSchema = z.object({
+  node_id: z.string(),
+  kind: z.string(),
+  label: z.string(),
+  selector: z.string(),
+  region: z.string(),
+  group_id: z.string().optional(),
+  heading_context: z.string().optional(),
+});
+
+/** Query statistics */
+const QueryStatsSchema = z.object({
+  total_matched: z.number(),
+  query_time_ms: z.number(),
+  nodes_evaluated: z.number(),
+});
+
+export const FindElementsOutputSchema = z.object({
+  /** Page ID */
+  page_id: z.string(),
+  /** Snapshot ID the query was run against */
+  snapshot_id: z.string(),
+  /** Matched nodes */
+  matches: z.array(MatchedNodeSchema),
+  /** Query execution statistics */
+  stats: QueryStatsSchema,
+});
+
+export type FindElementsInput = z.infer<typeof FindElementsInputSchema>;
+export type FindElementsOutput = z.infer<typeof FindElementsOutputSchema>;
