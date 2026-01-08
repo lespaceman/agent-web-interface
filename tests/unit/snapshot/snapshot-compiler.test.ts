@@ -1414,5 +1414,277 @@ describe('SnapshotCompiler', () => {
       const iframeBtn = snapshot.nodes.find((n) => n.backend_node_id === 33);
       expect(iframeBtn?.find?.frame_path).toEqual(['20']); // Iframe backendNodeId
     });
+
+    it('should NOT propagate heading context into iframe content', async () => {
+      // Setup: H1 in main doc, then iframe with button (no heading inside iframe)
+      mockCdp.setResponse('DOM.getDocument', {
+        root: {
+          nodeId: 1,
+          backendNodeId: 1,
+          nodeType: 9,
+          nodeName: '#document',
+          children: [
+            {
+              nodeId: 2,
+              backendNodeId: 2,
+              nodeType: 1,
+              nodeName: 'HTML',
+              children: [
+                {
+                  nodeId: 3,
+                  backendNodeId: 3,
+                  nodeType: 1,
+                  nodeName: 'BODY',
+                  children: [
+                    {
+                      // H1 in main document
+                      nodeId: 10,
+                      backendNodeId: 10,
+                      nodeType: 1,
+                      nodeName: 'H1',
+                      children: [],
+                    },
+                    {
+                      // Button after heading (should have heading context)
+                      nodeId: 15,
+                      backendNodeId: 15,
+                      nodeType: 1,
+                      nodeName: 'BUTTON',
+                      attributes: ['data-testid', 'main-btn'],
+                      children: [],
+                    },
+                    {
+                      // iframe after heading
+                      nodeId: 20,
+                      backendNodeId: 20,
+                      nodeType: 1,
+                      nodeName: 'IFRAME',
+                      frameId: 'frame-1',
+                      children: [],
+                      contentDocument: {
+                        nodeId: 30,
+                        backendNodeId: 30,
+                        nodeType: 9,
+                        nodeName: '#document',
+                        children: [
+                          {
+                            nodeId: 31,
+                            backendNodeId: 31,
+                            nodeType: 1,
+                            nodeName: 'HTML',
+                            children: [
+                              {
+                                nodeId: 32,
+                                backendNodeId: 32,
+                                nodeType: 1,
+                                nodeName: 'BODY',
+                                children: [
+                                  {
+                                    // Button inside iframe - NO heading in iframe
+                                    nodeId: 33,
+                                    backendNodeId: 33,
+                                    nodeType: 1,
+                                    nodeName: 'BUTTON',
+                                    attributes: ['data-testid', 'iframe-btn'],
+                                    children: [],
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      mockCdp.setResponse('Accessibility.getFullAXTree', {
+        nodes: [
+          {
+            nodeId: 'ax-10',
+            backendDOMNodeId: 10,
+            role: { value: 'heading' },
+            name: { value: 'Main Page Title' },
+            ignored: false,
+            properties: [{ name: 'level', value: { value: 1 } }],
+          },
+          {
+            nodeId: 'ax-15',
+            backendDOMNodeId: 15,
+            role: { value: 'button' },
+            name: { value: 'Main Button' },
+            ignored: false,
+          },
+          {
+            nodeId: 'ax-33',
+            backendDOMNodeId: 33,
+            role: { value: 'button' },
+            name: { value: 'Iframe Button' },
+            ignored: false,
+          },
+        ],
+      });
+
+      const compiler = new SnapshotCompiler({ includeReadable: false });
+      const snapshot = await compiler.compile(mockCdp, mockPage, 'page-1');
+
+      // Main button SHOULD have heading context
+      const mainBtn = snapshot.nodes.find((n) => n.backend_node_id === 15);
+      expect(mainBtn).toBeDefined();
+      expect(mainBtn?.where.heading_context).toBe('Main Page Title');
+
+      // Iframe button should NOT have heading context (isolated document)
+      const iframeBtn = snapshot.nodes.find((n) => n.backend_node_id === 33);
+      expect(iframeBtn).toBeDefined();
+      expect(iframeBtn?.where.heading_context).toBeUndefined();
+    });
+
+    it('should isolate heading context within iframe boundaries', async () => {
+      // Setup: Main doc with button, iframe with H2 then button, main button after iframe
+      mockCdp.setResponse('DOM.getDocument', {
+        root: {
+          nodeId: 1,
+          backendNodeId: 1,
+          nodeType: 9,
+          nodeName: '#document',
+          children: [
+            {
+              nodeId: 2,
+              backendNodeId: 2,
+              nodeType: 1,
+              nodeName: 'HTML',
+              children: [
+                {
+                  nodeId: 3,
+                  backendNodeId: 3,
+                  nodeType: 1,
+                  nodeName: 'BODY',
+                  children: [
+                    {
+                      nodeId: 10,
+                      backendNodeId: 10,
+                      nodeType: 1,
+                      nodeName: 'BUTTON',
+                      attributes: ['data-testid', 'before-iframe-btn'],
+                      children: [],
+                    },
+                    {
+                      nodeId: 20,
+                      backendNodeId: 20,
+                      nodeType: 1,
+                      nodeName: 'IFRAME',
+                      frameId: 'frame-1',
+                      children: [],
+                      contentDocument: {
+                        nodeId: 30,
+                        backendNodeId: 30,
+                        nodeType: 9,
+                        nodeName: '#document',
+                        children: [
+                          {
+                            nodeId: 31,
+                            backendNodeId: 31,
+                            nodeType: 1,
+                            nodeName: 'HTML',
+                            children: [
+                              {
+                                nodeId: 32,
+                                backendNodeId: 32,
+                                nodeType: 1,
+                                nodeName: 'BODY',
+                                children: [
+                                  {
+                                    nodeId: 33,
+                                    backendNodeId: 33,
+                                    nodeType: 1,
+                                    nodeName: 'H2',
+                                    children: [],
+                                  },
+                                  {
+                                    nodeId: 34,
+                                    backendNodeId: 34,
+                                    nodeType: 1,
+                                    nodeName: 'BUTTON',
+                                    attributes: ['data-testid', 'iframe-btn'],
+                                    children: [],
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                    {
+                      nodeId: 40,
+                      backendNodeId: 40,
+                      nodeType: 1,
+                      nodeName: 'BUTTON',
+                      attributes: ['data-testid', 'after-iframe-btn'],
+                      children: [],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      mockCdp.setResponse('Accessibility.getFullAXTree', {
+        nodes: [
+          {
+            nodeId: 'ax-10',
+            backendDOMNodeId: 10,
+            role: { value: 'button' },
+            name: { value: 'Before Iframe' },
+            ignored: false,
+          },
+          {
+            nodeId: 'ax-33',
+            backendDOMNodeId: 33,
+            role: { value: 'heading' },
+            name: { value: 'Iframe Section' },
+            ignored: false,
+            properties: [{ name: 'level', value: { value: 2 } }],
+          },
+          {
+            nodeId: 'ax-34',
+            backendDOMNodeId: 34,
+            role: { value: 'button' },
+            name: { value: 'Iframe Button' },
+            ignored: false,
+          },
+          {
+            nodeId: 'ax-40',
+            backendDOMNodeId: 40,
+            role: { value: 'button' },
+            name: { value: 'After Iframe' },
+            ignored: false,
+          },
+        ],
+      });
+
+      const compiler = new SnapshotCompiler({ includeReadable: false });
+      const snapshot = await compiler.compile(mockCdp, mockPage, 'page-1');
+
+      // Button before iframe - no heading context
+      const beforeBtn = snapshot.nodes.find((n) => n.backend_node_id === 10);
+      expect(beforeBtn?.where.heading_context).toBeUndefined();
+
+      // Button inside iframe - should have iframe's heading context
+      const iframeBtn = snapshot.nodes.find((n) => n.backend_node_id === 34);
+      expect(iframeBtn?.where.heading_context).toBe('Iframe Section');
+
+      // Button after iframe - should NOT have iframe's heading context
+      // (iframe heading stays inside iframe)
+      const afterBtn = snapshot.nodes.find((n) => n.backend_node_id === 40);
+      expect(afterBtn?.where.heading_context).toBeUndefined();
+    });
   });
 });

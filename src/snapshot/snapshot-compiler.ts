@@ -47,13 +47,57 @@ import {
 import { getTextContent } from '../lib/text-utils.js';
 
 /**
+ * Adjacency maps for efficient shadow root and content document lookup.
+ */
+interface AdjacencyMaps {
+  /** Maps shadow host backendNodeId -> array of shadow root backendNodeIds */
+  shadowRootsByHost: Map<number, number[]>;
+  /** Maps iframe backendNodeId -> array of content document backendNodeIds */
+  contentDocsByFrame: Map<number, number[]>;
+}
+
+/**
+ * Build adjacency maps for shadow roots and iframe content documents.
+ * Single O(n) pass through all nodes.
+ *
+ * @param domResult - DOM extraction result
+ * @returns Adjacency maps for shadow roots and content documents
+ */
+function buildAdjacencyMaps(domResult: DomExtractionResult): AdjacencyMaps {
+  const shadowRootsByHost = new Map<number, number[]>();
+  const contentDocsByFrame = new Map<number, number[]>();
+
+  for (const [nodeId, node] of domResult.nodes) {
+    if (node.parentId === undefined) continue;
+
+    if (node.nodeName === '#document-fragment') {
+      // This is a shadow root - add to shadow host's children
+      const existing = shadowRootsByHost.get(node.parentId) ?? [];
+      existing.push(nodeId);
+      shadowRootsByHost.set(node.parentId, existing);
+    } else if (node.nodeName === '#document') {
+      // This is a content document - add to iframe's children
+      const existing = contentDocsByFrame.get(node.parentId) ?? [];
+      existing.push(nodeId);
+      contentDocsByFrame.set(node.parentId, existing);
+    }
+  }
+
+  return { shadowRootsByHost, contentDocsByFrame };
+}
+
+/**
  * Build DOM pre-order index by traversing the DOM tree.
  * Also traverses into shadow roots and iframe content documents.
  *
  * @param domResult - DOM extraction result with nodes and rootId
+ * @param adjacencyMaps - Precomputed maps for shadow roots and content documents
  * @returns Map of backendNodeId -> DOM order index
  */
-function buildDomOrderIndex(domResult: DomExtractionResult): Map<number, number> {
+function buildDomOrderIndex(
+  domResult: DomExtractionResult,
+  adjacencyMaps: AdjacencyMaps
+): Map<number, number> {
   const orderIndex = new Map<number, number>();
   const shadowHostSet = new Set(domResult.shadowRoots);
   let index = 0;
@@ -71,26 +115,19 @@ function buildDomOrderIndex(domResult: DomExtractionResult): Map<number, number>
       }
     }
 
-    // 2. If this node hosts a shadow root, traverse shadow content
-    // Shadow roots have parentId = this node's backendNodeId and nodeName = '#document-fragment'
+    // 2. If this node hosts a shadow root, traverse shadow content (O(1) lookup)
     if (shadowHostSet.has(nodeId)) {
-      for (const [candidateId, candidateNode] of domResult.nodes) {
-        if (
-          candidateNode.parentId === nodeId &&
-          candidateNode.nodeName === '#document-fragment'
-        ) {
-          traverse(candidateId);
-        }
+      const shadowRoots = adjacencyMaps.shadowRootsByHost.get(nodeId) ?? [];
+      for (const shadowRootId of shadowRoots) {
+        traverse(shadowRootId);
       }
     }
 
-    // 3. If this node is an iframe (has frameId or is IFRAME tag), traverse content document
-    // Content documents have parentId = this node's backendNodeId and nodeName = '#document'
+    // 3. If this node is an iframe, traverse content document (O(1) lookup)
     if (node.frameId || node.nodeName.toUpperCase() === 'IFRAME') {
-      for (const [candidateId, candidateNode] of domResult.nodes) {
-        if (candidateNode.parentId === nodeId && candidateNode.nodeName === '#document') {
-          traverse(candidateId);
-        }
+      const contentDocs = adjacencyMaps.contentDocsByFrame.get(nodeId) ?? [];
+      for (const contentDocId of contentDocs) {
+        traverse(contentDocId);
       }
     }
   }
@@ -104,19 +141,25 @@ function buildDomOrderIndex(domResult: DomExtractionResult): Map<number, number>
  * Uses DOM order to determine the most recent preceding heading.
  * Also traverses into shadow roots and iframe content documents.
  *
+ * Heading context is isolated at iframe boundaries:
+ * - Heading from parent document does NOT propagate into iframe
+ * - Heading from iframe does NOT propagate back to parent document
+ * - Shadow DOM shares heading context with its host document
+ *
  * @param domResult - DOM extraction result
  * @param axResult - AX extraction result for heading names
  * @param idMap - Map of DOM ID to RawDomNode for aria-labelledby resolution
+ * @param adjacencyMaps - Precomputed maps for shadow roots and content documents
  * @returns Map of backendNodeId -> heading context string
  */
 function buildHeadingIndex(
   domResult: DomExtractionResult,
   axResult: AxExtractionResult | undefined,
-  idMap: Map<string, RawDomNode>
+  idMap: Map<string, RawDomNode>,
+  adjacencyMaps: AdjacencyMaps
 ): Map<number, string> {
   const headingIndex = new Map<number, string>();
   const shadowHostSet = new Set(domResult.shadowRoots);
-  let currentHeading: string | undefined;
 
   // Helper to check if a node is a heading and resolve its name
   function isHeading(backendNodeId: number): { isHeading: boolean; name?: string } {
@@ -154,10 +197,10 @@ function buildHeadingIndex(
     return { isHeading: false };
   }
 
-  // Traverse DOM in pre-order (same pattern as buildDomOrderIndex)
-  function traverse(nodeId: number): void {
+  // Traverse DOM in pre-order, passing and returning heading context
+  function traverse(nodeId: number, currentHeading: string | undefined): string | undefined {
     const node = domResult.nodes.get(nodeId);
-    if (!node) return;
+    if (!node) return currentHeading;
 
     // Check if this node is a heading
     const headingInfo = isHeading(nodeId);
@@ -171,35 +214,37 @@ function buildHeadingIndex(
     }
 
     // 1. Process light DOM children first (pre-order DFS)
+    // Heading context propagates and updates through light DOM
     if (node.childNodeIds) {
       for (const childId of node.childNodeIds) {
-        traverse(childId);
+        currentHeading = traverse(childId, currentHeading) ?? currentHeading;
       }
     }
 
-    // 2. If this node hosts a shadow root, traverse shadow content
+    // 2. If this node hosts a shadow root, traverse shadow content (O(1) lookup)
+    // Shadow DOM shares heading context with host document (same logical document)
     if (shadowHostSet.has(nodeId)) {
-      for (const [candidateId, candidateNode] of domResult.nodes) {
-        if (
-          candidateNode.parentId === nodeId &&
-          candidateNode.nodeName === '#document-fragment'
-        ) {
-          traverse(candidateId);
-        }
+      const shadowRoots = adjacencyMaps.shadowRootsByHost.get(nodeId) ?? [];
+      for (const shadowRootId of shadowRoots) {
+        currentHeading = traverse(shadowRootId, currentHeading) ?? currentHeading;
       }
     }
 
-    // 3. If this node is an iframe, traverse content document
+    // 3. If this node is an iframe, traverse content document (O(1) lookup)
+    // IMPORTANT: Heading context resets at iframe boundary (separate document)
+    // - Pass undefined to reset context inside iframe
+    // - Discard returned heading (iframe headings don't affect parent)
     if (node.frameId || node.nodeName.toUpperCase() === 'IFRAME') {
-      for (const [candidateId, candidateNode] of domResult.nodes) {
-        if (candidateNode.parentId === nodeId && candidateNode.nodeName === '#document') {
-          traverse(candidateId);
-        }
+      const contentDocs = adjacencyMaps.contentDocsByFrame.get(nodeId) ?? [];
+      for (const contentDocId of contentDocs) {
+        traverse(contentDocId, undefined);
       }
     }
+
+    return currentHeading;
   }
 
-  traverse(domResult.rootId);
+  traverse(domResult.rootId, undefined);
   return headingIndex;
 }
 
@@ -381,8 +426,9 @@ export class SnapshotCompiler {
     let headingIndex: Map<number, string> | undefined;
 
     if (domResult) {
-      domOrderIndex = buildDomOrderIndex(domResult);
-      headingIndex = buildHeadingIndex(domResult, axResult, idMap);
+      const adjacencyMaps = buildAdjacencyMaps(domResult);
+      domOrderIndex = buildDomOrderIndex(domResult, adjacencyMaps);
+      headingIndex = buildHeadingIndex(domResult, axResult, idMap, adjacencyMaps);
       domOrderAvailable = true;
     } else {
       // Add warning about DOM order fallback
