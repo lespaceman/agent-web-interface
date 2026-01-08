@@ -23,7 +23,6 @@ import type {
   NodeLayout,
   NodeState,
   NodeLocators,
-  NodeAttributes,
 } from './snapshot.types.js';
 import {
   createExtractorContext,
@@ -36,6 +35,7 @@ import {
   buildLocators,
   resolveGrouping,
   classifyAxRole,
+  extractAttributes,
   type RawNodeData,
   type RawDomNode,
   type RawAxNode,
@@ -366,8 +366,17 @@ export class SnapshotCompiler {
     // Build locators
     const locators: NodeLocators = buildLocators(domNode, axNode, label);
 
-    // Build attributes
-    const attributes = this.extractAttributes(domNode, axNode, kind);
+    // Build attributes using extractor module
+    const attributes = extractAttributes(
+      domNode,
+      kind,
+      {
+        includeValues: this.options.include_values,
+        redactSensitive: this.options.redact_sensitive,
+        sanitizeUrls: true,
+      },
+      axNode
+    );
 
     // Build the node
     const node: ReadableNode = {
@@ -419,81 +428,6 @@ export class SnapshotCompiler {
       NAV: 'navigation',
     };
     return tagMap[tag];
-  }
-
-  /**
-   * Extract additional attributes for specific node types.
-   */
-  private extractAttributes(
-    domNode: RawDomNode | undefined,
-    axNode: RawAxNode | undefined,
-    kind: NodeKind
-  ): NodeAttributes | undefined {
-    const attrs: NodeAttributes = {};
-    const domAttrs = domNode?.attributes;
-
-    // Input type
-    if (kind === 'input' && domAttrs?.type) {
-      attrs.input_type = domAttrs.type;
-    }
-
-    // Placeholder
-    if (domAttrs?.placeholder) {
-      attrs.placeholder = domAttrs.placeholder;
-    }
-
-    // Link href
-    if (kind === 'link' && domAttrs?.href) {
-      attrs.href = domAttrs.href;
-    }
-
-    // Image alt and src
-    if (kind === 'image') {
-      if (domAttrs?.alt) attrs.alt = domAttrs.alt;
-      if (domAttrs?.src) {
-        // Extract just domain + path
-        try {
-          const url = new URL(domAttrs.src, 'https://example.com');
-          attrs.src = `${url.host}${url.pathname}`;
-        } catch {
-          attrs.src = domAttrs.src;
-        }
-      }
-    }
-
-    // Heading level
-    if (kind === 'heading') {
-      const levelProp = axNode?.properties?.find((p) => p.name === 'level');
-      if (levelProp?.value?.value) {
-        attrs.heading_level = Number(levelProp.value.value);
-      } else if (domNode?.nodeName.match(/^H([1-6])$/i)) {
-        attrs.heading_level = parseInt(domNode.nodeName.substring(1));
-      }
-    }
-
-    // Form action and method
-    if (kind === 'form') {
-      if (domAttrs?.action) attrs.action = domAttrs.action;
-      if (domAttrs?.method) attrs.method = domAttrs.method;
-    }
-
-    // Autocomplete
-    if (domAttrs?.autocomplete) {
-      attrs.autocomplete = domAttrs.autocomplete;
-    }
-
-    // Test ID
-    const testId = domAttrs?.['data-testid'] ?? domAttrs?.['data-test'] ?? domAttrs?.['data-cy'];
-    if (testId) {
-      attrs.test_id = testId;
-    }
-
-    // Role (if explicitly set and different from implied)
-    if (domAttrs?.role) {
-      attrs.role = domAttrs.role;
-    }
-
-    return Object.keys(attrs).length > 0 ? attrs : undefined;
   }
 }
 

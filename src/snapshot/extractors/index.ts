@@ -62,3 +62,10 @@ export { buildLocators } from './locator-builder.js';
 
 // Grouping Resolver
 export { resolveGrouping, type GroupingInfo } from './grouping-resolver.js';
+
+// Attribute Extractor
+export {
+  extractAttributes,
+  sanitizeUrl,
+  type AttributeExtractionOptions,
+} from './attribute-extractor.js';
