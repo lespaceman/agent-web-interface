@@ -244,6 +244,8 @@ export const GetNodeDetailsInputSchema = z.object({
 export const NodeDetailsSchema = z.object({
   /** Unique node identifier */
   node_id: z.string(),
+  /** CDP backend node ID - stable within session */
+  backend_node_id: z.number(),
   /** Semantic node type */
   kind: z.string(),
   /** Human-readable label */
@@ -389,6 +391,7 @@ export const FindElementsInputSchema = z.object({
 /** Matched node in find_elements response */
 const MatchedNodeSchema = z.object({
   node_id: z.string(),
+  backend_node_id: z.number(),
   kind: z.string(),
   label: z.string(),
   selector: z.string(),

@@ -404,6 +404,7 @@ export function getNodeDetails(rawInput: unknown): GetNodeDetailsOutput {
   // Build full node details
   const details: NodeDetails = {
     node_id: node.node_id,
+    backend_node_id: node.backend_node_id,
     kind: node.kind,
     label: node.label,
     where: {
@@ -541,6 +542,7 @@ export function findElements(rawInput: unknown): FindElementsOutput {
   // Build output with simplified node info (including relevance)
   const matches = response.matches.map((m) => ({
     node_id: m.node.node_id,
+    backend_node_id: m.node.backend_node_id,
     kind: m.node.kind,
     label: m.node.label,
     selector: m.node.find?.primary ?? '',
