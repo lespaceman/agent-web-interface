@@ -1,0 +1,16 @@
+# Build outputs
+dist/
+build/
+coverage/
+
+# Dependencies
+node_modules/
+
+# Generated files
+*.tsbuildinfo
+
+# Documentation (auto-generated or manually formatted)
+.claude/
+AGENTS.md
+docs/tooling-plan.md
+docs/engineering-plan.md

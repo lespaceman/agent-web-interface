@@ -33,7 +33,7 @@ logs/
 
 # Linter and formatter cache
 .eslintcache
-.prettierignore
+.prettierrc.cache
 
 # OS files
 Thumbs.db
