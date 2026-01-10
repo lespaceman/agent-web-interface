@@ -291,6 +291,17 @@ describe('SnapshotCompiler', () => {
       expect(uniqueIds.size).toBe(nodeIds.length);
     });
 
+    it('should derive node_id from backend_node_id for stability across snapshots', async () => {
+      const compiler = new SnapshotCompiler();
+      const snapshot = await compiler.compile(mockCdp, mockPage, 'page-1');
+
+      // Each node's node_id should be the string representation of its backend_node_id
+      // This ensures the same DOM element gets the same ID across snapshots
+      for (const node of snapshot.nodes) {
+        expect(node.node_id).toBe(String(node.backend_node_id));
+      }
+    });
+
     it('should handle include_hidden option', async () => {
       const compiler = new SnapshotCompiler();
 

@@ -387,9 +387,6 @@ export class SnapshotCompiler {
   /** Counter for generating unique snapshot IDs */
   private snapshotCounter = 0;
 
-  /** Counter for generating unique node IDs within a snapshot */
-  private nodeCounter = 0;
-
   constructor(options?: Partial<CompileOptions>) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
   }
@@ -403,21 +400,6 @@ export class SnapshotCompiler {
   }
 
   /**
-   * Generate a unique node ID.
-   */
-  private generateNodeId(): string {
-    this.nodeCounter++;
-    return `n${this.nodeCounter}`;
-  }
-
-  /**
-   * Reset node counter for new snapshot.
-   */
-  private resetNodeCounter(): void {
-    this.nodeCounter = 0;
-  }
-
-  /**
    * Compile a snapshot from the current page state.
    *
    * @param cdp - CDP client for the page
@@ -427,7 +409,6 @@ export class SnapshotCompiler {
    */
   async compile(cdp: CdpClient, page: Page, _pageId: string): Promise<BaseSnapshot> {
     const startTime = Date.now();
-    this.resetNodeCounter();
 
     const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
     const ctx = createExtractorContext(cdp, viewport, this.options);
@@ -715,9 +696,9 @@ export class SnapshotCompiler {
       axNode
     );
 
-    // Build the node
+    // Build the node - node_id is derived from backend_node_id for stability across snapshots
     const node: ReadableNode = {
-      node_id: this.generateNodeId(),
+      node_id: String(backendNodeId),
       backend_node_id: backendNodeId,
       kind,
       label,

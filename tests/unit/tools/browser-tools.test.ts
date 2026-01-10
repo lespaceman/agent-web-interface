@@ -103,6 +103,7 @@ describe('BrowserTools', () => {
     );
 
     // Mock compileSnapshot
+    // Note: node_id is derived from backend_node_id for stability across snapshots
     const mockSnapshot: BaseSnapshot = {
       snapshot_id: 'snap-123',
       url: 'https://example.com',
@@ -111,7 +112,7 @@ describe('BrowserTools', () => {
       viewport: { width: 1280, height: 720 },
       nodes: [
         {
-          node_id: 'n1',
+          node_id: '12345', // Derived from backend_node_id
           backend_node_id: 12345, // CDP backendNodeId for direct clicking
           kind: 'link',
           label: 'More information...',
@@ -343,7 +344,7 @@ describe('BrowserTools', () => {
 
       expect(result.nodes).toHaveLength(1);
       expect(result.nodes![0]).toEqual({
-        node_id: 'n1',
+        node_id: '12345',
         kind: 'link',
         label: 'More information...',
         selector: 'role=link[name="More information..."]',
@@ -391,7 +392,7 @@ describe('BrowserTools', () => {
       // Then click
       const result = await browserTools.actionClick({
         page_id: 'page-123',
-        node_id: 'n1',
+        node_id: '12345',
       });
 
       // Verify CDP was used (not Playwright locators)
@@ -421,13 +422,13 @@ describe('BrowserTools', () => {
       expect(mockPage.locator).not.toHaveBeenCalled();
 
       expect(result.success).toBe(true);
-      expect(result.node_id).toBe('n1');
+      expect(result.node_id).toBe('12345');
       expect(result.clicked_element).toBe('More information...');
     });
 
     it('should throw error if no snapshot exists', async () => {
       await expect(
-        browserTools.actionClick({ page_id: 'page-123', node_id: 'n1' })
+        browserTools.actionClick({ page_id: 'page-123', node_id: '12345' })
       ).rejects.toThrow('No snapshot for page');
     });
 
@@ -444,12 +445,12 @@ describe('BrowserTools', () => {
       mockSessionManager.resolvePage.mockReturnValue(undefined);
 
       await expect(
-        browserTools.actionClick({ page_id: 'non-existent', node_id: 'n1' })
+        browserTools.actionClick({ page_id: 'non-existent', node_id: '12345' })
       ).rejects.toThrow('Page not found: non-existent');
     });
 
     it('should click element using CDP backendNodeId instead of Playwright locator', async () => {
-      // Mock a snapshot with backend_node_id (the new field we're adding)
+      // Mock a snapshot with backend_node_id (node_id is derived from backend_node_id)
       const mockSnapshotWithBackendId: BaseSnapshot = {
         snapshot_id: 'snap-456',
         url: 'https://example.com',
@@ -458,7 +459,7 @@ describe('BrowserTools', () => {
         viewport: { width: 1280, height: 720 },
         nodes: [
           {
-            node_id: 'n1',
+            node_id: '12345', // Derived from backend_node_id
             backend_node_id: 12345, // CDP backendNodeId - guaranteed unique
             kind: 'button',
             label: 'Yes',
@@ -467,13 +468,13 @@ describe('BrowserTools', () => {
             find: { primary: 'role=button[name="Yes"]' }, // This would match multiple elements!
           },
           {
-            node_id: 'n2',
+            node_id: '12346', // Derived from backend_node_id
             backend_node_id: 12346, // Different backendNodeId - unique
             kind: 'button',
             label: 'Yes',
             where: { region: 'dialog' },
             layout: { bbox: { x: 300, y: 400, w: 80, h: 40 } },
-            find: { primary: 'role=button[name="Yes"]' }, // Same locator as n1!
+            find: { primary: 'role=button[name="Yes"]' }, // Same locator as first button!
           },
         ],
         meta: { node_count: 2, interactive_count: 2 },
@@ -497,10 +498,10 @@ describe('BrowserTools', () => {
       // Capture snapshot first
       await browserTools.snapshotCapture({ page_id: 'page-123' });
 
-      // Click on first "Yes" button (n1)
+      // Click on first "Yes" button (node_id: '12345')
       const result = await browserTools.actionClick({
         page_id: 'page-123',
-        node_id: 'n1',
+        node_id: '12345',
       });
 
       // Verify CDP was used with the correct backendNodeId (not Playwright locator)
@@ -530,7 +531,7 @@ describe('BrowserTools', () => {
       expect(mockPage.locator).not.toHaveBeenCalled();
 
       expect(result.success).toBe(true);
-      expect(result.node_id).toBe('n1');
+      expect(result.node_id).toBe('12345');
       expect(result.clicked_element).toBe('Yes');
     });
   });
@@ -549,7 +550,7 @@ describe('BrowserTools', () => {
       expect(result.snapshot_id).toBe('snap-123');
       expect(result.matches).toHaveLength(1);
       expect(result.matches[0]).toMatchObject({
-        node_id: 'n1',
+        node_id: '12345',
         kind: 'link',
         label: 'More information...',
         selector: 'role=link[name="More information..."]',
@@ -629,7 +630,7 @@ describe('BrowserTools', () => {
         viewport: { width: 1280, height: 720 },
         nodes: [
           {
-            node_id: 'n1',
+            node_id: '1', // Derived from backend_node_id
             backend_node_id: 1,
             kind: 'button',
             label: 'Submit',
@@ -638,7 +639,7 @@ describe('BrowserTools', () => {
             find: { primary: 'role=button[name="Submit"]' },
           },
           {
-            node_id: 'n2',
+            node_id: '2', // Derived from backend_node_id
             backend_node_id: 2,
             kind: 'link',
             label: 'Home',
@@ -647,7 +648,7 @@ describe('BrowserTools', () => {
             find: { primary: 'role=link[name="Home"]' },
           },
           {
-            node_id: 'n3',
+            node_id: '3', // Derived from backend_node_id
             backend_node_id: 3,
             kind: 'input',
             label: 'Email',
@@ -680,7 +681,7 @@ describe('BrowserTools', () => {
         captured_at: new Date().toISOString(),
         viewport: { width: 1280, height: 720 },
         nodes: Array.from({ length: 20 }, (_, i) => ({
-          node_id: `n${i}`,
+          node_id: String(i), // Derived from backend_node_id
           backend_node_id: i,
           kind: 'link' as const,
           label: `Link ${i}`,
