@@ -509,9 +509,7 @@ export class SnapshotCompiler {
       // Fallback: Use DOM-only for interactive tags and essential structural elements
       for (const [backendNodeId, domNode] of domResult.nodes) {
         const tagName = domNode.nodeName.toUpperCase();
-        if (
-          ['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG'].includes(tagName)
-        ) {
+        if (['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG'].includes(tagName)) {
           nodesToProcess.push({
             backendNodeId,
             domNode,
