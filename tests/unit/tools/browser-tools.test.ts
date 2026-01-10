@@ -27,6 +27,7 @@ describe('BrowserTools', () => {
     getPage: ReturnType<typeof vi.fn>;
     closePage: ReturnType<typeof vi.fn>;
     navigateTo: ReturnType<typeof vi.fn>;
+    getPageCount: ReturnType<typeof vi.fn>;
   };
 
   let mockPage: Page;
@@ -86,6 +87,7 @@ describe('BrowserTools', () => {
       getPage: vi.fn().mockReturnValue(mockPageHandle),
       closePage: vi.fn().mockResolvedValue(true),
       navigateTo: vi.fn().mockResolvedValue(undefined),
+      getPageCount: vi.fn().mockReturnValue(1),
     };
 
     // Mock the SessionManager module
@@ -154,6 +156,26 @@ describe('BrowserTools', () => {
         endpointUrl: 'http://127.0.0.1:9223',
       });
       expect(mockSessionManager.adoptPage).toHaveBeenCalledWith(0);
+      expect(result.page_id).toBe('page-123');
+      expect(result.mode).toBe('connected');
+    });
+
+    it('should create new page in connect mode when browser has no pages', async () => {
+      // Simulate browser with 0 pages
+      mockSessionManager.getPageCount.mockReturnValue(0);
+
+      const result = await browserTools.browserLaunch({
+        mode: 'connect',
+        endpoint_url: 'http://127.0.0.1:9223',
+      });
+
+      expect(mockSessionManager.connect).toHaveBeenCalledWith({
+        endpointUrl: 'http://127.0.0.1:9223',
+      });
+      // Should NOT call adoptPage since there are no pages
+      expect(mockSessionManager.adoptPage).not.toHaveBeenCalled();
+      // Should create a new page instead
+      expect(mockSessionManager.createPage).toHaveBeenCalled();
       expect(result.page_id).toBe('page-123');
       expect(result.mode).toBe('connected');
     });

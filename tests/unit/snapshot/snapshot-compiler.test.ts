@@ -313,6 +313,174 @@ describe('SnapshotCompiler', () => {
       expect(snapshot.captured_at >= beforeCompile).toBe(true);
       expect(snapshot.captured_at <= afterCompile).toBe(true);
     });
+
+    it('should include form nodes for form detection', async () => {
+      // Setup: page with form element
+      mockCdp.setResponse('DOM.getDocument', {
+        root: {
+          nodeId: 1,
+          backendNodeId: 1,
+          nodeType: 9,
+          nodeName: '#document',
+          children: [
+            {
+              nodeId: 2,
+              backendNodeId: 2,
+              nodeType: 1,
+              nodeName: 'HTML',
+              children: [
+                {
+                  nodeId: 3,
+                  backendNodeId: 3,
+                  nodeType: 1,
+                  nodeName: 'BODY',
+                  children: [
+                    {
+                      nodeId: 10,
+                      backendNodeId: 10,
+                      nodeType: 1,
+                      nodeName: 'FORM',
+                      attributes: ['id', 'login-form'],
+                      children: [
+                        {
+                          nodeId: 11,
+                          backendNodeId: 11,
+                          nodeType: 1,
+                          nodeName: 'INPUT',
+                          attributes: ['type', 'text', 'name', 'username'],
+                          children: [],
+                        },
+                        {
+                          nodeId: 12,
+                          backendNodeId: 12,
+                          nodeType: 1,
+                          nodeName: 'BUTTON',
+                          attributes: ['type', 'submit'],
+                          children: [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      mockCdp.setResponse('Accessibility.getFullAXTree', {
+        nodes: [
+          {
+            nodeId: 'ax-10',
+            backendDOMNodeId: 10,
+            role: { value: 'form' },
+            name: { value: 'Login Form' },
+            ignored: false,
+          },
+          {
+            nodeId: 'ax-11',
+            backendDOMNodeId: 11,
+            role: { value: 'textbox' },
+            name: { value: 'Username' },
+            ignored: false,
+          },
+          {
+            nodeId: 'ax-12',
+            backendDOMNodeId: 12,
+            role: { value: 'button' },
+            name: { value: 'Submit' },
+            ignored: false,
+          },
+        ],
+      });
+
+      const compiler = new SnapshotCompiler();
+      const snapshot = await compiler.compile(mockCdp, mockPage, 'page-1');
+
+      // Should include form node (essential structural node for form detection)
+      const formNodes = snapshot.nodes.filter((n) => n.kind === 'form');
+      expect(formNodes.length).toBe(1);
+      expect(formNodes[0].label).toBe('Login Form');
+
+      // Should also include interactive nodes
+      const inputNodes = snapshot.nodes.filter((n) => n.kind === 'input');
+      expect(inputNodes.length).toBe(1);
+      const buttonNodes = snapshot.nodes.filter((n) => n.kind === 'button');
+      expect(buttonNodes.length).toBe(1);
+    });
+
+    it('should include dialog nodes for dialog detection', async () => {
+      // Setup: page with dialog element
+      mockCdp.setResponse('DOM.getDocument', {
+        root: {
+          nodeId: 1,
+          backendNodeId: 1,
+          nodeType: 9,
+          nodeName: '#document',
+          children: [
+            {
+              nodeId: 2,
+              backendNodeId: 2,
+              nodeType: 1,
+              nodeName: 'HTML',
+              children: [
+                {
+                  nodeId: 3,
+                  backendNodeId: 3,
+                  nodeType: 1,
+                  nodeName: 'BODY',
+                  children: [
+                    {
+                      nodeId: 10,
+                      backendNodeId: 10,
+                      nodeType: 1,
+                      nodeName: 'DIALOG',
+                      attributes: ['open', ''],
+                      children: [
+                        {
+                          nodeId: 11,
+                          backendNodeId: 11,
+                          nodeType: 1,
+                          nodeName: 'BUTTON',
+                          children: [],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      mockCdp.setResponse('Accessibility.getFullAXTree', {
+        nodes: [
+          {
+            nodeId: 'ax-10',
+            backendDOMNodeId: 10,
+            role: { value: 'dialog' },
+            name: { value: 'Confirm Action' },
+            ignored: false,
+          },
+          {
+            nodeId: 'ax-11',
+            backendDOMNodeId: 11,
+            role: { value: 'button' },
+            name: { value: 'OK' },
+            ignored: false,
+          },
+        ],
+      });
+
+      const compiler = new SnapshotCompiler();
+      const snapshot = await compiler.compile(mockCdp, mockPage, 'page-1');
+
+      // Should include dialog node (essential structural node for dialog detection)
+      const dialogNodes = snapshot.nodes.filter((n) => n.kind === 'dialog');
+      expect(dialogNodes.length).toBe(1);
+      expect(dialogNodes[0].label).toBe('Confirm Action');
+    });
   });
 
   describe('options', () => {

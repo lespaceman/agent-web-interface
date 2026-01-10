@@ -369,6 +369,18 @@ export class SessionManager {
   }
 
   /**
+   * Get the number of pages in the browser context.
+   *
+   * @returns Number of pages, or 0 if browser not running
+   */
+  getPageCount(): number {
+    if (!this.context) {
+      return 0;
+    }
+    return this.context.pages().length;
+  }
+
+  /**
    * Adopt an existing page from the connected browser.
    *
    * When connecting to an external browser (like Athena), use this to

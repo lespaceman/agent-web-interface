@@ -556,7 +556,7 @@ export function detectForms(
   const engine = new QueryEngine(snapshot);
   const includeDisabled = options.include_disabled_fields ?? true;
 
-  // Step 1: Find all form containers
+  // Step 1: Find all form containers (by AX role)
   const formNodes = engine.find({
     kind: 'form',
     limit: 50,
@@ -589,6 +589,17 @@ export function detectForms(
     });
   }
 
+  // Step 2b: Fallback - detect forms by region when no form nodes found
+  // Many forms (like GitHub's login) don't have an accessible name,
+  // so they don't get the "form" AX role. We can detect them by finding
+  // form fields in the "form" region.
+  if (forms.length === 0) {
+    const regionBasedForm = detectFormByRegion(snapshot, engine, includeDisabled);
+    if (regionBasedForm) {
+      forms.push(regionBasedForm);
+    }
+  }
+
   // Step 3: Select primary form (most prominent)
   let primaryForm: DetectedForm | undefined;
   if (forms.length > 0) {
@@ -608,5 +619,77 @@ export function detectForms(
       classified_count: forms.filter((f) => f.purpose !== 'generic').length,
       detection_time_ms: detectionTimeMs,
     },
+  };
+}
+
+/**
+ * Detect a form by looking for form fields in the "form" region.
+ * This is a fallback for forms that don't have an accessible name
+ * and thus don't expose the "form" AX role.
+ */
+function detectFormByRegion(
+  snapshot: BaseSnapshot,
+  _engine: QueryEngine,
+  includeDisabled: boolean
+): DetectedForm | null {
+  // Find all nodes in the "form" region
+  const formRegionNodes = snapshot.nodes.filter((n) => n.where.region === 'form');
+
+  if (formRegionNodes.length === 0) {
+    return null;
+  }
+
+  // Find form fields (inputs, textboxes, checkboxes, etc.)
+  const fieldKinds: NodeKind[] = ['input', 'combobox', 'checkbox', 'switch', 'radio', 'textarea'];
+  const fieldNodes = formRegionNodes.filter(
+    (n) => fieldKinds.includes(n.kind) && (includeDisabled || n.state?.enabled !== false)
+  );
+
+  if (fieldNodes.length === 0) {
+    return null;
+  }
+
+  // Find submit button in the form region
+  const submitNode = formRegionNodes.find(
+    (n) =>
+      n.kind === 'button' &&
+      n.state?.enabled !== false &&
+      (n.attributes?.input_type === 'submit' ||
+        /^(sign\s*in|log\s*in|submit|send|continue|register|create|save)/i.test(n.label))
+  );
+
+  // Build fields array using the nodeToFormField helper
+  const fields: FormField[] = fieldNodes.map((node) => nodeToFormField(node));
+
+  // Build submit button
+  const submitButton: FormSubmitButton | undefined = submitNode
+    ? {
+        node_id: submitNode.node_id,
+        backend_node_id: submitNode.backend_node_id,
+        label: submitNode.label,
+        enabled: submitNode.state?.enabled ?? true,
+        visible: submitNode.state?.visible ?? true,
+      }
+    : undefined;
+
+  const validation = calculateValidation(fields, submitButton);
+  const purposeInfo = inferFormPurpose(fields);
+
+  // Get heading context from the first field if available
+  const title = fieldNodes[0]?.where.heading_context;
+
+  // Use the first field's node_id as the form's node_id (synthetic form)
+  const firstField = fieldNodes[0];
+
+  return {
+    node_id: `form-region-${firstField.node_id}`,
+    backend_node_id: firstField.backend_node_id,
+    title,
+    fields,
+    submit_button: submitButton,
+    validation,
+    purpose: purposeInfo.purpose,
+    purpose_confidence: purposeInfo.confidence,
+    purpose_signals: purposeInfo.signals,
   };
 }

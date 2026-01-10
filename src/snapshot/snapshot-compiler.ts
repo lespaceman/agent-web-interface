@@ -482,14 +482,21 @@ export class SnapshotCompiler {
     // Phase 2: Correlate nodes and identify what to include
     const nodesToProcess: RawNodeData[] = [];
 
+    // Structural roles that must be included for FactPack features
+    // (form detection, dialog detection)
+    const essentialStructuralRoles = new Set(['form', 'dialog', 'alertdialog']);
+
     if (axResult) {
       // Build from AX tree (has semantic information)
       for (const [backendNodeId, axNode] of axResult.nodes) {
         const classification = classifyAxRole(axNode.role);
         const isInteractive = classification === 'interactive';
         const isReadable = classification === 'readable' && this.options.includeReadable;
+        const isEssentialStructural =
+          classification === 'structural' &&
+          essentialStructuralRoles.has(axNode.role?.toLowerCase() ?? '');
 
-        if (isInteractive || isReadable) {
+        if (isInteractive || isReadable || isEssentialStructural) {
           const domNode = domResult?.nodes.get(backendNodeId);
           nodesToProcess.push({
             backendNodeId,
@@ -499,10 +506,12 @@ export class SnapshotCompiler {
         }
       }
     } else if (domResult) {
-      // Fallback: Use DOM-only for interactive tags
+      // Fallback: Use DOM-only for interactive tags and essential structural elements
       for (const [backendNodeId, domNode] of domResult.nodes) {
         const tagName = domNode.nodeName.toUpperCase();
-        if (['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(tagName)) {
+        if (
+          ['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG'].includes(tagName)
+        ) {
           nodesToProcess.push({
             backendNodeId,
             domNode,

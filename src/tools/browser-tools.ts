@@ -106,7 +106,13 @@ export async function browserLaunch(rawInput: unknown): Promise<BrowserLaunchOut
   if (input.mode === 'connect') {
     const endpointUrl = input.endpoint_url ?? buildEndpointUrl();
     await session.connect({ endpointUrl });
-    handle = await session.adoptPage(0);
+    // Try to adopt existing page, or create one if none exist
+    if (session.getPageCount() > 0) {
+      handle = await session.adoptPage(0);
+    } else {
+      // No pages in connected browser, create a new one
+      handle = await session.createPage();
+    }
     mode = 'connected';
   } else {
     // Launch mode
