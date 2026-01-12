@@ -23,13 +23,10 @@ export function makeCompositeKey(ref: ScopedElementRef): CompositeNodeKey {
 
 /**
  * Create composite key from a ReadableNode.
- * IMPORTANT: Uses the node's own loader_id (not mainFrame's) to handle iframes correctly.
- * ReadableNode must include frame_id and loader_id from the snapshot compiler.
+ * Uses the node's own loader_id (not mainFrame's) to handle iframes correctly.
  */
 export function makeCompositeKeyFromNode(node: ReadableNode): CompositeNodeKey {
-  // Type assertion since we're adding frame_id and loader_id to ReadableNode
-  const extendedNode = node as ReadableNode & { frame_id: string; loader_id: string };
-  return `${extendedNode.frame_id}:${extendedNode.loader_id}:${node.backend_node_id}`;
+  return `${node.frame_id}:${node.loader_id}:${node.backend_node_id}`;
 }
 
 /**
@@ -37,11 +34,10 @@ export function makeCompositeKeyFromNode(node: ReadableNode): CompositeNodeKey {
  * Uses the node's stored data rather than current frame state.
  */
 export function buildRefFromNode(node: ReadableNode): ScopedElementRef {
-  const extendedNode = node as ReadableNode & { frame_id: string; loader_id: string };
   return {
     backend_node_id: node.backend_node_id,
-    frame_id: extendedNode.frame_id,
-    loader_id: extendedNode.loader_id,
+    frame_id: node.frame_id,
+    loader_id: node.loader_id,
   };
 }
 
