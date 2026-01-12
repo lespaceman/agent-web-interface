@@ -23,6 +23,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   bump-version:
@@ -125,6 +126,14 @@ jobs:
           git tag -a $TAG -m "Release $TAG"
           git push origin main
           git push origin $TAG
+
+      - name: Trigger release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.bump.outputs.new_version }}"
+          echo "Triggering release workflow for $TAG"
+          gh workflow run release.yml --field tag=$TAG
 
       - name: Create summary
         run: |
