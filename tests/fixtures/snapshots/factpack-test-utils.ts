@@ -28,6 +28,8 @@ export function createNode(overrides: Partial<ReadableNode> = {}): ReadableNode 
   return {
     node_id: `n${testBackendNodeIdCounter}`,
     backend_node_id: testBackendNodeIdCounter++,
+    frame_id: 'test-frame-id',
+    loader_id: 'test-loader-id',
     kind: 'generic',
     label: 'Test',
     where: { region: 'main' },

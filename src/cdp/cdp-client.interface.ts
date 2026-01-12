@@ -65,6 +65,14 @@ export interface CdpMethodMap {
     params: undefined;
     result: Protocol.Page.GetLayoutMetricsResponse;
   };
+  'Page.enable': {
+    params: undefined;
+    result: void;
+  };
+  'Page.getFrameTree': {
+    params: undefined;
+    result: Protocol.Page.GetFrameTreeResponse;
+  };
 
   // CSS methods
   'CSS.getComputedStyleForNode': {
@@ -110,6 +118,7 @@ export interface CdpEventMap {
   'Page.loadEventFired': Protocol.Page.LoadEventFiredEvent;
   'Page.domContentEventFired': Protocol.Page.DomContentEventFiredEvent;
   'Page.frameNavigated': Protocol.Page.FrameNavigatedEvent;
+  'Page.frameDetached': Protocol.Page.FrameDetachedEvent;
   'DOM.documentUpdated': undefined;
   'DOM.childNodeInserted': Protocol.DOM.ChildNodeInsertedEvent;
   'DOM.childNodeRemoved': Protocol.DOM.ChildNodeRemovedEvent;

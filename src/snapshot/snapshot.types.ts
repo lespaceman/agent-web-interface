@@ -93,6 +93,14 @@ export interface ReadableNode {
    * Used for direct CDP interactions to avoid Playwright locator ambiguity. */
   backend_node_id: number;
 
+  /** CDP frame ID containing this node.
+   * Used with loader_id to create globally unique element references. */
+  frame_id: string;
+
+  /** CDP loader ID at snapshot time - changes on frame navigation.
+   * Combined with frame_id and backend_node_id for safe cross-frame references. */
+  loader_id: string;
+
   /** Semantic classification */
   kind: NodeKind;
 

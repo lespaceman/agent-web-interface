@@ -65,6 +65,7 @@ import type { NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
 import type { BaseSnapshot } from '../snapshot/snapshot.types.js';
 import { extractFactPack, type FactPackOptions } from '../factpack/index.js';
 import { generatePageBrief } from '../renderer/index.js';
+import { executeWithDelta, extractDeltaFields, clearPageState } from '../delta/index.js';
 
 // Module-level state
 let sessionManager: SessionManager | null = null;
@@ -299,10 +300,16 @@ export async function browserClose(rawInput: unknown): Promise<BrowserCloseOutpu
   const session = getSessionManager();
 
   if (input.page_id) {
+    // Clear delta state before closing page
+    const handle = session.resolvePage(input.page_id);
+    if (handle) {
+      clearPageState(handle.page);
+    }
     await session.closePage(input.page_id);
     // Also remove any cached snapshot for this page
     snapshotStore.removeByPageId(input.page_id);
   } else {
+    // Delta state uses WeakMap keyed by Page, so cleanup is automatic
     await session.shutdown();
     // Clear all snapshots on full shutdown
     snapshotStore.clear();
@@ -724,9 +731,16 @@ export async function close(rawInput: unknown): Promise<CloseOutput> {
   const session = getSessionManager();
 
   if (input.page_id) {
+    // Clear delta state before closing page
+    const handle = session.resolvePage(input.page_id);
+    if (handle) {
+      clearPageState(handle.page);
+    }
     await session.closePage(input.page_id);
     snapshotStore.removeByPageId(input.page_id);
   } else {
+    // Delta state uses WeakMap keyed by Page, so cleanup is automatic
+    // when pages are garbage collected after shutdown
     await session.shutdown();
     snapshotStore.clear();
   }
@@ -917,9 +931,10 @@ export function find(rawInput: unknown): FindOutput {
 
 /**
  * Click an element.
+ * Returns delta FactPack showing what changed after the click.
  *
  * @param rawInput - Click options (will be validated)
- * @returns Click result
+ * @returns Click result with delta
  */
 export async function click(rawInput: unknown): Promise<ClickOutput> {
   const input = ClickInputSchema.parse(rawInput);
@@ -938,20 +953,35 @@ export async function click(rawInput: unknown): Promise<ClickOutput> {
     throw new Error(`Node ${input.node_id} not found in snapshot`);
   }
 
-  await clickByBackendNodeId(handle.cdp, node.backend_node_id);
+  // Use executeWithDelta wrapper
+  const deltaResult = await executeWithDelta(
+    handle,
+    'click',
+    async () => {
+      await clickByBackendNodeId(handle.cdp, node.backend_node_id);
+    },
+    'click',
+    input.agent_version
+  );
+
+  const deltaFields = extractDeltaFields(deltaResult);
 
   return {
-    success: true,
+    success: !deltaResult.isError,
     node_id: input.node_id,
     clicked_element: node.label,
+    version: deltaFields.version,
+    delta: deltaFields.delta,
+    response_type: deltaFields.response_type,
   };
 }
 
 /**
  * Type text into an element.
+ * Returns delta FactPack showing what changed after typing.
  *
  * @param rawInput - Type options (will be validated)
- * @returns Type result
+ * @returns Type result with delta
  */
 export async function type(rawInput: unknown): Promise<TypeOutput> {
   const input = TypeInputSchema.parse(rawInput);
@@ -962,8 +992,9 @@ export async function type(rawInput: unknown): Promise<TypeOutput> {
 
   let nodeLabel: string | undefined;
   const nodeId = input.node_id;
+  let backendNodeId: number | undefined;
 
-  // If node_id specified, click it first to focus
+  // Get node info if node_id specified
   if (input.node_id) {
     const snap = snapshotStore.getByPageId(page_id);
     if (!snap) {
@@ -976,28 +1007,47 @@ export async function type(rawInput: unknown): Promise<TypeOutput> {
     }
 
     nodeLabel = node.label;
-    await typeByBackendNodeId(handle.cdp, node.backend_node_id, input.text, { clear: input.clear });
-  } else {
-    // Type into currently focused element
-    if (input.clear) {
-      await clearFocusedText(handle.cdp);
-    }
-    await handle.cdp.send('Input.insertText', { text: input.text });
+    backendNodeId = node.backend_node_id;
   }
 
+  // Use executeWithDelta wrapper
+  const deltaResult = await executeWithDelta(
+    handle,
+    'type',
+    async () => {
+      if (backendNodeId !== undefined) {
+        await typeByBackendNodeId(handle.cdp, backendNodeId, input.text, { clear: input.clear });
+      } else {
+        // Type into currently focused element
+        if (input.clear) {
+          await clearFocusedText(handle.cdp);
+        }
+        await handle.cdp.send('Input.insertText', { text: input.text });
+      }
+    },
+    'type',
+    input.agent_version
+  );
+
+  const deltaFields = extractDeltaFields(deltaResult);
+
   return {
-    success: true,
+    success: !deltaResult.isError,
     typed_text: input.text,
     node_id: nodeId,
     element_label: nodeLabel,
+    version: deltaFields.version,
+    delta: deltaFields.delta,
+    response_type: deltaFields.response_type,
   };
 }
 
 /**
  * Press a keyboard key.
+ * Returns delta FactPack showing what changed after the key press.
  *
  * @param rawInput - Press options (will be validated)
- * @returns Press result
+ * @returns Press result with delta
  */
 export async function press(rawInput: unknown): Promise<PressOutput> {
   const input = PressInputSchema.parse(rawInput);
@@ -1005,20 +1055,35 @@ export async function press(rawInput: unknown): Promise<PressOutput> {
 
   const handle = resolveExistingPage(session, input.page_id);
 
-  await pressKey(handle.cdp, input.key, input.modifiers);
+  // Use executeWithDelta wrapper
+  const deltaResult = await executeWithDelta(
+    handle,
+    'press',
+    async () => {
+      await pressKey(handle.cdp, input.key, input.modifiers);
+    },
+    'press',
+    input.agent_version
+  );
+
+  const deltaFields = extractDeltaFields(deltaResult);
 
   return {
-    success: true,
+    success: !deltaResult.isError,
     key: input.key,
     modifiers: input.modifiers,
+    version: deltaFields.version,
+    delta: deltaFields.delta,
+    response_type: deltaFields.response_type,
   };
 }
 
 /**
  * Select a dropdown option.
+ * Returns delta FactPack showing what changed after selection.
  *
  * @param rawInput - Select options (will be validated)
- * @returns Select result
+ * @returns Select result with delta
  */
 export async function select(rawInput: unknown): Promise<SelectOutput> {
   const input = SelectInputSchema.parse(rawInput);
@@ -1037,21 +1102,38 @@ export async function select(rawInput: unknown): Promise<SelectOutput> {
     throw new Error(`Node ${input.node_id} not found in snapshot`);
   }
 
-  const selectedText = await selectOption(handle.cdp, node.backend_node_id, input.value);
+  let selectedText = '';
+
+  // Use executeWithDelta wrapper
+  const deltaResult = await executeWithDelta(
+    handle,
+    'select',
+    async () => {
+      selectedText = await selectOption(handle.cdp, node.backend_node_id, input.value);
+    },
+    'select',
+    input.agent_version
+  );
+
+  const deltaFields = extractDeltaFields(deltaResult);
 
   return {
-    success: true,
+    success: !deltaResult.isError,
     node_id: input.node_id,
     selected_value: input.value,
     selected_text: selectedText,
+    version: deltaFields.version,
+    delta: deltaFields.delta,
+    response_type: deltaFields.response_type,
   };
 }
 
 /**
  * Hover over an element.
+ * Returns delta FactPack showing what changed after hover.
  *
  * @param rawInput - Hover options (will be validated)
- * @returns Hover result
+ * @returns Hover result with delta
  */
 export async function hover(rawInput: unknown): Promise<HoverOutput> {
   const input = HoverInputSchema.parse(rawInput);
@@ -1070,20 +1152,35 @@ export async function hover(rawInput: unknown): Promise<HoverOutput> {
     throw new Error(`Node ${input.node_id} not found in snapshot`);
   }
 
-  await hoverByBackendNodeId(handle.cdp, node.backend_node_id);
+  // Use executeWithDelta wrapper
+  const deltaResult = await executeWithDelta(
+    handle,
+    'hover',
+    async () => {
+      await hoverByBackendNodeId(handle.cdp, node.backend_node_id);
+    },
+    'hover',
+    input.agent_version
+  );
+
+  const deltaFields = extractDeltaFields(deltaResult);
 
   return {
-    success: true,
+    success: !deltaResult.isError,
     node_id: input.node_id,
     element_label: node.label,
+    version: deltaFields.version,
+    delta: deltaFields.delta,
+    response_type: deltaFields.response_type,
   };
 }
 
 /**
  * Scroll page or element into view.
+ * Returns delta FactPack showing what changed after scrolling.
  *
  * @param rawInput - Scroll options (will be validated)
- * @returns Scroll result
+ * @returns Scroll result with delta
  */
 export async function scroll(rawInput: unknown): Promise<ScrollOutput> {
   const input = ScrollInputSchema.parse(rawInput);
@@ -1092,7 +1189,10 @@ export async function scroll(rawInput: unknown): Promise<ScrollOutput> {
   const handle = resolveExistingPage(session, input.page_id);
   const page_id = handle.page_id;
 
-  // Scroll element into view
+  let scrolledType: 'element' | 'page' = 'page';
+  let backendNodeId: number | undefined;
+
+  // Get node info if node_id specified
   if (input.node_id) {
     const snap = snapshotStore.getByPageId(page_id);
     if (!snap) {
@@ -1104,25 +1204,42 @@ export async function scroll(rawInput: unknown): Promise<ScrollOutput> {
       throw new Error(`Node ${input.node_id} not found in snapshot`);
     }
 
-    await scrollIntoView(handle.cdp, node.backend_node_id);
-
-    return {
-      success: true,
-      scrolled: 'element',
-    };
+    backendNodeId = node.backend_node_id;
+    scrolledType = 'element';
+  } else if (!input.direction) {
+    throw new Error('Must specify node_id or direction');
   }
 
-  // Scroll page
-  if (input.direction) {
-    await scrollPage(handle.cdp, input.direction, input.amount);
+  // Use executeWithDelta wrapper
+  const deltaResult = await executeWithDelta(
+    handle,
+    'scroll',
+    async () => {
+      if (backendNodeId !== undefined) {
+        await scrollIntoView(handle.cdp, backendNodeId);
+      } else if (input.direction) {
+        await scrollPage(handle.cdp, input.direction, input.amount);
+      }
+    },
+    'scroll',
+    input.agent_version
+  );
 
-    return {
-      success: true,
-      scrolled: 'page',
-      direction: input.direction,
-      amount: input.amount,
-    };
+  const deltaFields = extractDeltaFields(deltaResult);
+
+  const result: ScrollOutput = {
+    success: !deltaResult.isError,
+    scrolled: scrolledType,
+    version: deltaFields.version,
+    delta: deltaFields.delta,
+    response_type: deltaFields.response_type,
+  };
+
+  // Add direction and amount for page scrolls
+  if (scrolledType === 'page' && input.direction) {
+    result.direction = input.direction;
+    result.amount = input.amount;
   }
 
-  throw new Error('Must specify node_id or direction');
+  return result;
 }

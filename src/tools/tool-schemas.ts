@@ -867,6 +867,21 @@ export type FindInput = z.infer<typeof FindInputSchema>;
 export type FindOutput = z.infer<typeof FindOutputSchema>;
 
 // ============================================================================
+// Delta Response Types (shared by mutation tools)
+// ============================================================================
+
+/** Response type indicating what kind of snapshot data is returned */
+export const SnapshotResponseTypeSchema = z.enum([
+  'full',
+  'delta',
+  'no_change',
+  'overlay_opened',
+  'overlay_closed',
+]);
+
+export type SnapshotResponseType = z.infer<typeof SnapshotResponseTypeSchema>;
+
+// ============================================================================
 // click - Click an element
 // ============================================================================
 
@@ -875,6 +890,8 @@ export const ClickInputSchema = z.object({
   node_id: z.string(),
   /** Page ID. If omitted, uses most recently used page */
   page_id: z.string().optional(),
+  /** Agent's last known page version for delta computation */
+  agent_version: z.number().optional(),
 });
 
 export const ClickOutputSchema = z.object({
@@ -884,6 +901,12 @@ export const ClickOutputSchema = z.object({
   node_id: z.string(),
   /** Label of clicked element */
   clicked_element: z.string().optional(),
+  /** Current page version after action */
+  version: z.number().optional(),
+  /** Delta or full snapshot content */
+  delta: z.string().optional(),
+  /** Type of response (full, delta, no_change, overlay_opened, overlay_closed) */
+  response_type: SnapshotResponseTypeSchema.optional(),
 });
 
 export type ClickInput = z.infer<typeof ClickInputSchema>;
@@ -902,6 +925,8 @@ export const TypeInputSchema = z.object({
   clear: z.boolean().default(false),
   /** Page ID. If omitted, uses most recently used page */
   page_id: z.string().optional(),
+  /** Agent's last known page version for delta computation */
+  agent_version: z.number().optional(),
 });
 
 export const TypeOutputSchema = z.object({
@@ -913,6 +938,12 @@ export const TypeOutputSchema = z.object({
   node_id: z.string().optional(),
   /** Label of element typed into */
   element_label: z.string().optional(),
+  /** Current page version after action */
+  version: z.number().optional(),
+  /** Delta or full snapshot content */
+  delta: z.string().optional(),
+  /** Type of response (full, delta, no_change, overlay_opened, overlay_closed) */
+  response_type: SnapshotResponseTypeSchema.optional(),
 });
 
 export type TypeInput = z.infer<typeof TypeInputSchema>;
@@ -947,6 +978,8 @@ export const PressInputSchema = z.object({
   modifiers: z.array(z.enum(['Control', 'Shift', 'Alt', 'Meta'])).optional(),
   /** Page ID. If omitted, uses most recently used page */
   page_id: z.string().optional(),
+  /** Agent's last known page version for delta computation */
+  agent_version: z.number().optional(),
 });
 
 export const PressOutputSchema = z.object({
@@ -956,6 +989,12 @@ export const PressOutputSchema = z.object({
   key: z.string(),
   /** Modifiers that were held */
   modifiers: z.array(z.string()).optional(),
+  /** Current page version after action */
+  version: z.number().optional(),
+  /** Delta or full snapshot content */
+  delta: z.string().optional(),
+  /** Type of response (full, delta, no_change, overlay_opened, overlay_closed) */
+  response_type: SnapshotResponseTypeSchema.optional(),
 });
 
 export type PressInput = z.infer<typeof PressInputSchema>;
@@ -972,6 +1011,8 @@ export const SelectInputSchema = z.object({
   value: z.string(),
   /** Page ID. If omitted, uses most recently used page */
   page_id: z.string().optional(),
+  /** Agent's last known page version for delta computation */
+  agent_version: z.number().optional(),
 });
 
 export const SelectOutputSchema = z.object({
@@ -983,6 +1024,12 @@ export const SelectOutputSchema = z.object({
   selected_value: z.string(),
   /** Visible text of selected option */
   selected_text: z.string(),
+  /** Current page version after action */
+  version: z.number().optional(),
+  /** Delta or full snapshot content */
+  delta: z.string().optional(),
+  /** Type of response (full, delta, no_change, overlay_opened, overlay_closed) */
+  response_type: SnapshotResponseTypeSchema.optional(),
 });
 
 export type SelectInput = z.infer<typeof SelectInputSchema>;
@@ -997,6 +1044,8 @@ export const HoverInputSchema = z.object({
   node_id: z.string(),
   /** Page ID. If omitted, uses most recently used page */
   page_id: z.string().optional(),
+  /** Agent's last known page version for delta computation */
+  agent_version: z.number().optional(),
 });
 
 export const HoverOutputSchema = z.object({
@@ -1006,6 +1055,12 @@ export const HoverOutputSchema = z.object({
   node_id: z.string(),
   /** Label of hovered element */
   element_label: z.string().optional(),
+  /** Current page version after action */
+  version: z.number().optional(),
+  /** Delta or full snapshot content */
+  delta: z.string().optional(),
+  /** Type of response (full, delta, no_change, overlay_opened, overlay_closed) */
+  response_type: SnapshotResponseTypeSchema.optional(),
 });
 
 export type HoverInput = z.infer<typeof HoverInputSchema>;
@@ -1025,6 +1080,8 @@ export const ScrollInputSchemaBase = z.object({
   amount: z.number().default(500),
   /** Page ID. If omitted, uses most recently used page */
   page_id: z.string().optional(),
+  /** Agent's last known page version for delta computation */
+  agent_version: z.number().optional(),
 });
 
 /** Full schema with refinement (used for validation) */
@@ -1044,6 +1101,12 @@ export const ScrollOutputSchema = z.object({
   direction: z.enum(['up', 'down']).optional(),
   /** Amount scrolled (for page scroll) */
   amount: z.number().optional(),
+  /** Current page version after action */
+  version: z.number().optional(),
+  /** Delta or full snapshot content */
+  delta: z.string().optional(),
+  /** Type of response (full, delta, no_change, overlay_opened, overlay_closed) */
+  response_type: SnapshotResponseTypeSchema.optional(),
 });
 
 export type ScrollInput = z.infer<typeof ScrollInputSchema>;

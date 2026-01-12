@@ -114,6 +114,8 @@ describe('BrowserTools', () => {
         {
           node_id: '12345', // Derived from backend_node_id
           backend_node_id: 12345, // CDP backendNodeId for direct clicking
+          frame_id: 'test-frame-id',
+          loader_id: 'test-loader-id',
           kind: 'link',
           label: 'More information...',
           where: { region: 'main' },
@@ -461,6 +463,8 @@ describe('BrowserTools', () => {
           {
             node_id: '12345', // Derived from backend_node_id
             backend_node_id: 12345, // CDP backendNodeId - guaranteed unique
+            frame_id: 'test-frame-id',
+            loader_id: 'test-loader-id',
             kind: 'button',
             label: 'Yes',
             where: { region: 'main' },
@@ -470,6 +474,8 @@ describe('BrowserTools', () => {
           {
             node_id: '12346', // Derived from backend_node_id
             backend_node_id: 12346, // Different backendNodeId - unique
+            frame_id: 'test-frame-id',
+            loader_id: 'test-loader-id',
             kind: 'button',
             label: 'Yes',
             where: { region: 'dialog' },
@@ -632,6 +638,8 @@ describe('BrowserTools', () => {
           {
             node_id: '1', // Derived from backend_node_id
             backend_node_id: 1,
+            frame_id: 'test-frame-id',
+            loader_id: 'test-loader-id',
             kind: 'button',
             label: 'Submit',
             where: { region: 'main' },
@@ -641,6 +649,8 @@ describe('BrowserTools', () => {
           {
             node_id: '2', // Derived from backend_node_id
             backend_node_id: 2,
+            frame_id: 'test-frame-id',
+            loader_id: 'test-loader-id',
             kind: 'link',
             label: 'Home',
             where: { region: 'nav' },
@@ -650,6 +660,8 @@ describe('BrowserTools', () => {
           {
             node_id: '3', // Derived from backend_node_id
             backend_node_id: 3,
+            frame_id: 'test-frame-id',
+            loader_id: 'test-loader-id',
             kind: 'input',
             label: 'Email',
             where: { region: 'main' },
@@ -683,6 +695,8 @@ describe('BrowserTools', () => {
         nodes: Array.from({ length: 20 }, (_, i) => ({
           node_id: String(i), // Derived from backend_node_id
           backend_node_id: i,
+          frame_id: 'test-frame-id',
+          loader_id: 'test-loader-id',
           kind: 'link' as const,
           label: `Link ${i}`,
           where: { region: 'main' as const },

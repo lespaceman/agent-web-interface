@@ -298,6 +298,40 @@ function buildHeadingIndex(
 }
 
 /**
+ * Frame info for loader ID lookup.
+ */
+interface FrameLoaderInfo {
+  frameId: string;
+  loaderId: string;
+  isMainFrame: boolean;
+}
+
+/**
+ * Recursively collect frame loaderIds from frame tree.
+ */
+function collectFrameLoaderIds(
+  frameTree: {
+    frame: { id: string; loaderId: string; parentId?: string };
+    childFrames?: unknown[];
+  },
+  frameLoaderIds: Map<string, FrameLoaderInfo>,
+  _isMainFrame = true
+): void {
+  const frame = frameTree.frame;
+  frameLoaderIds.set(frame.id, {
+    frameId: frame.id,
+    loaderId: frame.loaderId,
+    isMainFrame: !frame.parentId,
+  });
+
+  if (frameTree.childFrames) {
+    for (const child of frameTree.childFrames as (typeof frameTree)[]) {
+      collectFrameLoaderIds(child, frameLoaderIds, false);
+    }
+  }
+}
+
+/**
  * Snapshot compiler options
  */
 export interface CompileOptions extends Partial<SnapshotOptions> {
@@ -446,6 +480,28 @@ export class SnapshotCompiler {
       ? buildIdMapsByContext(domResult)
       : new Map<string, Map<string, RawDomNode>>();
 
+    // Query frame tree for loader IDs (needed for delta computation)
+    const frameLoaderIds = new Map<string, FrameLoaderInfo>();
+    let mainFrameId: string | undefined;
+    let hasUnknownFrames = false;
+
+    try {
+      const frameTreeResult = await cdp.send('Page.getFrameTree', undefined);
+      collectFrameLoaderIds(frameTreeResult.frameTree, frameLoaderIds);
+
+      // Find main frame ID
+      for (const [frameId, info] of frameLoaderIds) {
+        if (info.isMainFrame) {
+          mainFrameId = frameId;
+          break;
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      warnings.push(`Frame tree query failed: ${message}`);
+      hasUnknownFrames = true;
+    }
+
     // Build DOM order index for deterministic ordering
     let domOrderIndex: Map<number, number> | undefined;
     let headingIndex: Map<number, string> | undefined;
@@ -540,8 +596,15 @@ export class SnapshotCompiler {
         axResult?.nodes ?? new Map<number, RawAxNode>(),
         limitedNodes,
         idMapsByContext,
-        headingIndex
+        headingIndex,
+        frameLoaderIds,
+        mainFrameId
       );
+
+      // Track if any node has unknown frame (loader_id lookup failed)
+      if (!node.loader_id) {
+        hasUnknownFrames = true;
+      }
 
       // Filter by visibility (unless include_hidden)
       if (this.options.include_hidden || node.state?.visible !== false) {
@@ -583,6 +646,10 @@ export class SnapshotCompiler {
 
     if (partial) {
       meta.partial = true;
+    }
+
+    if (hasUnknownFrames) {
+      warnings.push('Some nodes have unknown frame loaderIds; delta computation may be unreliable');
     }
 
     if (warnings.length > 0) {
@@ -627,9 +694,18 @@ export class SnapshotCompiler {
     axTree: Map<number, RawAxNode>,
     allNodes: RawNodeData[],
     idMapsByContext: IdMapsByContext,
-    headingIndex?: Map<number, string>
+    headingIndex: Map<number, string> | undefined,
+    frameLoaderIds: Map<string, FrameLoaderInfo>,
+    mainFrameId: string | undefined
   ): ReadableNode {
     const { domNode, axNode, layout, backendNodeId } = nodeData;
+
+    // Determine frame_id and loader_id for this node
+    // If domNode has frameId, use it; otherwise default to mainFrameId
+    const nodeFrameId = domNode?.frameId ?? mainFrameId ?? 'unknown';
+    const frameInfo = frameLoaderIds.get(nodeFrameId);
+    const frameId = frameInfo?.frameId ?? nodeFrameId;
+    const loaderId = frameInfo?.loaderId ?? '';
 
     // Determine kind
     let kind: NodeKind = 'generic';
@@ -700,6 +776,8 @@ export class SnapshotCompiler {
     const node: ReadableNode = {
       node_id: String(backendNodeId),
       backend_node_id: backendNodeId,
+      frame_id: frameId,
+      loader_id: loaderId,
       kind,
       label,
       where,

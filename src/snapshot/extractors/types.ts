@@ -48,6 +48,10 @@ export interface RawDomNode {
   /** Frame ID if this node is an iframe content document */
   frameId?: string;
 
+  /** Loader ID from the frame at extraction time.
+   * Changes on frame navigation. Used for delta computation. */
+  loaderId?: string;
+
   /** Parent node's backendNodeId */
   parentId?: number;
 
