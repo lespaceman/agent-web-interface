@@ -252,8 +252,8 @@ export type LaunchBrowserOutput = z.infer<typeof LaunchBrowserOutputSchema>;
 // ============================================================================
 
 export const ConnectBrowserInputSchema = z.object({
-  /** CDP endpoint URL (e.g., ws://localhost:9222) */
-  endpoint_url: z.string(),
+  /** CDP endpoint URL (e.g., http://localhost:9223). Defaults to Athena CEF bridge host/port. */
+  endpoint_url: z.string().optional(),
 });
 
 export const ConnectBrowserOutputSchema = z.object({

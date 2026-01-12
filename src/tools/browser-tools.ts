@@ -134,7 +134,11 @@ export async function connectBrowser(
   const input = ConnectBrowserInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  await session.connect({ endpointUrl: input.endpoint_url });
+  if (input.endpoint_url) {
+    await session.connect({ endpointUrl: input.endpoint_url });
+  } else {
+    await session.connect();
+  }
 
   // Try to adopt existing page, or create one if none exist
   let handle;

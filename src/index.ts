@@ -111,7 +111,8 @@ function initializeServer(): BrowserAutomationServer {
     'connect_browser',
     {
       title: 'Connect Browser (V2)',
-      description: 'Connect to an existing browser instance via CDP.',
+      description:
+        'Connect to an existing browser instance via CDP. Defaults to the Athena CEF bridge endpoint.',
       inputSchema: ConnectBrowserInputSchema.shape,
       outputSchema: ConnectBrowserOutputSchema.shape,
     },
