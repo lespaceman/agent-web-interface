@@ -138,6 +138,7 @@ export interface ComputedDelta {
  */
 export interface ModifiedNode {
   ref: ScopedElementRef;
+  kind?: NodeKind;
   previousLabel: string;
   currentLabel: string;
   changeType: 'text' | 'state' | 'attributes';
@@ -212,14 +213,99 @@ export type SnapshotResponseType =
   | 'overlay_opened'
   | 'overlay_closed';
 
+export interface DeltaCounts {
+  invalidated: number;
+  added: number;
+  modified: number;
+  removed: number;
+}
+
+export interface DeltaNodeSummary {
+  ref: SerializedRef;
+  kind: NodeKind;
+  label: string;
+  state?: ReadableNode['state'];
+}
+
+export interface DeltaModifiedSummary {
+  ref: SerializedRef;
+  kind?: NodeKind;
+  change_type: ModifiedNode['changeType'];
+  previous_label?: string;
+  current_label?: string;
+}
+
+export interface DeltaPayloadBase {
+  type: SnapshotResponseType;
+  summary: string;
+}
+
+export interface DeltaPayloadDelta extends DeltaPayloadBase {
+  type: 'delta';
+  context: 'base' | 'overlay';
+  counts: DeltaCounts;
+  invalidated_refs: SerializedRef[];
+  added: DeltaNodeSummary[];
+  modified: DeltaModifiedSummary[];
+  removed_refs: SerializedRef[];
+}
+
+export interface DeltaPayloadFull extends DeltaPayloadBase {
+  type: 'full';
+  snapshot: string;
+  reason?: string;
+}
+
+export interface DeltaPayloadNoChange extends DeltaPayloadBase {
+  type: 'no_change';
+}
+
+export interface DeltaPayloadOverlayOpened extends DeltaPayloadBase {
+  type: 'overlay_opened';
+  invalidated_refs: SerializedRef[];
+  overlay: {
+    overlay_type: OverlayType;
+    root_ref: SerializedRef;
+  };
+  counts: DeltaCounts;
+  nodes: DeltaNodeSummary[];
+  transition?: 'opened' | 'replaced';
+  previous_overlay?: {
+    overlay_type: OverlayType;
+    root_ref: SerializedRef;
+    invalidated_refs: SerializedRef[];
+  };
+}
+
+export interface DeltaPayloadOverlayClosed extends DeltaPayloadBase {
+  type: 'overlay_closed';
+  overlay: {
+    overlay_type: OverlayType;
+    root_ref: SerializedRef;
+  };
+  invalidated_refs: SerializedRef[];
+  base_changes?: {
+    counts: DeltaCounts;
+    added: DeltaNodeSummary[];
+    modified: DeltaModifiedSummary[];
+    removed_refs: SerializedRef[];
+  };
+}
+
+export type DeltaPayload =
+  | DeltaPayloadDelta
+  | DeltaPayloadFull
+  | DeltaPayloadNoChange
+  | DeltaPayloadOverlayOpened
+  | DeltaPayloadOverlayClosed;
+
 /**
  * Snapshot response returned by computeResponse.
  */
 export interface SnapshotResponse {
   type: SnapshotResponseType;
-  content: string;
+  content: DeltaPayload;
   version: number;
-  reason?: string;
 }
 
 /**
@@ -291,12 +377,25 @@ export interface ToolResultContent {
   text: string;
 }
 
+export type ActionStatus = 'completed' | 'failed' | 'skipped';
+
+export interface ActionDeltaPayload {
+  action: {
+    name: string;
+    status: ActionStatus;
+  };
+  pre_action?: DeltaPayload;
+  result: DeltaPayload;
+  warnings?: string[];
+  error?: string;
+}
+
 /**
  * Delta tool result with extracted fields.
  */
 export interface DeltaToolResult {
   version: number;
-  content: string;
+  content: ActionDeltaPayload;
   type: SnapshotResponseType;
   isError?: boolean;
 }

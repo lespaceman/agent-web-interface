@@ -295,8 +295,11 @@ describe('PageSnapshotState', () => {
       // Replacement is reported as overlay_opened (new overlay is now active)
       expect(response.type).toBe('overlay_opened');
       expect(pageSnapshotState.isInOverlayMode).toBe(true);
-      // Content should mention both close and open (case-insensitive)
-      expect(response.content.toLowerCase()).toContain('closed');
+      expect(response.content.type).toBe('overlay_opened');
+      if (response.content.type === 'overlay_opened') {
+        expect(response.content.transition).toBe('replaced');
+        expect(response.content.previous_overlay).toBeDefined();
+      }
     });
 
     it('should keep baseline frozen during overlay mode', async () => {

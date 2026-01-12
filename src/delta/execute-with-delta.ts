@@ -7,12 +7,12 @@
 
 import type { Page } from 'playwright';
 import type { PageHandle } from '../browser/page-registry.js';
-import type { ActionType, DeltaToolResult, SnapshotResponseType } from './types.js';
+import type { ActionDeltaPayload, ActionType, DeltaToolResult, SnapshotResponseType } from './types.js';
 import { FrameTracker } from './frame-tracker.js';
 import { SnapshotVersionManager } from './snapshot-version-manager.js';
 import { PageSnapshotState } from './page-snapshot-state.js';
 import { stabilizeDom } from './dom-stabilizer.js';
-import { formatDelta } from './delta-formatter.js';
+import { formatDelta, formatNoChange } from './delta-formatter.js';
 import { makeCompositeKeyFromNode, buildRefFromNode, computeDeltaConfidence } from './utils.js';
 import type { ReadableNode } from '../snapshot/snapshot.types.js';
 import type { ScopedElementRef, ComputedDelta, ModifiedNode } from './types.js';
@@ -92,18 +92,26 @@ export async function executeWithDelta(
   if (preValidation.status === 'stale_no_history') {
     // Reset state and return full snapshot - agent must re-sync before acting
     const fullResponse = await state.initialize(handle.page, handle.cdp);
+    const errorMessage = `Action not executed: your page state (v${preValidation.agentVersionNumber}) is too stale to reconcile. Review the full snapshot and retry.`;
+    const resultPayload = {
+      ...fullResponse.content,
+      summary: 'Full snapshot: action skipped due to stale agent state.',
+      reason: 'Action skipped due to stale agent state.',
+    };
+    const payload: ActionDeltaPayload = {
+      action: { name: toolName, status: 'skipped' },
+      error: errorMessage,
+      result: resultPayload,
+    };
     return {
       version: fullResponse.version,
-      content:
-        `Action not executed: Your page state (v${preValidation.agentVersionNumber}) is too stale to reconcile.\n\n` +
-        `Here is the current page state. Please review and retry your action.\n\n` +
-        `${fullResponse.content}`,
-      type: 'full' as SnapshotResponseType,
+      content: payload,
+      type: fullResponse.type,
       isError: true,
     };
   }
 
-  let preNotice = '';
+  let preAction: ActionDeltaPayload['pre_action'];
   let pendingBaselineAdvance = false;
 
   // For stale_with_history, we can show what changed and proceed
@@ -115,7 +123,11 @@ export async function executeWithDelta(
       state.frameTracker
     );
     const context = state.isInOverlayMode ? 'overlay' : 'base';
-    preNotice = `Page changed before action:\n${formatDelta(preDelta, [], { context }, state.frameTracker)}\n\n`;
+    const preDeltaPayload = formatDelta(preDelta, [], { context }, state.frameTracker);
+    preAction = {
+      ...preDeltaPayload,
+      summary: `Before action: ${preDeltaPayload.summary}`,
+    };
   }
 
   // Execute action - if this throws, baseline is NOT advanced (invariant preserved)
@@ -125,9 +137,16 @@ export async function executeWithDelta(
     // Action failed - do NOT advance baseline, return error
     // Agent still has their old version which is still valid
     const message = error instanceof Error ? error.message : String(error);
+    const payload: ActionDeltaPayload = {
+      action: { name: toolName, status: 'failed' },
+      error: `${toolName} failed: ${message}`,
+      result: formatNoChange(
+        'Action failed. Page state unchanged; existing element references remain valid.'
+      ),
+    };
     return {
       version: state.currentVersion,
-      content: `${toolName} failed: ${message}\n\nPage state unchanged. Your element references remain valid.`,
+      content: payload,
       type: 'no_change' as SnapshotResponseType,
       isError: true,
     };
@@ -144,24 +163,22 @@ export async function executeWithDelta(
   // Compute response (delta will be from advanced baseline)
   const response = await state.computeResponse(handle.page, handle.cdp, actionType);
 
-  // Build final result
-  const parts: string[] = [];
+  const payload: ActionDeltaPayload = {
+    action: { name: toolName, status: 'completed' },
+    result: response.content,
+  };
 
-  if (preNotice) {
-    parts.push(preNotice);
+  if (preAction) {
+    payload.pre_action = preAction;
   }
-
-  parts.push(`${toolName} completed`);
 
   if (stability.warning) {
-    parts.push(`\n${stability.warning}`);
+    payload.warnings = [stability.warning];
   }
-
-  parts.push(`\n\n${response.content}`);
 
   return {
     version: response.version,
-    content: parts.join(''),
+    content: payload,
     type: response.type,
   };
 }
@@ -219,7 +236,7 @@ function computeDeltaBetweenSnapshots(
  */
 export function extractDeltaFields(result: DeltaToolResult): {
   version?: number;
-  delta?: string;
+  delta?: ActionDeltaPayload;
   response_type?: SnapshotResponseType;
 } {
   return {

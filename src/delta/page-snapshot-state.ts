@@ -221,9 +221,12 @@ export class PageSnapshotState {
 
       return {
         type: 'full',
-        content: formatFullSnapshot(versioned.snapshot, this._frameTracker),
+        content: formatFullSnapshot(
+          versioned.snapshot,
+          this._frameTracker,
+          'Unknown frame loaderIds - delta computation unreliable'
+        ),
         version: versioned.version,
-        reason: 'Unknown frame loaderIds - delta computation unreliable',
       };
     }
 
@@ -287,9 +290,12 @@ export class PageSnapshotState {
 
     return {
       type: 'full',
-      content: formatFullSnapshot(versioned.snapshot, this._frameTracker),
+      content: formatFullSnapshot(
+        versioned.snapshot,
+        this._frameTracker,
+        'Full page navigation detected'
+      ),
       version: versioned.version,
-      reason: 'Full page navigation detected',
     };
   }
 
@@ -425,23 +431,42 @@ export class PageSnapshotState {
     // Prune invalidated refs from old overlay
     this.pruneRemovedRefs(closedInvalidations);
 
-    // Format combined response: close message + open message
-    const closeContent = formatOverlayClosed(
+    // Format combined response: close + open details
+    const closedPayload = formatOverlayClosed(
       closedOverlay,
       closedInvalidations,
       null,
       this._frameTracker
     );
-    const openContent = formatOverlayOpened(
+    const openedPayload = formatOverlayOpened(
       newOverlayState,
       newOverlayNodes,
       [], // No additional invalidations - already handled above
       this._frameTracker
     );
 
+    const invalidatedRefs = closedPayload.invalidated_refs ?? [];
+    const counts = {
+      invalidated: invalidatedRefs.length,
+      added: openedPayload.nodes.length,
+      modified: 0,
+      removed: 0,
+    };
+
     return {
-      type: 'overlay_opened', // Use overlay_opened as primary type since new overlay is now active
-      content: `${closeContent}\n\n${openContent}`,
+      type: 'overlay_opened', // New overlay is active
+      content: {
+        ...openedPayload,
+        summary: `Overlay replaced: opened ${openedPayload.overlay.overlay_type} (${counts.added} node(s)), invalidated ${counts.invalidated}.`,
+        counts,
+        invalidated_refs: invalidatedRefs,
+        transition: 'replaced',
+        previous_overlay: {
+          overlay_type: closedPayload.overlay.overlay_type,
+          root_ref: closedPayload.overlay.root_ref,
+          invalidated_refs: invalidatedRefs,
+        },
+      },
       version: versioned.version,
     };
   }
@@ -508,9 +533,12 @@ export class PageSnapshotState {
 
       return {
         type: 'full',
-        content: formatFullSnapshot(versioned.snapshot, this._frameTracker),
+        content: formatFullSnapshot(
+          versioned.snapshot,
+          this._frameTracker,
+          'Delta unreliable - sending full snapshot'
+        ),
         version: versioned.version,
-        reason: 'Delta unreliable - sending full snapshot',
       };
     }
 
@@ -770,6 +798,7 @@ export class PageSnapshotState {
       if (known && hashNodeContent(node) !== known.contentHash) {
         modified.push({
           ref: buildRefFromNode(node),
+          kind: known.kind,
           previousLabel: known.label,
           currentLabel: node.label,
           changeType: 'text',

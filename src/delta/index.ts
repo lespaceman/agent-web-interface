@@ -26,8 +26,19 @@ export type {
   // Responses
   SnapshotResponse,
   SnapshotResponseType,
+  DeltaPayload,
+  DeltaPayloadDelta,
+  DeltaPayloadFull,
+  DeltaPayloadNoChange,
+  DeltaPayloadOverlayOpened,
+  DeltaPayloadOverlayClosed,
+  DeltaCounts,
+  DeltaNodeSummary,
+  DeltaModifiedSummary,
   DeltaToolResult,
   DeltaFormatOptions,
+  ActionStatus,
+  ActionDeltaPayload,
 
   // Overlay
   OverlayState,

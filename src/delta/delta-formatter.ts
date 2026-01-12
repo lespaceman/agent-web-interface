@@ -6,7 +6,21 @@
  */
 
 import type { ReadableNode, BaseSnapshot } from '../snapshot/snapshot.types.js';
-import type { ScopedElementRef, ComputedDelta, OverlayState, DeltaFormatOptions } from './types.js';
+import type {
+  ScopedElementRef,
+  ComputedDelta,
+  OverlayState,
+  DeltaFormatOptions,
+  DeltaCounts,
+  DeltaNodeSummary,
+  DeltaModifiedSummary,
+  DeltaPayloadDelta,
+  DeltaPayloadFull,
+  DeltaPayloadOverlayOpened,
+  DeltaPayloadOverlayClosed,
+  DeltaPayloadNoChange,
+  SerializedRef,
+} from './types.js';
 import type { FrameTracker } from './frame-tracker.js';
 import { buildRefFromNode } from './utils.js';
 
@@ -48,6 +62,73 @@ export function formatNode(node: ReadableNode, frameTracker: FrameTracker): stri
   const serialized = frameTracker.serializeRef(ref);
   const stateIndicators = formatState(node.state);
   return `- ${node.kind}[${serialized}]: "${node.label}"${stateIndicators}`;
+}
+
+function buildDeltaNodeSummary(node: ReadableNode, frameTracker: FrameTracker): DeltaNodeSummary {
+  const ref = buildRefFromNode(node);
+  const summary: DeltaNodeSummary = {
+    ref: frameTracker.serializeRef(ref),
+    kind: node.kind,
+    label: node.label,
+  };
+
+  if (node.state) {
+    summary.state = node.state;
+  }
+
+  return summary;
+}
+
+function buildDeltaModifiedSummary(
+  mod: ComputedDelta['modified'][number],
+  frameTracker: FrameTracker
+): DeltaModifiedSummary {
+  const summary: DeltaModifiedSummary = {
+    ref: frameTracker.serializeRef(mod.ref),
+    change_type: mod.changeType,
+  };
+
+  if (mod.kind) {
+    summary.kind = mod.kind;
+  }
+
+  if (mod.previousLabel !== mod.currentLabel) {
+    summary.previous_label = mod.previousLabel;
+    summary.current_label = mod.currentLabel;
+  }
+
+  return summary;
+}
+
+function serializeRefs(refs: ScopedElementRef[], frameTracker: FrameTracker): SerializedRef[] {
+  return refs.map((ref) => frameTracker.serializeRef(ref));
+}
+
+function uniqueRefs(refs: SerializedRef[]): SerializedRef[] {
+  const seen = new Set<string>();
+  const unique: SerializedRef[] = [];
+
+  for (const ref of refs) {
+    if (seen.has(ref)) continue;
+    seen.add(ref);
+    unique.push(ref);
+  }
+
+  return unique;
+}
+
+function buildCounts(
+  invalidated: number,
+  added: number,
+  modified: number,
+  removed: number
+): DeltaCounts {
+  return {
+    invalidated,
+    added,
+    modified,
+    removed,
+  };
 }
 
 // ============================================================================
@@ -107,9 +188,9 @@ function groupByRegion(nodes: ReadableNode[]): Record<string, ReadableNode[]> {
  *
  * @param snapshot - BaseSnapshot to format
  * @param frameTracker - FrameTracker for ref serialization
- * @returns Formatted snapshot string
+ * @returns Formatted snapshot text
  */
-export function formatFullSnapshot(snapshot: BaseSnapshot, frameTracker: FrameTracker): string {
+function renderFullSnapshotText(snapshot: BaseSnapshot, frameTracker: FrameTracker): string {
   const parts: string[] = [];
 
   parts.push(`# Page: ${snapshot.title}`);
@@ -132,6 +213,22 @@ export function formatFullSnapshot(snapshot: BaseSnapshot, frameTracker: FrameTr
   return parts.join('\n');
 }
 
+export function formatFullSnapshot(
+  snapshot: BaseSnapshot,
+  frameTracker: FrameTracker,
+  reason?: string
+): DeltaPayloadFull {
+  const snapshotText = renderFullSnapshotText(snapshot, frameTracker);
+  const summary = reason ? `Full snapshot: ${reason}` : 'Full snapshot.';
+
+  return {
+    type: 'full',
+    summary,
+    snapshot: snapshotText,
+    reason,
+  };
+}
+
 // ============================================================================
 // Delta Formatting
 // ============================================================================
@@ -143,64 +240,41 @@ export function formatFullSnapshot(snapshot: BaseSnapshot, frameTracker: FrameTr
  * @param frameInvalidations - Additional invalidations from frame events
  * @param options - Format options (context: base or overlay)
  * @param frameTracker - FrameTracker for ref serialization
- * @returns Formatted delta string
+ * @returns Structured delta payload
  */
 export function formatDelta(
   delta: ComputedDelta,
   frameInvalidations: ScopedElementRef[],
   options: DeltaFormatOptions,
   frameTracker: FrameTracker
-): string {
-  const parts: string[] = [];
+): DeltaPayloadDelta {
+  const removedRefs = serializeRefs(delta.removed, frameTracker);
+  const invalidatedRefs = uniqueRefs([
+    ...serializeRefs(frameInvalidations, frameTracker),
+    ...removedRefs,
+  ]);
+  const added = delta.added.map((node) => buildDeltaNodeSummary(node, frameTracker));
+  const modified = delta.modified.map((mod) => buildDeltaModifiedSummary(mod, frameTracker));
+  const counts = buildCounts(
+    invalidatedRefs.length,
+    added.length,
+    modified.length,
+    removedRefs.length
+  );
 
-  // Header based on context
-  if (options.context === 'overlay') {
-    parts.push('## Overlay Updated');
-  } else {
-    parts.push('## Page Updated');
-  }
+  const contextLabel = options.context === 'overlay' ? 'Overlay updated' : 'Page updated';
+  const summary = `${contextLabel}: +${counts.added} ~${counts.modified} -${counts.removed}, invalidated ${counts.invalidated}.`;
 
-  // CRITICAL: Invalidations first (agent must stop using these)
-  const allInvalidations = [
-    ...frameInvalidations.map((r) => frameTracker.serializeRef(r)),
-    ...delta.removed.map((r) => frameTracker.serializeRef(r)),
-  ];
-
-  if (allInvalidations.length > 0) {
-    parts.push('');
-    parts.push('### Invalidated References');
-    parts.push('These element IDs are no longer valid. Do NOT use them:');
-    parts.push(`\`${allInvalidations.join(', ')}\``);
-  }
-
-  // Additions
-  if (delta.added.length > 0) {
-    parts.push('');
-    parts.push('### + Added');
-    for (const node of delta.added) {
-      parts.push(formatNode(node, frameTracker));
-    }
-  }
-
-  // Modifications
-  if (delta.modified.length > 0) {
-    parts.push('');
-    parts.push('### ~ Modified');
-    for (const mod of delta.modified) {
-      parts.push(
-        `- [${frameTracker.serializeRef(mod.ref)}]: "${mod.previousLabel}" -> "${mod.currentLabel}"`
-      );
-    }
-  }
-
-  // Removals (already in invalidations, but provide context)
-  if (delta.removed.length > 0) {
-    parts.push('');
-    parts.push('### - Removed');
-    parts.push(`${delta.removed.length} element(s) removed from page.`);
-  }
-
-  return parts.join('\n');
+  return {
+    type: 'delta',
+    context: options.context,
+    summary,
+    counts,
+    invalidated_refs: invalidatedRefs,
+    added,
+    modified,
+    removed_refs: removedRefs,
+  };
 }
 
 // ============================================================================
@@ -228,37 +302,31 @@ function getOverlayTypeLabel(overlayType: OverlayState['overlayType']): string {
  * @param nodes - Nodes within the overlay
  * @param frameInvalidations - Additional invalidations from frame events
  * @param frameTracker - FrameTracker for ref serialization
- * @returns Formatted overlay opened string
+ * @returns Structured overlay-opened payload
  */
 export function formatOverlayOpened(
   overlay: OverlayState,
   nodes: ReadableNode[],
   frameInvalidations: ScopedElementRef[],
   frameTracker: FrameTracker
-): string {
-  const parts: string[] = [];
-
+): DeltaPayloadOverlayOpened {
+  const invalidatedRefs = uniqueRefs(serializeRefs(frameInvalidations, frameTracker));
+  const nodeSummaries = nodes.map((node) => buildDeltaNodeSummary(node, frameTracker));
+  const counts = buildCounts(invalidatedRefs.length, nodeSummaries.length, 0, 0);
   const typeLabel = getOverlayTypeLabel(overlay.overlayType);
-  parts.push(`## ${typeLabel} Opened`);
-  parts.push('');
+  const summary = `${typeLabel} opened: ${counts.added} node(s), invalidated ${counts.invalidated}.`;
 
-  // Invalidations
-  if (frameInvalidations.length > 0) {
-    parts.push('### Invalidated References');
-    parts.push(`\`${frameInvalidations.map((r) => frameTracker.serializeRef(r)).join(', ')}\``);
-    parts.push('');
-  }
-
-  // Overlay content
-  parts.push('### Overlay Content');
-  for (const node of nodes) {
-    parts.push(formatNode(node, frameTracker));
-  }
-
-  parts.push('');
-  parts.push('> Base page is accessible behind this overlay.');
-
-  return parts.join('\n');
+  return {
+    type: 'overlay_opened',
+    summary,
+    invalidated_refs: invalidatedRefs,
+    overlay: {
+      overlay_type: overlay.overlayType,
+      root_ref: frameTracker.serializeRef(overlay.rootRef),
+    },
+    counts,
+    nodes: nodeSummaries,
+  };
 }
 
 /**
@@ -268,53 +336,51 @@ export function formatOverlayOpened(
  * @param invalidations - All invalidated refs (including overlay refs)
  * @param baseDelta - Changes to base page while overlay was open (optional)
  * @param frameTracker - FrameTracker for ref serialization
- * @returns Formatted overlay closed string
+ * @returns Structured overlay-closed payload
  */
 export function formatOverlayClosed(
   closedOverlay: OverlayState,
   invalidations: ScopedElementRef[],
   baseDelta: ComputedDelta | null,
   frameTracker: FrameTracker
-): string {
-  const parts: string[] = [];
+): DeltaPayloadOverlayClosed {
+  const invalidatedRefs = uniqueRefs(serializeRefs(invalidations, frameTracker));
+  const overlayInfo = {
+    overlay_type: closedOverlay.overlayType,
+    root_ref: frameTracker.serializeRef(closedOverlay.rootRef),
+  };
+  const hasBaseChanges =
+    baseDelta &&
+    (baseDelta.added.length > 0 || baseDelta.modified.length > 0 || baseDelta.removed.length > 0);
 
-  parts.push('## Overlay Closed');
-  parts.push('');
+  let baseChanges: DeltaPayloadOverlayClosed['base_changes'];
+  let summary = `Overlay closed: invalidated ${invalidatedRefs.length}.`;
 
-  // All overlay refs are now invalid
-  parts.push('### Invalidated References');
-  parts.push('All overlay element IDs are now invalid:');
-  parts.push(`\`${invalidations.map((r) => frameTracker.serializeRef(r)).join(', ')}\``);
+  if (hasBaseChanges && baseDelta) {
+    const added = baseDelta.added.map((node) => buildDeltaNodeSummary(node, frameTracker));
+    const modified = baseDelta.modified.map((mod) => buildDeltaModifiedSummary(mod, frameTracker));
+    const removedRefs = serializeRefs(baseDelta.removed, frameTracker);
+    const counts = buildCounts(0, added.length, modified.length, removedRefs.length);
 
-  // Base page changes while overlay was open
-  if (baseDelta && (baseDelta.added.length > 0 || baseDelta.modified.length > 0)) {
-    parts.push('');
-    parts.push('### Base Page Changes');
-    parts.push('The following changed while the overlay was open:');
+    baseChanges = {
+      counts,
+      added,
+      modified,
+      removed_refs: removedRefs,
+    };
 
-    if (baseDelta.added.length > 0) {
-      parts.push('');
-      parts.push('**Added:**');
-      for (const node of baseDelta.added) {
-        parts.push(formatNode(node, frameTracker));
-      }
-    }
-
-    if (baseDelta.modified.length > 0) {
-      parts.push('');
-      parts.push('**Modified:**');
-      for (const mod of baseDelta.modified) {
-        parts.push(
-          `- [${frameTracker.serializeRef(mod.ref)}]: "${mod.previousLabel}" -> "${mod.currentLabel}"`
-        );
-      }
-    }
+    summary = `Overlay closed: invalidated ${invalidatedRefs.length}. Base changes: +${counts.added} ~${counts.modified} -${counts.removed}.`;
   } else {
-    parts.push('');
-    parts.push('Base page unchanged.');
+    summary = `Overlay closed: invalidated ${invalidatedRefs.length}. Base unchanged.`;
   }
 
-  return parts.join('\n');
+  return {
+    type: 'overlay_closed',
+    summary,
+    overlay: overlayInfo,
+    invalidated_refs: invalidatedRefs,
+    base_changes: baseChanges,
+  };
 }
 
 // ============================================================================
@@ -324,8 +390,11 @@ export function formatOverlayClosed(
 /**
  * Format no-change response.
  *
- * @returns No change message
+ * @returns Structured no-change payload
  */
-export function formatNoChange(): string {
-  return 'Action completed. No visible changes.';
+export function formatNoChange(summary = 'No visible changes.'): DeltaPayloadNoChange {
+  return {
+    type: 'no_change',
+    summary,
+  };
 }
