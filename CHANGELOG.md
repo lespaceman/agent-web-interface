@@ -1,3 +1,8 @@
+## [2.0.1] - 2026-01-12
+
+- fix(ci): ignore CHANGELOG.md from prettier checks
+- fix(ci): trigger release workflow via workflow_dispatch
+
 # Changelog
 
 ## [2.0.0] - 2026-01-12
