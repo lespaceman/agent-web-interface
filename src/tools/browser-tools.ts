@@ -609,10 +609,19 @@ export function findElements(
   const engine = new QueryEngine(snap);
   const response = engine.find(request);
 
+  // Get registry for EID lookup
+  const stateManager = getStateManager(page_id);
+  const registry = stateManager.getElementRegistry();
+
   const matches: FindElementsMatch[] = response.matches.map((m) => {
+    // Look up EID from registry (single source of truth)
+    const eid = registry.getEidBySnapshotAndBackendNodeId(
+      snap.snapshot_id,
+      m.node.backend_node_id
+    );
+
     const match: FindElementsMatch = {
-      node_id: m.node.node_id,
-      backend_node_id: m.node.backend_node_id,
+      eid: eid ?? `unknown-${m.node.backend_node_id}`,
       kind: m.node.kind,
       label: m.node.label,
       selector: m.node.find?.primary ?? '',
@@ -664,14 +673,21 @@ export function getNodeDetails(
     throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
   }
 
-  const node = snap.nodes.find((n) => n.node_id === input.node_id);
+  // Look up element by EID from registry
+  const stateManager = getStateManager(page_id);
+  const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
+  if (!elementRef) {
+    throw new Error(`Element with eid ${input.eid} not found in registry`);
+  }
+
+  // Find the node by backend_node_id
+  const node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
   if (!node) {
-    throw new Error(`Node ${input.node_id} not found in snapshot`);
+    throw new Error(`Element with eid ${input.eid} has stale reference`);
   }
 
   const details: NodeDetails = {
-    node_id: node.node_id,
-    backend_node_id: node.backend_node_id,
+    eid: input.eid,
     kind: node.kind,
     label: node.label,
     where: {

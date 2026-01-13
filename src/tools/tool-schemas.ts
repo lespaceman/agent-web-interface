@@ -72,10 +72,8 @@ export type RuntimeHealth = z.infer<typeof RuntimeHealthSchema>;
 
 /** Full node details including location, layout, state, and attributes */
 export const NodeDetailsSchema = z.object({
-  /** Unique node identifier */
-  node_id: z.string(),
-  /** CDP backend node ID - stable within session */
-  backend_node_id: z.number(),
+  /** Stable element ID for use with action tools */
+  eid: z.string(),
   /** Semantic node type */
   kind: z.string(),
   /** Human-readable label */
@@ -579,8 +577,8 @@ export type FindElementsOutput = z.infer<typeof FindElementsOutputSchema>;
 // ============================================================================
 
 export const GetNodeDetailsInputSchema = z.object({
-  /** Node ID to get details for */
-  node_id: z.string(),
+  /** Stable element ID (eid) to get details for */
+  eid: z.string(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });

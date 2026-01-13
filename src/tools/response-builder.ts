@@ -100,8 +100,8 @@ export function buildCloseSessionResponse(): string {
  * Match item from find_elements query.
  */
 export interface FindElementsMatch {
-  node_id: string;
-  backend_node_id: number;
+  /** Stable element ID for use with action tools */
+  eid: string;
   kind: string;
   label: string;
   selector: string;
@@ -131,7 +131,7 @@ export function buildFindElementsResponse(
 
   for (const m of matches) {
     const attrs: string[] = [
-      `id="${escapeXml(m.node_id)}"`,
+      `eid="${escapeXml(m.eid)}"`,
       `kind="${escapeXml(m.kind)}"`,
       `label="${escapeXml(m.label)}"`,
       `region="${escapeXml(m.region)}"`,
@@ -189,8 +189,7 @@ export function buildGetNodeDetailsResponse(
 
   // Node element with core attributes
   const nodeAttrs = [
-    `id="${escapeXml(node.node_id)}"`,
-    `backend_node_id="${node.backend_node_id}"`,
+    `eid="${escapeXml(node.eid)}"`,
     `kind="${escapeXml(node.kind)}"`,
     `label="${escapeXml(node.label)}"`,
   ];
