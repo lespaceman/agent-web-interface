@@ -4,13 +4,14 @@
 [![npm version](https://badge.fury.io/js/athena-browser-mcp.svg)](https://www.npmjs.com/package/athena-browser-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Minimal MCP server for AI browser automation - 11 simple tools.
+MCP server for AI browser automation - 18 tools with semantic element targeting.
 
 ## Design Philosophy
 
-1. **Page state in system prompt** - Agent always knows current page state without querying
-2. **Lightweight delta responses** - Tools return what changed, not full snapshots
-3. **Simple verb-based naming** - `click`, `type`, `press` instead of `action_click`, `action_type`
+1. **Semantic element IDs** - Stable `eid` references survive DOM mutations
+2. **XML state responses** - Structured page state with layers, actionables, and diffs
+3. **Multi-frame support** - Extract content from iframes (cookie consent, widgets)
+4. **Automatic retry** - Stale element recovery with fresh snapshot
 
 ## Architecture
 
@@ -18,15 +19,17 @@ Minimal MCP server for AI browser automation - 11 simple tools.
 ┌─────────────────────────────────────────────────────────────────┐
 │                         AI Agent                                 │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │ System Prompt: Current page state (URL, forms, actions)    │ │
+│  │ System Prompt: XML state (layers, actionables, atoms)      │ │
 │  └────────────────────────────────────────────────────────────┘ │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ MCP Protocol (stdio)
 ┌───────────────────────────▼─────────────────────────────────────┐
-│  SESSION: open, close                                            │
-│  NAVIGATION: goto                                                │
-│  OBSERVATION: snapshot, find                                     │
-│  INTERACTION: click, type, press, select, hover, scroll          │
+│  SESSION: launch_browser, connect_browser, close_page,          │
+│           close_session                                          │
+│  NAVIGATION: navigate, go_back, go_forward, reload               │
+│  OBSERVATION: capture_snapshot, find_elements, get_node_details  │
+│  INTERACTION: click, type, press, select, hover,                 │
+│               scroll_element_into_view, scroll_page              │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ Playwright + CDP
 ┌───────────────────────────▼─────────────────────────────────────┐
@@ -38,111 +41,129 @@ Minimal MCP server for AI browser automation - 11 simple tools.
 
 ### Session
 
-| Tool    | Purpose               | Input                        |
-| ------- | --------------------- | ---------------------------- |
-| `open`  | Start browser session | `{ headless?, connect_to? }` |
-| `close` | End browser session   | `{ page_id? }`               |
+| Tool              | Purpose                   | Input               |
+| ----------------- | ------------------------- | ------------------- |
+| `launch_browser`  | Launch new browser        | `{ headless? }`     |
+| `connect_browser` | Connect to existing (CDP) | `{ endpoint_url? }` |
+| `close_page`      | Close specific page       | `{ page_id }`       |
+| `close_session`   | Close entire browser      | `{}`                |
 
 ### Navigation
 
-| Tool   | Purpose                 | Input                                                        |
-| ------ | ----------------------- | ------------------------------------------------------------ |
-| `goto` | Navigate to URL         | `{ url: "https://..." }`                                     |
-|        | Go back/forward/refresh | `{ back: true }` / `{ forward: true }` / `{ refresh: true }` |
+| Tool         | Purpose         | Input               |
+| ------------ | --------------- | ------------------- |
+| `navigate`   | Go to URL       | `{ url, page_id? }` |
+| `go_back`    | Browser back    | `{ page_id? }`      |
+| `go_forward` | Browser forward | `{ page_id? }`      |
+| `reload`     | Refresh page    | `{ page_id? }`      |
 
 ### Observation
 
-| Tool       | Purpose                       | Input                                   |
-| ---------- | ----------------------------- | --------------------------------------- |
-| `snapshot` | Capture fresh page state      | `{ include_factpack?, include_nodes? }` |
-| `find`     | Find elements by criteria     | `{ kind?, label?, region? }`            |
-|            | Get details for specific node | `{ node_id }`                           |
+| Tool               | Purpose             | Input                                                             |
+| ------------------ | ------------------- | ----------------------------------------------------------------- |
+| `capture_snapshot` | Capture page state  | `{ page_id? }`                                                    |
+| `find_elements`    | Find by criteria    | `{ kind?, label?, region?, limit?, include_readable?, page_id? }` |
+| `get_node_details` | Get element details | `{ eid, page_id? }`                                               |
 
 ### Interaction
 
-| Tool     | Purpose                | Input                                      |
-| -------- | ---------------------- | ------------------------------------------ |
-| `click`  | Click element          | `{ node_id }`                              |
-| `type`   | Type text into element | `{ text, node_id?, clear? }`               |
-| `press`  | Press keyboard key     | `{ key }` (Enter, Tab, Escape, etc.)       |
-| `select` | Choose dropdown option | `{ node_id, value }`                       |
-| `hover`  | Hover over element     | `{ node_id }` (reveal menus/tooltips)      |
-| `scroll` | Scroll page or element | `{ node_id? }` or `{ direction, amount? }` |
+| Tool                       | Purpose            | Input                              |
+| -------------------------- | ------------------ | ---------------------------------- |
+| `click`                    | Click element      | `{ eid, page_id? }`                |
+| `type`                     | Type text          | `{ eid, text, clear?, page_id? }`  |
+| `press`                    | Press keyboard key | `{ key, modifiers?, page_id? }`    |
+| `select`                   | Select option      | `{ eid, value, page_id? }`         |
+| `hover`                    | Hover element      | `{ eid, page_id? }`                |
+| `scroll_element_into_view` | Scroll to element  | `{ eid, page_id? }`                |
+| `scroll_page`              | Scroll viewport    | `{ direction, amount?, page_id? }` |
+
+## Element IDs (eid)
+
+Elements are identified by stable semantic IDs (`eid`) instead of transient DOM node IDs:
+
+```xml
+<match eid="a1b2c3d4e5f6" kind="button" label="Sign In" region="header" />
+```
+
+EIDs are computed from:
+
+- Role/kind (button, link, input)
+- Accessible name (label text)
+- Landmark path (region + group hierarchy)
+- Position hint (screen zone, quadrant)
+
+This means the same logical element keeps its `eid` across page updates.
 
 ## Response Format
 
-Tools return lightweight deltas describing what changed:
+Tools return XML state responses with page understanding:
 
-```json
-{
-  "delta": {
-    "action": "Clicked 'Sign In' button",
-    "changes": [
-      { "type": "navigation", "from": "/login", "to": "/dashboard" }
-    ]
-  },
-  "page_state": { ... }
-}
+```xml
+<state page_id="abc123" url="https://example.com" title="Example">
+  <layer type="main" active="true">
+    <actionables count="12">
+      <el eid="a1b2c3" kind="button" label="Sign In" />
+      <el eid="d4e5f6" kind="link" label="Forgot password?" />
+      <el eid="g7h8i9" kind="input" label="Email" type="email" />
+    </actionables>
+  </layer>
+  <atoms>
+    <viewport w="1280" h="720" />
+    <scroll x="0" y="0" />
+  </atoms>
+</state>
 ```
 
-### Change Types
+### Layer Types
 
-| Type             | Description               |
-| ---------------- | ------------------------- |
-| `focused`        | Element received focus    |
-| `filled`         | Input field value changed |
-| `selected`       | Dropdown option selected  |
-| `clicked`        | Element was clicked       |
-| `navigation`     | URL changed               |
-| `page_changed`   | Page type changed         |
-| `modal_opened`   | Modal dialog appeared     |
-| `modal_closed`   | Modal dialog dismissed    |
-| `form_submitted` | Form was submitted        |
+| Layer     | Description                |
+| --------- | -------------------------- |
+| `main`    | Primary page content       |
+| `modal`   | Dialog overlays            |
+| `drawer`  | Slide-in panels            |
+| `popover` | Dropdowns, tooltips, menus |
 
 ## Usage Examples
 
 ### Login Flow
 
 ```
-1. open { }
-   → System prompt updated with initial page state
+1. launch_browser { }
+   → XML state with initial page
 
-2. goto { url: "https://example.com/login" }
-   → Page changed: login form detected
-   → System prompt updated with form fields
+2. navigate { url: "https://example.com/login" }
+   → State shows login form elements
 
-3. find { kind: "input", label: "email" }
-   → { matches: [{ node_id: "42", label: "Email" }] }
+3. find_elements { kind: "input", label: "email" }
+   → <match eid="abc123" kind="input" label="Email" />
 
-4. click { node_id: "42" }
-   → Focused: Email field
+4. click { eid: "abc123" }
+   → Element focused
 
-5. type { text: "user@example.com" }
-   → Filled: Email = "user@example.com"
+5. type { eid: "abc123", text: "user@example.com" }
+   → Value filled
 
 6. press { key: "Tab" }
-   → Focused: Password field
+   → Focus moved to password field
 
-7. type { text: "password123" }
-   → Filled: Password = "••••••••••••"
+7. type { eid: "def456", text: "password123" }
+   → Password filled
 
 8. press { key: "Enter" }
-   → Form submitted
-   → Navigation: /login → /dashboard
+   → Form submitted, navigation to dashboard
 ```
 
-### E-commerce Purchase
+### Cookie Consent (Multi-Frame)
 
 ```
-1. goto { url: "https://shop.example.com/product/123" }
-   → System prompt: product page, Add to Cart [node:101], Size [node:103]
+1. navigate { url: "https://news-site.com" }
+   → Modal layer detected (cookie consent iframe)
 
-2. select { node_id: "103", value: "Large" }
-   → Selected: Size = "Large"
+2. find_elements { label: "Accept", kind: "button" }
+   → <match eid="xyz789" kind="button" label="Accept All" />
 
-3. click { node_id: "101" }
-   → Clicked: Add to Cart
-   → Modal opened: "Added to cart"
+3. click { eid: "xyz789" }
+   → Modal closed, main layer active
 ```
 
 ## Installation
@@ -173,11 +194,27 @@ Add to your Claude Desktop config:
 }
 ```
 
+### Connect to Existing Browser
+
+To connect to an existing Chromium browser with CDP enabled:
+
+```bash
+# Start Chrome with remote debugging
+google-chrome --remote-debugging-port=9222
+
+# Or use environment variables
+export CEF_BRIDGE_HOST=127.0.0.1
+export CEF_BRIDGE_PORT=9222
+```
+
+Then use `connect_browser` instead of `launch_browser`.
+
 ### Environment Variables
 
-| Variable             | Description               | Default |
-| -------------------- | ------------------------- | ------- |
-| `DEFAULT_TIMEOUT_MS` | Default operation timeout | `30000` |
+| Variable          | Description          | Default     |
+| ----------------- | -------------------- | ----------- |
+| `CEF_BRIDGE_HOST` | CDP host for connect | `127.0.0.1` |
+| `CEF_BRIDGE_PORT` | CDP port for connect | `9223`      |
 
 ## Development
 
