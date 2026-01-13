@@ -23,12 +23,17 @@ import type { ElementIdentity } from './types.js';
  * - Landmark path (region + group_path)
  * - Layer context (modal vs main - prevents collision across layers)
  * - Position hint (screen zone + heading context)
+ * - Shadow path (disambiguates elements in different shadow roots)
  *
  * @param node - Node to compute EID for
  * @param layer - Optional layer context for disambiguation
  * @returns 12-character hex hash
  */
 export function computeEid(node: ReadableNode, layer?: string): string {
+  // Shadow path ensures elements in different shadow roots get unique EIDs
+  // even if they have identical semantic properties
+  const shadowPath = node.find?.shadow_path?.join('/') ?? '';
+
   const components = [
     node.attributes?.role ?? node.kind,
     normalizeAccessibleName(node.label),
@@ -36,6 +41,7 @@ export function computeEid(node: ReadableNode, layer?: string): string {
     computeLandmarkPath(node),
     layer ?? computeLayerFromRegion(node),
     computePositionHint(node),
+    shadowPath,
   ];
 
   return hashComponents(components);

@@ -332,6 +332,58 @@ describe('Element Identity', () => {
       const eid = computeEid(node);
       expect(eid).toMatch(/^[0-9a-f]{12}$/);
     });
+
+    it('should generate different EIDs for elements in different shadow roots', () => {
+      // Two identical buttons but in different shadow roots
+      const nodeInShadow1 = createNode({
+        label: 'Click',
+        kind: 'button',
+        find: {
+          primary: 'button',
+          shadow_path: ['shadow-host-123'],
+        },
+      });
+      const nodeInShadow2 = createNode({
+        label: 'Click',
+        kind: 'button',
+        find: {
+          primary: 'button',
+          shadow_path: ['shadow-host-456'],
+        },
+      });
+      const nodeNotInShadow = createNode({
+        label: 'Click',
+        kind: 'button',
+      });
+
+      const eid1 = computeEid(nodeInShadow1);
+      const eid2 = computeEid(nodeInShadow2);
+      const eid3 = computeEid(nodeNotInShadow);
+
+      // All three should be different
+      expect(eid1).not.toBe(eid2);
+      expect(eid1).not.toBe(eid3);
+      expect(eid2).not.toBe(eid3);
+    });
+
+    it('should handle nested shadow roots', () => {
+      const nodeNestedShadow = createNode({
+        label: 'Submit',
+        find: {
+          primary: 'button',
+          shadow_path: ['outer-host', 'inner-host'],
+        },
+      });
+      const nodeSingleShadow = createNode({
+        label: 'Submit',
+        find: {
+          primary: 'button',
+          shadow_path: ['outer-host'],
+        },
+      });
+
+      expect(computeEid(nodeNestedShadow)).not.toBe(computeEid(nodeSingleShadow));
+    });
   });
 
   describe('resolveEidCollision', () => {
