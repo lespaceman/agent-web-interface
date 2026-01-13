@@ -6,7 +6,7 @@
  * - Data tools return `<result type="...">...</result>` (via builders here)
  */
 
-import type { BaseSnapshot } from '../snapshot/snapshot.types.js';
+import type { BaseSnapshot, NodeState } from '../snapshot/snapshot.types.js';
 import { getStateManager } from './execute-action.js';
 import type { StateResponse } from '../state/types.js';
 import type { NodeDetails } from './tool-schemas.js';
@@ -112,7 +112,8 @@ export interface FindElementsMatch {
   label: string;
   selector: string;
   region: string;
-  state?: Record<string, boolean | undefined>;
+  /** Element state (visible, enabled, checked, etc.) */
+  state?: NodeState;
   attributes?: Record<string, string>;
 }
 

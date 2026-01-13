@@ -559,6 +559,14 @@ export const FindElementsInputSchema = z.object({
     .describe('Restrict search to a specific area.'),
   /** Maximum number of results (default: 10) */
   limit: z.number().int().min(1).max(100).default(10).describe('Number of results to return.'),
+  /** Include non-interactive readable content (text, paragraph, dialog) */
+  include_readable: z
+    .boolean()
+    .default(true)
+    .optional()
+    .describe(
+      'Include non-interactive readable content (text, heading, paragraph, dialog). These get rd-* IDs.'
+    ),
 });
 
 /** Returns XML result string */

@@ -144,6 +144,18 @@ export class StateManager {
   }
 
   /**
+   * Get the active layer for the current snapshot.
+   * Returns 'main' if no snapshot is available.
+   */
+  getActiveLayer(): string {
+    if (!this.context.currentSnapshot) {
+      return 'main';
+    }
+    const layerResult = detectLayers(this.context.currentSnapshot);
+    return layerResult.active;
+  }
+
+  /**
    * Generate an error response.
    *
    * @param errorMessage - The error message to include

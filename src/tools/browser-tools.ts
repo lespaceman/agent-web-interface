@@ -39,6 +39,8 @@ import {
 import { QueryEngine } from '../query/query-engine.js';
 import type { FindElementsRequest } from '../query/types/query.types.js';
 import type { BaseSnapshot, NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
+import { isReadableNode, isStructuralNode } from '../snapshot/snapshot.types.js';
+import { computeEid } from '../state/element-identity.js';
 import {
   captureWithStabilization,
   determineHealthCode,
@@ -262,20 +264,28 @@ async function prepareActionContext(pageId: string | undefined): Promise<ActionC
 /**
  * Resolve element by eid for action tools.
  * Looks up element in registry and finds corresponding node in snapshot.
+ * Includes proactive staleness detection before CDP interaction.
  *
  * @param pageId - Page ID for registry lookup
  * @param eid - Element ID to resolve
  * @param snapshot - Current snapshot to search
  * @returns Resolved node from snapshot
  * @throws {ElementNotFoundError} If eid not found in registry
- * @throws {StaleElementError} If eid reference is stale
+ * @throws {StaleElementError} If eid reference is stale or element not in current snapshot
  */
 function resolveElementByEid(pageId: string, eid: string, snapshot: BaseSnapshot): ReadableNode {
   const stateManager = getStateManager(pageId);
-  const elementRef = stateManager.getElementRegistry().getByEid(eid);
+  const registry = stateManager.getElementRegistry();
+  const elementRef = registry.getByEid(eid);
 
   if (!elementRef) {
     throw new ElementNotFoundError(eid);
+  }
+
+  // Proactive staleness check - detect stale elements before CDP interaction
+  // This catches elements that haven't been seen in recent snapshots
+  if (registry.isStale(eid)) {
+    throw new StaleElementError(eid);
   }
 
   const node = snapshot.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
@@ -586,25 +596,46 @@ export function findElements(rawInput: unknown): import('./tool-schemas.js').Fin
   const engine = new QueryEngine(snap);
   const response = engine.find(request);
 
-  // Get registry for EID lookup
+  // Get registry and state manager for EID lookup
   const stateManager = getStateManager(page_id);
   const registry = stateManager.getElementRegistry();
+  const activeLayer = stateManager.getActiveLayer();
 
   const matches: FindElementsMatch[] = response.matches.map((m) => {
-    // Look up EID from registry (single source of truth)
-    const eid = registry.getEidBySnapshotAndBackendNodeId(snap.snapshot_id, m.node.backend_node_id);
+    // Check if this is a readable/structural (non-interactive) node
+    const isNonInteractive = isReadableNode(m.node) || isStructuralNode(m.node);
+
+    // Look up EID from registry (for interactive nodes)
+    const registryEid = registry.getEidBySnapshotAndBackendNodeId(
+      snap.snapshot_id,
+      m.node.backend_node_id
+    );
+
+    // Determine EID:
+    // - Interactive nodes: use registry EID
+    // - Non-interactive nodes with include_readable: compute rd-* ID on-demand
+    // - Non-interactive nodes without include_readable: use unknown-* fallback
+    let eid: string;
+    if (registryEid) {
+      eid = registryEid;
+    } else if (isNonInteractive && input.include_readable) {
+      // Compute on-demand semantic ID for readable content with rd- prefix
+      eid = `rd-${computeEid(m.node, activeLayer).substring(0, 10)}`;
+    } else {
+      eid = `unknown-${m.node.backend_node_id}`;
+    }
 
     const match: FindElementsMatch = {
-      eid: eid ?? `unknown-${m.node.backend_node_id}`,
+      eid,
       kind: m.node.kind,
       label: m.node.label,
       selector: m.node.find?.primary ?? '',
       region: m.node.where.region,
     };
 
-    // Include state if present
+    // Include state if present (type-safe assignment via NodeState interface)
     if (m.node.state) {
-      match.state = m.node.state as unknown as Record<string, boolean | undefined>;
+      match.state = m.node.state;
     }
 
     // Include attributes if present (filter to common ones)
