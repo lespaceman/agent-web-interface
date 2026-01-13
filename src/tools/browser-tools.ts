@@ -16,6 +16,26 @@ import {
   scrollPage as scrollPageByAmount,
 } from '../snapshot/index.js';
 import type { NodeDetails } from './tool-schemas.js';
+import {
+  LaunchBrowserInputSchema,
+  ConnectBrowserInputSchema,
+  ClosePageInputSchema,
+  CloseSessionInputSchema,
+  NavigateInputSchema,
+  GoBackInputSchema,
+  GoForwardInputSchema,
+  ReloadInputSchema,
+  CaptureSnapshotInputSchema,
+  FindElementsInputSchema,
+  GetNodeDetailsInputSchema,
+  ScrollElementIntoViewInputSchema,
+  ScrollPageInputSchema,
+  ClickInputSchema,
+  TypeInputSchema,
+  PressInputSchema,
+  SelectInputSchema,
+  HoverInputSchema,
+} from './tool-schemas.js';
 import { QueryEngine } from '../query/query-engine.js';
 import type { FindElementsRequest } from '../query/types/query.types.js';
 import type { BaseSnapshot, NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
@@ -43,6 +63,12 @@ import {
   buildGetNodeDetailsResponse,
   type FindElementsMatch,
 } from './response-builder.js';
+import {
+  ElementNotFoundError,
+  StaleElementError,
+  SnapshotRequiredError,
+} from './errors.js';
+import type { ReadableNode } from '../snapshot/snapshot.types.js';
 
 // Module-level state
 let sessionManager: SessionManager | null = null;
@@ -207,6 +233,131 @@ function createActionCapture(
 }
 
 // ============================================================================
+// Action Context Helpers
+// ============================================================================
+
+/**
+ * Context for action execution.
+ */
+interface ActionContext {
+  /** Mutable reference to page handle (updated on recovery) */
+  handleRef: { current: PageHandle };
+  /** Resolved page ID */
+  pageId: string;
+  /** Snapshot capture function */
+  captureSnapshot: CaptureSnapshotFn;
+  /** Session manager instance */
+  session: SessionManager;
+}
+
+/**
+ * Prepare context for action execution.
+ * Resolves page, ensures CDP session health, and creates capture function.
+ *
+ * @param pageId - Optional page ID to resolve
+ * @returns Action context with handle, capture function, and session
+ */
+async function prepareActionContext(pageId: string | undefined): Promise<ActionContext> {
+  const session = getSessionManager();
+  const handleRef = { current: resolveExistingPage(session, pageId) };
+  const resolvedPageId = handleRef.current.page_id;
+
+  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  const captureSnapshot = createActionCapture(session, handleRef, resolvedPageId);
+
+  return { handleRef, pageId: resolvedPageId, captureSnapshot, session };
+}
+
+/**
+ * Resolve element by eid for action tools.
+ * Looks up element in registry and finds corresponding node in snapshot.
+ *
+ * @param pageId - Page ID for registry lookup
+ * @param eid - Element ID to resolve
+ * @param snapshot - Current snapshot to search
+ * @returns Resolved node from snapshot
+ * @throws {ElementNotFoundError} If eid not found in registry
+ * @throws {StaleElementError} If eid reference is stale
+ */
+function resolveElementByEid(pageId: string, eid: string, snapshot: BaseSnapshot): ReadableNode {
+  const stateManager = getStateManager(pageId);
+  const elementRef = stateManager.getElementRegistry().getByEid(eid);
+
+  if (!elementRef) {
+    throw new ElementNotFoundError(eid);
+  }
+
+  const node = snapshot.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
+  if (!node) {
+    throw new StaleElementError(eid);
+  }
+
+  return node;
+}
+
+/**
+ * Require snapshot for action, throwing consistent error if missing.
+ *
+ * @param pageId - Page ID to look up snapshot
+ * @returns Snapshot for the page
+ * @throws {SnapshotRequiredError} If no snapshot exists
+ */
+function requireSnapshot(pageId: string): BaseSnapshot {
+  const snap = snapshotStore.getByPageId(pageId);
+  if (!snap) {
+    throw new SnapshotRequiredError(pageId);
+  }
+  return snap;
+}
+
+/**
+ * Navigation action types.
+ */
+type NavigationAction = 'back' | 'forward' | 'reload';
+
+/**
+ * Execute a navigation action with snapshot capture.
+ * Consolidates goBack, goForward, and reload handlers.
+ *
+ * @param pageId - Optional page ID
+ * @param action - Navigation action to execute
+ * @returns State response after navigation
+ */
+async function executeNavigationAction(
+  pageId: string | undefined,
+  action: NavigationAction
+): Promise<string> {
+  const session = getSessionManager();
+
+  let handle = await session.resolvePageOrCreate(pageId);
+  const page_id = handle.page_id;
+  session.touchPage(page_id);
+
+  // Execute navigation
+  switch (action) {
+    case 'back':
+      await handle.page.goBack();
+      break;
+    case 'forward':
+      await handle.page.goForward();
+      break;
+    case 'reload':
+      await handle.page.reload();
+      break;
+  }
+
+  // Auto-capture snapshot after navigation
+  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  handle = captureResult.handle;
+  const snapshot = captureResult.snapshot;
+  snapshotStore.store(page_id, snapshot);
+
+  // Return XML state response
+  const stateManager = getStateManager(page_id);
+  return stateManager.generateResponse(snapshot);
+}
+
+// ============================================================================
 // SIMPLIFIED API - Tool handlers with clearer contracts
 // ============================================================================
 
@@ -219,7 +370,6 @@ function createActionCapture(
 export async function launchBrowser(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').LaunchBrowserOutput> {
-  const { LaunchBrowserInputSchema } = await import('./tool-schemas.js');
   const input = LaunchBrowserInputSchema.parse(rawInput);
   const session = getSessionManager();
 
@@ -250,7 +400,6 @@ export async function launchBrowser(
 export async function connectBrowser(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').ConnectBrowserOutput> {
-  const { ConnectBrowserInputSchema } = await import('./tool-schemas.js');
   const input = ConnectBrowserInputSchema.parse(rawInput);
   const session = getSessionManager();
 
@@ -300,7 +449,6 @@ export async function connectBrowser(
 export async function closePage(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').ClosePageOutput> {
-  const { ClosePageInputSchema } = await import('./tool-schemas.js');
   const input = ClosePageInputSchema.parse(rawInput);
   const session = getSessionManager();
 
@@ -320,7 +468,6 @@ export async function closePage(
 export async function closeSession(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').CloseSessionOutput> {
-  const { CloseSessionInputSchema } = await import('./tool-schemas.js');
   CloseSessionInputSchema.parse(rawInput);
   const session = getSessionManager();
 
@@ -340,7 +487,6 @@ export async function closeSession(
 export async function navigate(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').NavigateOutput> {
-  const { NavigateInputSchema } = await import('./tool-schemas.js');
   const input = NavigateInputSchema.parse(rawInput);
   const session = getSessionManager();
 
@@ -370,25 +516,8 @@ export async function navigate(
 export async function goBack(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').GoBackOutput> {
-  const { GoBackInputSchema } = await import('./tool-schemas.js');
   const input = GoBackInputSchema.parse(rawInput);
-  const session = getSessionManager();
-
-  let handle = await session.resolvePageOrCreate(input.page_id);
-  const page_id = handle.page_id;
-  session.touchPage(page_id);
-
-  await handle.page.goBack();
-
-  // Auto-capture snapshot after navigation
-  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
-  handle = captureResult.handle;
-  const snapshot = captureResult.snapshot;
-  snapshotStore.store(page_id, snapshot);
-
-  // Return XML state response directly
-  const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return executeNavigationAction(input.page_id, 'back');
 }
 
 /**
@@ -400,25 +529,8 @@ export async function goBack(
 export async function goForward(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').GoForwardOutput> {
-  const { GoForwardInputSchema } = await import('./tool-schemas.js');
   const input = GoForwardInputSchema.parse(rawInput);
-  const session = getSessionManager();
-
-  let handle = await session.resolvePageOrCreate(input.page_id);
-  const page_id = handle.page_id;
-  session.touchPage(page_id);
-
-  await handle.page.goForward();
-
-  // Auto-capture snapshot after navigation
-  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
-  handle = captureResult.handle;
-  const snapshot = captureResult.snapshot;
-  snapshotStore.store(page_id, snapshot);
-
-  // Return XML state response directly
-  const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return executeNavigationAction(input.page_id, 'forward');
 }
 
 /**
@@ -430,25 +542,8 @@ export async function goForward(
 export async function reload(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').ReloadOutput> {
-  const { ReloadInputSchema } = await import('./tool-schemas.js');
   const input = ReloadInputSchema.parse(rawInput);
-  const session = getSessionManager();
-
-  let handle = await session.resolvePageOrCreate(input.page_id);
-  const page_id = handle.page_id;
-  session.touchPage(page_id);
-
-  await handle.page.reload();
-
-  // Auto-capture snapshot after navigation
-  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
-  handle = captureResult.handle;
-  const snapshot = captureResult.snapshot;
-  snapshotStore.store(page_id, snapshot);
-
-  // Return XML state response directly
-  const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return executeNavigationAction(input.page_id, 'reload');
 }
 
 /**
@@ -460,7 +555,6 @@ export async function reload(
 export async function captureSnapshot(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').CaptureSnapshotOutput> {
-  const { CaptureSnapshotInputSchema } = await import('./tool-schemas.js');
   const input = CaptureSnapshotInputSchema.parse(rawInput);
   const session = getSessionManager();
 
@@ -483,10 +577,9 @@ export async function captureSnapshot(
  * @param rawInput - Query filters (will be validated)
  * @returns Matched nodes
  */
-export async function findElements(
+export function findElements(
   rawInput: unknown
-): Promise<import('./tool-schemas.js').FindElementsOutput> {
-  const { FindElementsInputSchema } = await import('./tool-schemas.js');
+): import('./tool-schemas.js').FindElementsOutput {
   const input = FindElementsInputSchema.parse(rawInput);
   const session = getSessionManager();
 
@@ -557,10 +650,9 @@ export async function findElements(
  * @param rawInput - Node details request (will be validated)
  * @returns Full node details
  */
-export async function getNodeDetails(
+export function getNodeDetails(
   rawInput: unknown
-): Promise<import('./tool-schemas.js').GetNodeDetailsOutput> {
-  const { GetNodeDetailsInputSchema } = await import('./tool-schemas.js');
+): import('./tool-schemas.js').GetNodeDetailsOutput {
   const input = GetNodeDetailsInputSchema.parse(rawInput);
   const session = getSessionManager();
 
@@ -610,7 +702,6 @@ export async function getNodeDetails(
 
 /**
  * Scroll an element into view.
- * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Scroll options (will be validated)
  * @returns Scroll result with delta
@@ -618,41 +709,11 @@ export async function getNodeDetails(
 export async function scrollElementIntoView(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').ScrollElementIntoViewOutput> {
-  const { ScrollElementIntoViewInputSchema } = await import('./tool-schemas.js');
   const input = ScrollElementIntoViewInputSchema.parse(rawInput);
-  const session = getSessionManager();
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
 
-  const handleRef = { current: resolveExistingPage(session, input.page_id) };
-  const page_id = handleRef.current.page_id;
-  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
-  const captureSnapshot = createActionCapture(session, handleRef, page_id);
-
-  const snap = snapshotStore.getByPageId(page_id);
-  if (!snap) {
-    throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
-  }
-
-  // Resolve target element (eid preferred, node_id deprecated)
-  let node;
-  if (input.eid) {
-    const stateManager = getStateManager(page_id);
-    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
-    if (!elementRef) {
-      throw new Error(`Element with eid ${input.eid} not found`);
-    }
-    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
-    if (!node) {
-      throw new Error(`Element with eid ${input.eid} has stale reference`);
-    }
-  } else if (input.node_id) {
-    node = snap.nodes.find((n) => n.node_id === input.node_id);
-    if (!node) {
-      throw new Error(`Node ${input.node_id} not found in snapshot`);
-    }
-    console.warn(`[DEPRECATED] scrollElementIntoView with node_id - use eid instead`);
-  } else {
-    throw new Error('Either eid or node_id is required');
-  }
+  const snap = requireSnapshot(pageId);
+  const node = resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
@@ -666,7 +727,7 @@ export async function scrollElementIntoView(
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(page_id, result.snapshot);
+  snapshotStore.store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -681,14 +742,8 @@ export async function scrollElementIntoView(
 export async function scrollPage(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').ScrollPageOutput> {
-  const { ScrollPageInputSchema } = await import('./tool-schemas.js');
   const input = ScrollPageInputSchema.parse(rawInput);
-  const session = getSessionManager();
-
-  const handleRef = { current: resolveExistingPage(session, input.page_id) };
-  const page_id = handleRef.current.page_id;
-  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
-  const captureSnapshot = createActionCapture(session, handleRef, page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
 
   // Execute action with new simplified wrapper
   const result = await executeAction(
@@ -700,7 +755,7 @@ export async function scrollPage(
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(page_id, result.snapshot);
+  snapshotStore.store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -708,7 +763,6 @@ export async function scrollPage(
 
 /**
  * Click an element.
- * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Click options (will be validated)
  * @returns Click result with navigation-aware outcome
@@ -716,48 +770,11 @@ export async function scrollPage(
 export async function click(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').ClickOutput> {
-  const { ClickInputSchema } = await import('./tool-schemas.js');
   const input = ClickInputSchema.parse(rawInput);
-  const session = getSessionManager();
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
 
-  const handleRef = { current: resolveExistingPage(session, input.page_id) };
-  const page_id = handleRef.current.page_id;
-  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
-  const captureSnapshot = createActionCapture(session, handleRef, page_id);
-
-  const snap = snapshotStore.getByPageId(page_id);
-  if (!snap) {
-    throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
-  }
-
-  // Resolve target element (eid preferred, node_id deprecated)
-  let node;
-
-  if (input.eid) {
-    // New path: use eid to look up via ElementRegistry
-    const stateManager = getStateManager(page_id);
-    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
-
-    if (!elementRef) {
-      throw new Error(`Element with eid ${input.eid} not found`);
-    }
-
-    // Find node by backend_node_id
-    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
-    if (!node) {
-      throw new Error(`Element with eid ${input.eid} has stale reference`);
-    }
-  } else if (input.node_id) {
-    // Legacy path: use node_id directly (deprecated)
-    node = snap.nodes.find((n) => n.node_id === input.node_id);
-    if (!node) {
-      throw new Error(`Node ${input.node_id} not found in snapshot`);
-    }
-    // Log deprecation warning
-    console.warn(`[DEPRECATED] click with node_id - use eid instead`);
-  } else {
-    throw new Error('Either eid or node_id is required');
-  }
+  const snap = requireSnapshot(pageId);
+  const node = resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with navigation-aware outcome detection
   const result = await executeActionWithOutcome(
@@ -771,7 +788,7 @@ export async function click(
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(page_id, result.snapshot);
+  snapshotStore.store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -779,7 +796,6 @@ export async function click(
 
 /**
  * Type text into an element.
- * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Type options (will be validated)
  * @returns Type result with delta
@@ -787,41 +803,11 @@ export async function click(
 export async function type(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').TypeOutput> {
-  const { TypeInputSchema } = await import('./tool-schemas.js');
   const input = TypeInputSchema.parse(rawInput);
-  const session = getSessionManager();
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
 
-  const handleRef = { current: resolveExistingPage(session, input.page_id) };
-  const page_id = handleRef.current.page_id;
-  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
-  const captureSnapshot = createActionCapture(session, handleRef, page_id);
-
-  const snap = snapshotStore.getByPageId(page_id);
-  if (!snap) {
-    throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
-  }
-
-  // Resolve target element (eid preferred, node_id deprecated)
-  let node;
-  if (input.eid) {
-    const stateManager = getStateManager(page_id);
-    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
-    if (!elementRef) {
-      throw new Error(`Element with eid ${input.eid} not found`);
-    }
-    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
-    if (!node) {
-      throw new Error(`Element with eid ${input.eid} has stale reference`);
-    }
-  } else if (input.node_id) {
-    node = snap.nodes.find((n) => n.node_id === input.node_id);
-    if (!node) {
-      throw new Error(`Node ${input.node_id} not found in snapshot`);
-    }
-    console.warn(`[DEPRECATED] type with node_id - use eid instead`);
-  } else {
-    throw new Error('Either eid or node_id is required');
-  }
+  const snap = requireSnapshot(pageId);
+  const node = resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
@@ -837,7 +823,7 @@ export async function type(
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(page_id, result.snapshot);
+  snapshotStore.store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -852,14 +838,8 @@ export async function type(
 export async function press(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').PressOutput> {
-  const { PressInputSchema } = await import('./tool-schemas.js');
   const input = PressInputSchema.parse(rawInput);
-  const session = getSessionManager();
-
-  const handleRef = { current: resolveExistingPage(session, input.page_id) };
-  const page_id = handleRef.current.page_id;
-  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
-  const captureSnapshot = createActionCapture(session, handleRef, page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
 
   // Execute action with new simplified wrapper
   const result = await executeAction(
@@ -871,7 +851,7 @@ export async function press(
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(page_id, result.snapshot);
+  snapshotStore.store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -879,7 +859,6 @@ export async function press(
 
 /**
  * Select a dropdown option.
- * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Select options (will be validated)
  * @returns Select result with delta
@@ -887,41 +866,11 @@ export async function press(
 export async function select(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').SelectOutput> {
-  const { SelectInputSchema } = await import('./tool-schemas.js');
   const input = SelectInputSchema.parse(rawInput);
-  const session = getSessionManager();
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
 
-  const handleRef = { current: resolveExistingPage(session, input.page_id) };
-  const page_id = handleRef.current.page_id;
-  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
-  const captureSnapshot = createActionCapture(session, handleRef, page_id);
-
-  const snap = snapshotStore.getByPageId(page_id);
-  if (!snap) {
-    throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
-  }
-
-  // Resolve target element (eid preferred, node_id deprecated)
-  let node;
-  if (input.eid) {
-    const stateManager = getStateManager(page_id);
-    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
-    if (!elementRef) {
-      throw new Error(`Element with eid ${input.eid} not found`);
-    }
-    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
-    if (!node) {
-      throw new Error(`Element with eid ${input.eid} has stale reference`);
-    }
-  } else if (input.node_id) {
-    node = snap.nodes.find((n) => n.node_id === input.node_id);
-    if (!node) {
-      throw new Error(`Node ${input.node_id} not found in snapshot`);
-    }
-    console.warn(`[DEPRECATED] select with node_id - use eid instead`);
-  } else {
-    throw new Error('Either eid or node_id is required');
-  }
+  const snap = requireSnapshot(pageId);
+  const node = resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
@@ -935,7 +884,7 @@ export async function select(
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(page_id, result.snapshot);
+  snapshotStore.store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -943,7 +892,6 @@ export async function select(
 
 /**
  * Hover over an element.
- * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Hover options (will be validated)
  * @returns Hover result with delta
@@ -951,41 +899,11 @@ export async function select(
 export async function hover(
   rawInput: unknown
 ): Promise<import('./tool-schemas.js').HoverOutput> {
-  const { HoverInputSchema } = await import('./tool-schemas.js');
   const input = HoverInputSchema.parse(rawInput);
-  const session = getSessionManager();
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
 
-  const handleRef = { current: resolveExistingPage(session, input.page_id) };
-  const page_id = handleRef.current.page_id;
-  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
-  const captureSnapshot = createActionCapture(session, handleRef, page_id);
-
-  const snap = snapshotStore.getByPageId(page_id);
-  if (!snap) {
-    throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
-  }
-
-  // Resolve target element (eid preferred, node_id deprecated)
-  let node;
-  if (input.eid) {
-    const stateManager = getStateManager(page_id);
-    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
-    if (!elementRef) {
-      throw new Error(`Element with eid ${input.eid} not found`);
-    }
-    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
-    if (!node) {
-      throw new Error(`Element with eid ${input.eid} has stale reference`);
-    }
-  } else if (input.node_id) {
-    node = snap.nodes.find((n) => n.node_id === input.node_id);
-    if (!node) {
-      throw new Error(`Node ${input.node_id} not found in snapshot`);
-    }
-    console.warn(`[DEPRECATED] hover with node_id - use eid instead`);
-  } else {
-    throw new Error('Either eid or node_id is required');
-  }
+  const snap = requireSnapshot(pageId);
+  const node = resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
@@ -999,7 +917,7 @@ export async function hover(
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(page_id, result.snapshot);
+  snapshotStore.store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;

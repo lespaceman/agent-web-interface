@@ -596,17 +596,12 @@ export type GetNodeDetailsOutput = z.infer<typeof GetNodeDetailsOutputSchema>;
 // ============================================================================
 
 const ScrollElementIntoViewInputSchemaBase = z.object({
-  /** Stable element ID from actionables list (preferred) */
-  eid: z.string().optional(),
-  /** Node ID to scroll into view (DEPRECATED: use eid instead) */
-  node_id: z.string().optional(),
+  /** Stable element ID from actionables list */
+  eid: z.string(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
-export const ScrollElementIntoViewInputSchema = ScrollElementIntoViewInputSchemaBase.refine(
-  (data) => data.eid ?? data.node_id,
-  { message: 'Either eid or node_id is required' }
-);
+export const ScrollElementIntoViewInputSchema = ScrollElementIntoViewInputSchemaBase;
 export { ScrollElementIntoViewInputSchemaBase };
 
 /** Returns XML state response string directly */
@@ -661,19 +656,10 @@ export const SupportedKeys = [
 const ClickInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page containing the element.'),
-  /** Stable element ID from actionables list (preferred) */
-  eid: z.string().optional().describe('The internal element ID (eid) from the snapshot.'),
-  /** Node ID to click (DEPRECATED: use eid instead) */
-  node_id: z
-    .string()
-    .optional()
-    .describe('The backend_node_id of the element (DEPRECATED: use eid).'),
+  /** Stable element ID from actionables list */
+  eid: z.string().describe('The internal element ID (eid) from the snapshot.'),
 });
-// Refined schema for validation
-export const ClickInputSchema = ClickInputSchemaBase.refine(
-  (data) => data.eid ?? data.node_id,
-  { message: 'Either eid or node_id is required' }
-);
+export const ClickInputSchema = ClickInputSchemaBase;
 // Re-export base for .shape access
 export { ClickInputSchemaBase };
 
@@ -683,23 +669,18 @@ export const ClickOutputSchema = z.string();
 export type ClickInput = z.infer<typeof ClickInputSchema>;
 export type ClickOutput = z.infer<typeof ClickOutputSchema>;
 
-// type - Type text into an element (node_id required, no agent_version)
+// type - Type text into an element (eid required, no agent_version)
 const TypeInputSchemaBase = z.object({
   /** Text to type */
   text: z.string(),
-  /** Stable element ID from actionables list (preferred) */
-  eid: z.string().optional(),
-  /** Node ID to type into (DEPRECATED: use eid instead) */
-  node_id: z.string().optional(),
+  /** Stable element ID from actionables list */
+  eid: z.string(),
   /** Clear existing text before typing (default: false) */
   clear: z.boolean().default(false),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
-export const TypeInputSchema = TypeInputSchemaBase.refine(
-  (data) => data.eid ?? data.node_id,
-  { message: 'Either eid or node_id is required' }
-);
+export const TypeInputSchema = TypeInputSchemaBase;
 export { TypeInputSchemaBase };
 
 /** Returns XML state response string directly */
@@ -726,19 +707,14 @@ export type PressOutput = z.infer<typeof PressOutputSchema>;
 
 // select - Select a dropdown option (no agent_version)
 const SelectInputSchemaBase = z.object({
-  /** Stable element ID from actionables list (preferred) */
-  eid: z.string().optional(),
-  /** Select element node_id (DEPRECATED: use eid instead) */
-  node_id: z.string().optional(),
+  /** Stable element ID from actionables list */
+  eid: z.string(),
   /** Option value or visible text to select */
   value: z.string(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
-export const SelectInputSchema = SelectInputSchemaBase.refine(
-  (data) => data.eid ?? data.node_id,
-  { message: 'Either eid or node_id is required' }
-);
+export const SelectInputSchema = SelectInputSchemaBase;
 export { SelectInputSchemaBase };
 
 /** Returns XML state response string directly */
@@ -749,17 +725,12 @@ export type SelectOutput = z.infer<typeof SelectOutputSchema>;
 
 // hover - Hover over an element (no agent_version)
 const HoverInputSchemaBase = z.object({
-  /** Stable element ID from actionables list (preferred) */
-  eid: z.string().optional(),
-  /** Node ID to hover over (DEPRECATED: use eid instead) */
-  node_id: z.string().optional(),
+  /** Stable element ID from actionables list */
+  eid: z.string(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
-export const HoverInputSchema = HoverInputSchemaBase.refine(
-  (data) => data.eid ?? data.node_id,
-  { message: 'Either eid or node_id is required' }
-);
+export const HoverInputSchema = HoverInputSchemaBase;
 export { HoverInputSchemaBase };
 
 /** Returns XML state response string directly */
