@@ -187,7 +187,7 @@ function initializeServer(): BrowserAutomationServer {
       description: 'Find elements by kind, label, or region in the current snapshot.',
       inputSchema: FindElementsInputSchema.shape,
     },
-    findElements
+    (input) => Promise.resolve(findElements(input))
   );
 
   server.registerTool(
@@ -197,7 +197,7 @@ function initializeServer(): BrowserAutomationServer {
       description: 'Return full details for a single node_id.',
       inputSchema: GetNodeDetailsInputSchema.shape,
     },
-    getNodeDetails
+    (input) => Promise.resolve(getNodeDetails(input))
   );
 
   // ============================================================================

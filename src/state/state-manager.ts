@@ -500,12 +500,24 @@ export class StateManager {
     snapshotId: string
   ): ActionableInfo[] {
     const actionables: ActionableInfo[] = [];
-    const usedEids = new Set<string>();
+    // Used only for fallback case when element not in registry
+    const fallbackUsedEids = new Set<string>();
 
     for (const node of nodes) {
-      const baseEid = computeEid(node, activeLayer);
-      const eid = resolveEidCollision(baseEid, usedEids);
-      usedEids.add(eid);
+      // Look up EID from registry - single source of truth
+      // Registry was updated in generateResponse() before this method is called
+      let eid = this.elementRegistry.getEidBySnapshotAndBackendNodeId(
+        snapshotId,
+        node.backend_node_id
+      );
+
+      if (!eid) {
+        // Defensive fallback: compute if not in registry
+        // This can happen for non-interactive elements or edge cases
+        const baseEid = computeEid(node, activeLayer);
+        eid = resolveEidCollision(baseEid, fallbackUsedEids);
+        fallbackUsedEids.add(eid);
+      }
 
       const loc = generateLocator(node, activeLayer);
 
