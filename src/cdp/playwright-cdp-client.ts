@@ -8,6 +8,7 @@
 
 import type { CDPSession } from 'playwright';
 import type { CdpClient, CdpEventHandler, CdpClientOptions } from './cdp-client.interface.js';
+import type { CdpHealthDiagnostics } from '../state/health.types.js';
 import { getLogger } from '../shared/services/logging.service.js';
 
 /**
@@ -49,6 +50,10 @@ export class PlaywrightCdpClient implements CdpClient {
   private readonly enabledDomains = new Set<string>();
   private readonly eventHandlers = new Map<string, Set<CdpEventHandler>>();
   private readonly domainsWithoutEnable: Set<string>;
+  /** Last error message from CDP operations */
+  private lastError?: string;
+  /** Timestamp of last error */
+  private lastErrorTime?: Date;
 
   constructor(
     private readonly session: CDPSession,
@@ -106,6 +111,11 @@ export class PlaywrightCdpClient implements CdpClient {
     } catch (error) {
       // Detect session disconnection from error messages
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Track error for health diagnostics
+      this.lastError = errorMessage;
+      this.lastErrorTime = new Date();
+
       if (
         errorMessage.includes('Target closed') ||
         errorMessage.includes('Session closed') ||
@@ -231,6 +241,22 @@ export class PlaywrightCdpClient implements CdpClient {
    */
   isActive(): boolean {
     return this.active;
+  }
+
+  /**
+   * Get detailed health diagnostics for this CDP session.
+   *
+   * Includes:
+   * - active: Whether session is operational
+   * - lastError: Last error message if any
+   * - lastErrorTime: When the last error occurred
+   */
+  getHealth(): CdpHealthDiagnostics {
+    return {
+      active: this.active,
+      lastError: this.lastError,
+      lastErrorTime: this.lastErrorTime,
+    };
   }
 
   /**

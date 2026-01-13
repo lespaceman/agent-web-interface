@@ -8,6 +8,65 @@
 import { z } from 'zod';
 
 // ============================================================================
+// Runtime Health Schema (CDP + Snapshot health telemetry)
+// ============================================================================
+
+/**
+ * Snapshot health codes - specific reasons for snapshot failures.
+ */
+export const SnapshotHealthCodeSchema = z.enum([
+  'HEALTHY', // Snapshot valid and complete
+  'PENDING_DOM', // DOM not ready (still loading)
+  'AX_EMPTY', // Accessibility tree empty (AX extraction failed)
+  'DOM_EMPTY', // DOM tree empty (DOM extraction failed)
+  'CDP_SESSION_DEAD', // CDP session closed/detached
+  'UNKNOWN', // Other failure
+]);
+
+/**
+ * CDP session health status.
+ */
+export const CdpHealthSchema = z.object({
+  /** Whether CDP session is operational */
+  ok: z.boolean(),
+  /** Whether recovery was attempted and succeeded */
+  recovered: z.boolean().optional(),
+  /** Recovery method used if recovery occurred */
+  recovery_method: z.literal('rebind').optional(),
+  /** Error message if not ok */
+  error: z.string().optional(),
+});
+
+/**
+ * Snapshot capture health status.
+ */
+export const SnapshotCaptureHealthSchema = z.object({
+  /** Whether snapshot is usable */
+  ok: z.boolean(),
+  /** Whether recovery was attempted */
+  recovered: z.boolean().optional(),
+  /** Health code explaining status */
+  code: SnapshotHealthCodeSchema,
+  /** Number of capture attempts */
+  attempts: z.number().optional(),
+  /** Human-readable message */
+  message: z.string().optional(),
+});
+
+/**
+ * Runtime health info included in tool responses.
+ * Enables LLM to understand CDP/snapshot recovery status.
+ */
+export const RuntimeHealthSchema = z.object({
+  /** CDP session health */
+  cdp: CdpHealthSchema,
+  /** Snapshot capture health */
+  snapshot: SnapshotCaptureHealthSchema,
+});
+
+export type RuntimeHealth = z.infer<typeof RuntimeHealthSchema>;
+
+// ============================================================================
 // Shared Node Details Schema
 // ============================================================================
 
@@ -82,7 +141,254 @@ export const NodeDetailsSchema = z.object({
 export type NodeDetails = z.infer<typeof NodeDetailsSchema>;
 
 // ============================================================================
-// Page Summary Schema (JSON page state)
+// State Response Schema (NEW: StateHandle + Diff + Actionables)
+// ============================================================================
+
+/**
+ * Locator information for element targeting.
+ */
+export const LocatorInfoSchema = z.object({
+  preferred: z.object({ ax: z.string() }),
+  fallback: z.object({ css: z.string() }).optional(),
+});
+
+/**
+ * Element target reference - for direct targeting via backend_node_id.
+ * Included in actionables to enable direct element interaction.
+ */
+export const ElementTargetRefSchema = z.object({
+  /** Snapshot that produced this ref */
+  snapshot_id: z.string(),
+  /** CDP backend node ID - primary targeting method */
+  backend_node_id: z.number(),
+  /** CDP frame ID - for cross-frame targeting */
+  frame_id: z.string().optional(),
+  /** CDP loader ID - changes on navigation */
+  loader_id: z.string().optional(),
+});
+
+/**
+ * Actionable element information.
+ * Returned as a capped list of interactive elements in the active layer.
+ *
+ * NEW: Includes `ref` for direct element targeting. Use `eid` for stable
+ * identity across snapshots, and `ref.backend_node_id` for immediate actions.
+ */
+export const ActionableInfoSchema = z.object({
+  eid: z.string(),
+  kind: z.string(),
+  name: z.string(),
+  role: z.string(),
+  vis: z.boolean(),
+  ena: z.boolean(),
+  /** Element target reference for direct interaction */
+  ref: ElementTargetRefSchema,
+  loc: LocatorInfoSchema,
+  ctx: z.object({
+    layer: z.string(),
+    group: z.string().optional(),
+  }),
+  chk: z.boolean().optional(),
+  sel: z.boolean().optional(),
+  exp: z.boolean().optional(),
+  foc: z.boolean().optional(),
+  req: z.boolean().optional(),
+  inv: z.boolean().optional(),
+  rdo: z.boolean().optional(),
+  val_hint: z.string().optional(),
+  placeholder: z.string().optional(),
+  href: z.string().optional(),
+  type: z.string().optional(),
+});
+
+/**
+ * State handle - core state metadata.
+ */
+export const StateHandleSchema = z.object({
+  sid: z.string(),
+  step: z.number(),
+  doc: z.object({
+    url: z.string(),
+    origin: z.string(),
+    title: z.string(),
+    doc_id: z.string(),
+    nav_type: z.enum(['soft', 'hard']),
+    history_idx: z.number(),
+  }),
+  layer: z.object({
+    active: z.enum(['main', 'modal', 'drawer', 'popover']),
+    stack: z.array(z.string()),
+    focus_eid: z.string().optional(),
+    pointer_lock: z.boolean(),
+  }),
+  timing: z.object({
+    ts: z.string(),
+    dom_ready: z.boolean(),
+    network_busy: z.boolean(),
+  }),
+  hash: z.object({
+    ui: z.string(),
+    layer: z.string(),
+  }),
+});
+
+/**
+ * Baseline response (full state, no diff).
+ */
+export const BaselineResponseSchema = z.object({
+  mode: z.literal('baseline'),
+  reason: z.enum(['first', 'navigation', 'threshold', 'periodic', 'error']),
+  error: z.string().optional(),
+});
+
+/**
+ * Diff change for actionables.
+ */
+export const DiffChangeSchema = z.object({
+  eid: z.string(),
+  k: z.string(),
+  from: z.unknown(),
+  to: z.unknown(),
+});
+
+/**
+ * Atom change.
+ */
+export const AtomChangeSchema = z.object({
+  k: z.string(),
+  from: z.unknown(),
+  to: z.unknown(),
+});
+
+/**
+ * Diff response (incremental changes).
+ */
+export const DiffResponseSchema = z.object({
+  mode: z.literal('diff'),
+  diff: z.object({
+    doc: z.object({
+      from: z.object({ url: z.string(), title: z.string() }),
+      to: z.object({ url: z.string(), title: z.string() }),
+      nav_type: z.enum(['soft', 'hard']),
+    }).optional(),
+    layer: z.object({
+      stack_from: z.array(z.string()),
+      stack_to: z.array(z.string()),
+    }).optional(),
+    actionables: z.object({
+      added: z.array(z.string()),
+      removed: z.array(z.string()),
+      changed: z.array(DiffChangeSchema),
+    }),
+    atoms: z.array(AtomChangeSchema),
+  }),
+});
+
+/**
+ * Universal UI state atoms.
+ */
+export const AtomsSchema = z.object({
+  viewport: z.object({
+    w: z.number(),
+    h: z.number(),
+    dpr: z.number(),
+  }),
+  scroll: z.object({
+    x: z.number(),
+    y: z.number(),
+  }),
+  loading: z.object({
+    network_busy: z.boolean(),
+    spinners: z.number(),
+    progress: z.number().optional(),
+  }).optional(),
+  forms: z.object({
+    dirty: z.boolean(),
+    focused_field: z.string().optional(),
+    validation_errors: z.number(),
+  }).optional(),
+  notifications: z.object({
+    toasts: z.number(),
+    banners: z.number(),
+  }).optional(),
+});
+
+/**
+ * Internal state response object structure (for reference/documentation).
+ * The actual StateResponse is an XML string for LLM context efficiency.
+ */
+export const StateResponseObjectSchema = z.object({
+  state: StateHandleSchema,
+  diff: z.union([BaselineResponseSchema, DiffResponseSchema]),
+  actionables: z.array(ActionableInfoSchema),
+  counts: z.object({
+    shown: z.number(),
+    total_in_layer: z.number(),
+  }),
+  limits: z.object({
+    max_actionables: z.number(),
+    actionables_capped: z.boolean(),
+  }),
+  atoms: AtomsSchema,
+  tokens: z.number(),
+});
+
+export type StateResponseObject = z.infer<typeof StateResponseObjectSchema>;
+
+/**
+ * State response - returned after every action as a dense XML string.
+ *
+ * This is the NEW response format that replaces page_summary.
+ * It's rendered as XML for maximum LLM context efficiency.
+ * Contains:
+ * - StateHandle: Current state metadata
+ * - Diff: Incremental changes since last action (or baseline)
+ * - Actionables: Capped list of interactive elements from active layer
+ * - Atoms: Universal UI state facts
+ */
+export const StateResponseSchema = z.string();
+
+export type StateResponse = z.infer<typeof StateResponseSchema>;
+
+// ============================================================================
+// Click Outcome Schema (Navigation-aware action results)
+// ============================================================================
+
+/**
+ * Click outcome - result of a click action with navigation awareness.
+ * Differentiates between "element gone due to navigation" vs "element stale due to DOM mutation".
+ */
+export const ClickOutcomeSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('success'),
+    /** Whether the click triggered a page navigation */
+    navigated: z.boolean(),
+  }),
+  z.object({
+    status: z.literal('stale_element'),
+    /** Why the element became stale */
+    reason: z.enum(['dom_mutation', 'navigation']),
+    /** Whether retry was attempted */
+    retried: z.boolean(),
+  }),
+  z.object({
+    status: z.literal('element_not_found'),
+    /** The eid that wasn't found */
+    eid: z.string(),
+    /** Last known label for debugging */
+    last_known_label: z.string().optional(),
+  }),
+  z.object({
+    status: z.literal('error'),
+    /** Error message */
+    message: z.string(),
+  }),
+]);
+
+export type ClickOutcome = z.infer<typeof ClickOutcomeSchema>;
+
+// ============================================================================
+// Page Summary Schema (DEPRECATED - JSON page state)
 // ============================================================================
 
 /**
@@ -314,26 +620,8 @@ export const LaunchBrowserInputSchema = z.object({
   headless: z.boolean().default(true),
 });
 
-export const LaunchBrowserOutputSchema = z.object({
-  /** Session ID for the browser session */
-  session_id: z.string(),
-  /** Unique page identifier */
-  page_id: z.string(),
-  /** Current URL of the page */
-  url: z.string(),
-  /** Page title */
-  title: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-});
+/** Returns XML state response string directly */
+export const LaunchBrowserOutputSchema = z.string();
 
 export type LaunchBrowserInput = z.infer<typeof LaunchBrowserInputSchema>;
 export type LaunchBrowserOutput = z.infer<typeof LaunchBrowserOutputSchema>;
@@ -347,26 +635,8 @@ export const ConnectBrowserInputSchema = z.object({
   endpoint_url: z.string().optional(),
 });
 
-export const ConnectBrowserOutputSchema = z.object({
-  /** Session ID for the browser session */
-  session_id: z.string(),
-  /** Unique page identifier */
-  page_id: z.string(),
-  /** Current URL of the page */
-  url: z.string(),
-  /** Page title */
-  title: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-});
+/** Returns XML state response string directly */
+export const ConnectBrowserOutputSchema = z.string();
 
 export type ConnectBrowserInput = z.infer<typeof ConnectBrowserInputSchema>;
 export type ConnectBrowserOutput = z.infer<typeof ConnectBrowserOutputSchema>;
@@ -380,12 +650,8 @@ export const ClosePageInputSchema = z.object({
   page_id: z.string(),
 });
 
-export const ClosePageOutputSchema = z.object({
-  /** Whether the close operation succeeded */
-  closed: z.boolean(),
-  /** Page ID that was closed */
-  page_id: z.string(),
-});
+/** Returns XML result string */
+export const ClosePageOutputSchema = z.string();
 
 export type ClosePageInput = z.infer<typeof ClosePageInputSchema>;
 export type ClosePageOutput = z.infer<typeof ClosePageOutputSchema>;
@@ -396,10 +662,8 @@ export type ClosePageOutput = z.infer<typeof ClosePageOutputSchema>;
 
 export const CloseSessionInputSchema = z.object({});
 
-export const CloseSessionOutputSchema = z.object({
-  /** Whether the close operation succeeded */
-  closed: z.boolean(),
-});
+/** Returns XML result string */
+export const CloseSessionOutputSchema = z.string();
 
 export type CloseSessionInput = z.infer<typeof CloseSessionInputSchema>;
 export type CloseSessionOutput = z.infer<typeof CloseSessionOutputSchema>;
@@ -415,24 +679,8 @@ export const NavigateInputSchema = z.object({
   page_id: z.string().optional(),
 });
 
-export const NavigateOutputSchema = z.object({
-  /** Page ID */
-  page_id: z.string(),
-  /** Final URL after navigation */
-  url: z.string(),
-  /** Page title */
-  title: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-});
+/** Returns XML state response string directly */
+export const NavigateOutputSchema = z.string();
 
 export type NavigateInput = z.infer<typeof NavigateInputSchema>;
 export type NavigateOutput = z.infer<typeof NavigateOutputSchema>;
@@ -446,24 +694,8 @@ export const GoBackInputSchema = z.object({
   page_id: z.string().optional(),
 });
 
-export const GoBackOutputSchema = z.object({
-  /** Page ID */
-  page_id: z.string(),
-  /** URL after going back */
-  url: z.string(),
-  /** Page title */
-  title: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-});
+/** Returns XML state response string directly */
+export const GoBackOutputSchema = z.string();
 
 export type GoBackInput = z.infer<typeof GoBackInputSchema>;
 export type GoBackOutput = z.infer<typeof GoBackOutputSchema>;
@@ -477,24 +709,8 @@ export const GoForwardInputSchema = z.object({
   page_id: z.string().optional(),
 });
 
-export const GoForwardOutputSchema = z.object({
-  /** Page ID */
-  page_id: z.string(),
-  /** URL after going forward */
-  url: z.string(),
-  /** Page title */
-  title: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-});
+/** Returns XML state response string directly */
+export const GoForwardOutputSchema = z.string();
 
 export type GoForwardInput = z.infer<typeof GoForwardInputSchema>;
 export type GoForwardOutput = z.infer<typeof GoForwardOutputSchema>;
@@ -508,24 +724,8 @@ export const ReloadInputSchema = z.object({
   page_id: z.string().optional(),
 });
 
-export const ReloadOutputSchema = z.object({
-  /** Page ID */
-  page_id: z.string(),
-  /** URL after reload */
-  url: z.string(),
-  /** Page title */
-  title: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-});
+/** Returns XML state response string directly */
+export const ReloadOutputSchema = z.string();
 
 export type ReloadInput = z.infer<typeof ReloadInputSchema>;
 export type ReloadOutput = z.infer<typeof ReloadOutputSchema>;
@@ -539,24 +739,8 @@ export const CaptureSnapshotInputSchema = z.object({
   page_id: z.string().optional(),
 });
 
-export const CaptureSnapshotOutputSchema = z.object({
-  /** Page ID */
-  page_id: z.string(),
-  /** Current URL of the page */
-  url: z.string(),
-  /** Page title */
-  title: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-});
+/** Returns XML state response string directly */
+export const CaptureSnapshotOutputSchema = z.string();
 
 export type CaptureSnapshotInput = z.infer<typeof CaptureSnapshotInputSchema>;
 export type CaptureSnapshotOutput = z.infer<typeof CaptureSnapshotOutputSchema>;
@@ -566,60 +750,41 @@ export type CaptureSnapshotOutput = z.infer<typeof CaptureSnapshotOutputSchema>;
 // ============================================================================
 
 export const FindElementsInputSchema = z.object({
-  /** Filter by NodeKind (single or array) */
-  kind: z.union([z.string(), z.array(z.string())]).optional(),
-  /** Filter by label text (simple contains match) */
-  label: z.string().optional(),
-  /** Filter by semantic region (single or array) */
-  region: z.union([z.string(), z.array(z.string())]).optional(),
-  /** Maximum number of results (default: 10) */
-  limit: z.number().int().min(1).max(100).default(10),
   /** Page ID. If omitted, operates on the most recently used page */
-  page_id: z.string().optional(),
+  page_id: z.string().optional().describe('The ID of the page to search within.'),
+  /** Filter by semantic type (e.g., 'radio' for form options). */
+  kind: z
+    .enum([
+      'button',
+      'link',
+      'radio',
+      'checkbox',
+      'textbox',
+      'combobox',
+      'image',
+      'heading',
+    ])
+    .optional()
+    .describe("Filter by semantic type (e.g., 'radio' for form options)."),
+  /** Fuzzy match for visible text or accessible name. */
+  label: z.string().optional().describe('Fuzzy match for visible text or accessible name.'),
+  /** Restrict search to a specific area. */
+  region: z
+    .enum(['main', 'nav', 'header', 'footer'])
+    .optional()
+    .describe('Restrict search to a specific area.'),
+  /** Maximum number of results (default: 10) */
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(10)
+    .describe('Number of results to return.'),
 });
 
-export const FindElementsOutputSchema = z.object({
-  /** Page ID */
-  page_id: z.string(),
-  /** Snapshot ID */
-  snapshot_id: z.string(),
-  /** Matched nodes */
-  matches: z.array(
-    z.object({
-      node_id: z.string(),
-      backend_node_id: z.number(),
-      kind: z.string(),
-      label: z.string(),
-      selector: z.string(),
-      region: z.string(),
-      /** Element state */
-      state: z
-        .object({
-          visible: z.boolean().optional(),
-          enabled: z.boolean().optional(),
-          checked: z.boolean().optional(),
-          expanded: z.boolean().optional(),
-          selected: z.boolean().optional(),
-          focused: z.boolean().optional(),
-          required: z.boolean().optional(),
-          invalid: z.boolean().optional(),
-          readonly: z.boolean().optional(),
-        })
-        .optional(),
-      /** Additional attributes */
-      attributes: z
-        .object({
-          input_type: z.string().optional(),
-          placeholder: z.string().optional(),
-          value: z.string().optional(),
-          href: z.string().optional(),
-          alt: z.string().optional(),
-          src: z.string().optional(),
-        })
-        .optional(),
-    })
-  ),
-});
+/** Returns XML result string */
+export const FindElementsOutputSchema = z.string();
 
 export type FindElementsInput = z.infer<typeof FindElementsInputSchema>;
 export type FindElementsOutput = z.infer<typeof FindElementsOutputSchema>;
@@ -635,14 +800,8 @@ export const GetNodeDetailsInputSchema = z.object({
   page_id: z.string().optional(),
 });
 
-export const GetNodeDetailsOutputSchema = z.object({
-  /** Page ID */
-  page_id: z.string(),
-  /** Snapshot ID */
-  snapshot_id: z.string(),
-  /** Node details */
-  node: NodeDetailsSchema,
-});
+/** Returns XML result string */
+export const GetNodeDetailsOutputSchema = z.string();
 
 export type GetNodeDetailsInput = z.infer<typeof GetNodeDetailsInputSchema>;
 export type GetNodeDetailsOutput = z.infer<typeof GetNodeDetailsOutputSchema>;
@@ -651,31 +810,22 @@ export type GetNodeDetailsOutput = z.infer<typeof GetNodeDetailsOutputSchema>;
 // scroll_element_into_view - Scroll an element into view
 // ============================================================================
 
-export const ScrollElementIntoViewInputSchema = z.object({
-  /** Node ID to scroll into view */
-  node_id: z.string(),
+const ScrollElementIntoViewInputSchemaBase = z.object({
+  /** Stable element ID from actionables list (preferred) */
+  eid: z.string().optional(),
+  /** Node ID to scroll into view (DEPRECATED: use eid instead) */
+  node_id: z.string().optional(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
+export const ScrollElementIntoViewInputSchema = ScrollElementIntoViewInputSchemaBase.refine(
+  (data) => data.eid ?? data.node_id,
+  { message: 'Either eid or node_id is required' }
+);
+export { ScrollElementIntoViewInputSchemaBase };
 
-export const ScrollElementIntoViewOutputSchema = z.object({
-  /** Whether scroll succeeded */
-  success: z.boolean(),
-  /** Node ID that was scrolled into view */
-  node_id: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-  /** Error message if action failed */
-  error: z.string().optional(),
-});
+/** Returns XML state response string directly */
+export const ScrollElementIntoViewOutputSchema = z.string();
 
 export type ScrollElementIntoViewInput = z.infer<typeof ScrollElementIntoViewInputSchema>;
 export type ScrollElementIntoViewOutput = z.infer<typeof ScrollElementIntoViewOutputSchema>;
@@ -693,26 +843,8 @@ export const ScrollPageInputSchema = z.object({
   page_id: z.string().optional(),
 });
 
-export const ScrollPageOutputSchema = z.object({
-  /** Whether scroll succeeded */
-  success: z.boolean(),
-  /** Direction scrolled */
-  direction: z.enum(['up', 'down']),
-  /** Amount scrolled in pixels */
-  amount: z.number(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-  /** Error message if action failed */
-  error: z.string().optional(),
-});
+/** Returns XML state response string directly */
+export const ScrollPageOutputSchema = z.string();
 
 export type ScrollPageInput = z.infer<typeof ScrollPageInputSchema>;
 export type ScrollPageOutput = z.infer<typeof ScrollPageOutputSchema>;
@@ -740,71 +872,53 @@ export const SupportedKeys = [
 ] as const;
 
 // click - Click an element (no agent_version)
-export const ClickInputSchema = z.object({
-  /** Node ID to click */
-  node_id: z.string(),
+// Raw schema for .shape access (tool registration)
+const ClickInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
-  page_id: z.string().optional(),
+  page_id: z.string().optional().describe('The ID of the page containing the element.'),
+  /** Stable element ID from actionables list (preferred) */
+  eid: z.string().optional().describe('The internal element ID (eid) from the snapshot.'),
+  /** Node ID to click (DEPRECATED: use eid instead) */
+  node_id: z
+    .string()
+    .optional()
+    .describe('The backend_node_id of the element (DEPRECATED: use eid).'),
 });
+// Refined schema for validation
+export const ClickInputSchema = ClickInputSchemaBase.refine(
+  (data) => data.eid ?? data.node_id,
+  { message: 'Either eid or node_id is required' }
+);
+// Re-export base for .shape access
+export { ClickInputSchemaBase };
 
-export const ClickOutputSchema = z.object({
-  /** Whether click succeeded */
-  success: z.boolean(),
-  /** Node ID that was clicked */
-  node_id: z.string(),
-  /** Label of clicked element */
-  clicked_element: z.string().optional(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-  /** Error message if action failed */
-  error: z.string().optional(),
-});
+/** Returns XML state response string directly */
+export const ClickOutputSchema = z.string();
 
 export type ClickInput = z.infer<typeof ClickInputSchema>;
 export type ClickOutput = z.infer<typeof ClickOutputSchema>;
 
 // type - Type text into an element (node_id required, no agent_version)
-export const TypeInputSchema = z.object({
+const TypeInputSchemaBase = z.object({
   /** Text to type */
   text: z.string(),
-  /** Node ID to type into (required) */
-  node_id: z.string(),
+  /** Stable element ID from actionables list (preferred) */
+  eid: z.string().optional(),
+  /** Node ID to type into (DEPRECATED: use eid instead) */
+  node_id: z.string().optional(),
   /** Clear existing text before typing (default: false) */
   clear: z.boolean().default(false),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
+export const TypeInputSchema = TypeInputSchemaBase.refine(
+  (data) => data.eid ?? data.node_id,
+  { message: 'Either eid or node_id is required' }
+);
+export { TypeInputSchemaBase };
 
-export const TypeOutputSchema = z.object({
-  /** Whether typing succeeded */
-  success: z.boolean(),
-  /** Text that was typed */
-  typed_text: z.string(),
-  /** Node ID that received input */
-  node_id: z.string(),
-  /** Label of element typed into */
-  element_label: z.string().optional(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-  /** Error message if action failed */
-  error: z.string().optional(),
-});
+/** Returns XML state response string directly */
+export const TypeOutputSchema = z.string();
 
 export type TypeInput = z.infer<typeof TypeInputSchema>;
 export type TypeOutput = z.infer<typeof TypeOutputSchema>;
@@ -819,94 +933,52 @@ export const PressInputSchema = z.object({
   page_id: z.string().optional(),
 });
 
-export const PressOutputSchema = z.object({
-  /** Whether key press succeeded */
-  success: z.boolean(),
-  /** Key that was pressed */
-  key: z.string(),
-  /** Modifiers that were held */
-  modifiers: z.array(z.string()).optional(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-  /** Error message if action failed */
-  error: z.string().optional(),
-});
+/** Returns XML state response string directly */
+export const PressOutputSchema = z.string();
 
 export type PressInput = z.infer<typeof PressInputSchema>;
 export type PressOutput = z.infer<typeof PressOutputSchema>;
 
 // select - Select a dropdown option (no agent_version)
-export const SelectInputSchema = z.object({
-  /** Select element node_id */
-  node_id: z.string(),
+const SelectInputSchemaBase = z.object({
+  /** Stable element ID from actionables list (preferred) */
+  eid: z.string().optional(),
+  /** Select element node_id (DEPRECATED: use eid instead) */
+  node_id: z.string().optional(),
   /** Option value or visible text to select */
   value: z.string(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
+export const SelectInputSchema = SelectInputSchemaBase.refine(
+  (data) => data.eid ?? data.node_id,
+  { message: 'Either eid or node_id is required' }
+);
+export { SelectInputSchemaBase };
 
-export const SelectOutputSchema = z.object({
-  /** Whether selection succeeded */
-  success: z.boolean(),
-  /** Node ID of the select element */
-  node_id: z.string(),
-  /** Value that was selected */
-  selected_value: z.string(),
-  /** Visible text of selected option */
-  selected_text: z.string(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-  /** Error message if action failed */
-  error: z.string().optional(),
-});
+/** Returns XML state response string directly */
+export const SelectOutputSchema = z.string();
 
 export type SelectInput = z.infer<typeof SelectInputSchema>;
 export type SelectOutput = z.infer<typeof SelectOutputSchema>;
 
 // hover - Hover over an element (no agent_version)
-export const HoverInputSchema = z.object({
-  /** Node ID to hover over */
-  node_id: z.string(),
+const HoverInputSchemaBase = z.object({
+  /** Stable element ID from actionables list (preferred) */
+  eid: z.string().optional(),
+  /** Node ID to hover over (DEPRECATED: use eid instead) */
+  node_id: z.string().optional(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
+export const HoverInputSchema = HoverInputSchemaBase.refine(
+  (data) => data.eid ?? data.node_id,
+  { message: 'Either eid or node_id is required' }
+);
+export { HoverInputSchemaBase };
 
-export const HoverOutputSchema = z.object({
-  /** Whether hover succeeded */
-  success: z.boolean(),
-  /** Node ID that was hovered */
-  node_id: z.string(),
-  /** Label of hovered element */
-  element_label: z.string().optional(),
-  /** Snapshot ID for the captured page state */
-  snapshot_id: z.string(),
-  /** Total nodes captured */
-  node_count: z.number(),
-  /** Interactive nodes captured */
-  interactive_count: z.number(),
-  /** Comprehensive JSON page summary for LLM context */
-  page_summary: PageSummarySchema,
-  /** Token count for page_summary */
-  page_summary_tokens: z.number(),
-  /** Error message if action failed */
-  error: z.string().optional(),
-});
+/** Returns XML state response string directly */
+export const HoverOutputSchema = z.string();
 
 export type HoverInput = z.infer<typeof HoverInputSchema>;
 export type HoverOutput = z.infer<typeof HoverOutputSchema>;

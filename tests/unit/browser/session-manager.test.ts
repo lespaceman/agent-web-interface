@@ -868,4 +868,132 @@ describe('SessionManager', () => {
       await expect(newManager.resolvePageOrCreate()).rejects.toThrow('Browser not running');
     });
   });
+
+  describe('getConnectionHealth', () => {
+    it('should return "failed" before launch/connect', async () => {
+      const health = await sessionManager.getConnectionHealth();
+      expect(health).toBe('failed');
+    });
+
+    it('should return "healthy" when connected and all CDP sessions active', async () => {
+      await sessionManager.launch();
+      await sessionManager.createPage();
+
+      const health = await sessionManager.getConnectionHealth();
+      expect(health).toBe('healthy');
+    });
+
+    it('should return "degraded" when connected but CDP session inactive', async () => {
+      await sessionManager.launch();
+      const handle = await sessionManager.createPage();
+
+      // Simulate CDP session becoming inactive
+      // We need to mock cdp.isActive() to return false
+      vi.spyOn(handle.cdp, 'isActive').mockReturnValue(false);
+
+      const health = await sessionManager.getConnectionHealth();
+      expect(health).toBe('degraded');
+    });
+
+    it('should return "healthy" with no pages (nothing degraded)', async () => {
+      await sessionManager.launch();
+
+      const health = await sessionManager.getConnectionHealth();
+      expect(health).toBe('healthy');
+    });
+
+    it('should return "failed" after shutdown', async () => {
+      await sessionManager.launch();
+      await sessionManager.shutdown();
+
+      const health = await sessionManager.getConnectionHealth();
+      expect(health).toBe('failed');
+    });
+
+    it('should return "degraded" when CDP probe fails', async () => {
+      await sessionManager.launch();
+      const handle = await sessionManager.createPage();
+
+      vi.spyOn(handle.cdp, 'send').mockRejectedValue(new Error('Probe failed'));
+
+      const health = await sessionManager.getConnectionHealth();
+      expect(health).toBe('degraded');
+    });
+  });
+
+  describe('rebindCdpSession', () => {
+    beforeEach(async () => {
+      await sessionManager.launch();
+    });
+
+    it('should create new CDP session for existing page', async () => {
+      const handle = await sessionManager.createPage();
+
+      // Clear mock to track rebind calls
+      mockContext.newCDPSession.mockClear();
+
+      const newHandle = await sessionManager.rebindCdpSession(handle.page_id);
+
+      expect(mockContext.newCDPSession).toHaveBeenCalledWith(handle.page);
+      expect(newHandle.page_id).toBe(handle.page_id);
+      expect(newHandle.page).toBe(handle.page);
+      // cdp should be different object (new session)
+      expect(newHandle.cdp).not.toBe(handle.cdp);
+    });
+
+    it('should close old CDP session before creating new one', async () => {
+      const handle = await sessionManager.createPage();
+      const oldCdpClose = vi.spyOn(handle.cdp, 'close');
+
+      await sessionManager.rebindCdpSession(handle.page_id);
+
+      expect(oldCdpClose).toHaveBeenCalled();
+    });
+
+    it('should update registry with new handle', async () => {
+      const handle = await sessionManager.createPage();
+      const newHandle = await sessionManager.rebindCdpSession(handle.page_id);
+
+      // Getting page should return handle with new CDP
+      const retrieved = sessionManager.getPage(handle.page_id);
+      expect(retrieved?.cdp).toBe(newHandle.cdp);
+    });
+
+    it('should throw if page not found', async () => {
+      await expect(sessionManager.rebindCdpSession('page-unknown')).rejects.toThrow(
+        'Page not found: page-unknown'
+      );
+    });
+
+    it('should throw if page is closed', async () => {
+      const handle = await sessionManager.createPage();
+      mockPage.isClosed.mockReturnValue(true);
+
+      await expect(sessionManager.rebindCdpSession(handle.page_id)).rejects.toThrow(
+        `Page is closed: ${handle.page_id}`
+      );
+    });
+
+    it('should handle old CDP close error gracefully', async () => {
+      const handle = await sessionManager.createPage();
+      vi.spyOn(handle.cdp, 'close').mockRejectedValue(new Error('Already closed'));
+
+      // Should not throw
+      await expect(sessionManager.rebindCdpSession(handle.page_id)).resolves.toBeDefined();
+    });
+
+    it('should restore degraded connection to healthy', async () => {
+      const handle = await sessionManager.createPage();
+
+      // Simulate degraded state
+      vi.spyOn(handle.cdp, 'isActive').mockReturnValue(false);
+      await expect(sessionManager.getConnectionHealth()).resolves.toBe('degraded');
+
+      // Rebind
+      await sessionManager.rebindCdpSession(handle.page_id);
+
+      // Should be healthy again
+      await expect(sessionManager.getConnectionHealth()).resolves.toBe('healthy');
+    });
+  });
 });

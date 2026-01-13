@@ -90,6 +90,7 @@ export {
   type GetNodeDetailsOutput,
   // scroll_element_into_view
   ScrollElementIntoViewInputSchema,
+  ScrollElementIntoViewInputSchemaBase,
   ScrollElementIntoViewOutputSchema,
   type ScrollElementIntoViewInput,
   type ScrollElementIntoViewOutput,
@@ -100,11 +101,13 @@ export {
   type ScrollPageOutput,
   // click
   ClickInputSchema,
+  ClickInputSchemaBase,
   ClickOutputSchema,
   type ClickInput,
   type ClickOutput,
   // type
   TypeInputSchema,
+  TypeInputSchemaBase,
   TypeOutputSchema,
   type TypeInput,
   type TypeOutput,
@@ -115,11 +118,13 @@ export {
   type PressOutput,
   // select
   SelectInputSchema,
+  SelectInputSchemaBase,
   SelectOutputSchema,
   type SelectInput,
   type SelectOutput,
   // hover
   HoverInputSchema,
+  HoverInputSchemaBase,
   HoverOutputSchema,
   type HoverInput,
   type HoverOutput,

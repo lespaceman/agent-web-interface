@@ -7,7 +7,6 @@
 import type { SessionManager } from '../browser/session-manager.js';
 import {
   SnapshotStore,
-  compileSnapshot,
   clickByBackendNodeId,
   typeByBackendNodeId,
   pressKey,
@@ -19,15 +18,31 @@ import {
 import type { NodeDetails } from './tool-schemas.js';
 import { QueryEngine } from '../query/query-engine.js';
 import type { FindElementsRequest } from '../query/types/query.types.js';
-import type { NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
-import { extractFactPack } from '../factpack/index.js';
-import { generatePageSummary } from '../renderer/index.js';
+import type { BaseSnapshot, NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
+import {
+  captureWithStabilization,
+  determineHealthCode,
+  type CaptureWithStabilizationResult,
+} from '../snapshot/snapshot-health.js';
 import {
   executeAction,
   executeActionWithRetry,
+  executeActionWithOutcome,
+  type CaptureSnapshotFn,
+  getStateManager,
   removeStateManager,
   clearAllStateManagers,
 } from './execute-action.js';
+import type { PageHandle } from '../browser/page-registry.js';
+import { createHealthyRuntime, createRecoveredCdpRuntime } from '../state/health.types.js';
+import type { RuntimeHealth } from '../state/health.types.js';
+import {
+  buildClosePageResponse,
+  buildCloseSessionResponse,
+  buildFindElementsResponse,
+  buildGetNodeDetailsResponse,
+  type FindElementsMatch,
+} from './response-builder.js';
 
 // Module-level state
 let sessionManager: SessionManager | null = null;
@@ -72,7 +87,7 @@ export function getSnapshotStore(): SnapshotStore {
 function resolveExistingPage(
   session: SessionManager,
   page_id: string | undefined
-): import('../browser/page-registry.js').PageHandle {
+): PageHandle {
   const handle = session.resolvePage(page_id);
   if (!handle) {
     if (page_id) {
@@ -83,6 +98,112 @@ function resolveExistingPage(
   }
   session.touchPage(handle.page_id);
   return handle;
+}
+
+/**
+ * Ensure CDP session is healthy, attempting repair if needed.
+ *
+ * Call this before any CDP operation to auto-repair dead sessions.
+ *
+ * @param session - SessionManager instance
+ * @param handle - Current page handle
+ * @returns Updated handle (may be same or new if recovered) and recovery status
+ */
+async function ensureCdpSession(
+  session: SessionManager,
+  handle: PageHandle
+): Promise<{ handle: PageHandle; recovered: boolean; runtime_health: RuntimeHealth }> {
+  // Fast path: CDP is active and responds to a lightweight probe
+  if (handle.cdp.isActive()) {
+    try {
+      await handle.cdp.send('Page.getFrameTree', undefined);
+      return { handle, recovered: false, runtime_health: createHealthyRuntime() };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[RECOVERY] CDP probe failed for ${handle.page_id}: ${message}. Attempting rebind`
+      );
+    }
+  }
+
+  // Slow path: CDP needs repair
+  console.warn(`[RECOVERY] CDP session dead for ${handle.page_id}, attempting rebind`);
+
+  const newHandle = await session.rebindCdpSession(handle.page_id);
+  return {
+    handle: newHandle,
+    recovered: true,
+    runtime_health: createRecoveredCdpRuntime('HEALTHY'),
+  };
+}
+
+/**
+ * Build runtime health details from a capture attempt.
+ */
+function buildRuntimeHealth(
+  cdpHealth: RuntimeHealth['cdp'],
+  result: CaptureWithStabilizationResult
+): RuntimeHealth {
+  const code = determineHealthCode(result);
+
+  return {
+    cdp: cdpHealth,
+    snapshot: {
+      ok: code === 'HEALTHY',
+      code,
+      attempts: result.attempts,
+      message: result.health.message,
+    },
+  };
+}
+
+/**
+ * Capture a snapshot with stabilization and CDP recovery when empty.
+ */
+async function captureSnapshotWithRecovery(
+  session: SessionManager,
+  handle: PageHandle,
+  pageId: string
+): Promise<{ snapshot: BaseSnapshot; handle: PageHandle; runtime_health: RuntimeHealth }> {
+  const ensureResult = await ensureCdpSession(session, handle);
+  handle = ensureResult.handle;
+
+  let result = await captureWithStabilization(handle.cdp, handle.page, pageId);
+  let runtime_health = buildRuntimeHealth(ensureResult.runtime_health.cdp, result);
+
+  if (!result.health.valid) {
+    const healthCode = determineHealthCode(result);
+    console.warn(
+      `[RECOVERY] Empty snapshot for ${pageId} (${healthCode}); rebinding CDP session`
+    );
+
+    handle = await session.rebindCdpSession(pageId);
+    result = await captureWithStabilization(handle.cdp, handle.page, pageId, { maxRetries: 1 });
+    runtime_health = buildRuntimeHealth(
+      { ok: true, recovered: true, recovery_method: 'rebind' },
+      result
+    );
+  }
+
+  return { snapshot: result.snapshot, handle, runtime_health };
+}
+
+/**
+ * Create a capture function that keeps the handle updated after recovery.
+ */
+function createActionCapture(
+  session: SessionManager,
+  handleRef: { current: PageHandle },
+  pageId: string
+): CaptureSnapshotFn {
+  return async () => {
+    const captureResult = await captureSnapshotWithRecovery(session, handleRef.current, pageId);
+    handleRef.current = captureResult.handle;
+    return {
+      snapshot: captureResult.snapshot,
+      runtime_health: captureResult.runtime_health,
+    };
+  };
 }
 
 // ============================================================================
@@ -103,27 +224,21 @@ export async function launchBrowser(
   const session = getSessionManager();
 
   await session.launch({ headless: input.headless });
-  const handle = await session.createPage();
+  let handle = await session.createPage();
 
   // Auto-capture snapshot
-  const snapshot = await compileSnapshot(handle.cdp, handle.page, handle.page_id);
+  const captureResult = await captureSnapshotWithRecovery(
+    session,
+    handle,
+    handle.page_id
+  );
+  handle = captureResult.handle;
+  const snapshot = captureResult.snapshot;
   snapshotStore.store(handle.page_id, snapshot);
 
-  // Extract FactPack and generate page_summary
-  const factpack = extractFactPack(snapshot);
-  const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
-
-  return {
-    session_id: 'default', // TODO: Track actual session ID
-    page_id: handle.page_id,
-    url: handle.url ?? handle.page.url(),
-    title: await handle.page.title(),
-    snapshot_id: snapshot.snapshot_id,
-    node_count: snapshot.meta.node_count,
-    interactive_count: snapshot.meta.interactive_count,
-    page_summary,
-    page_summary_tokens,
-  };
+  // Return XML state response directly
+  const stateManager = getStateManager(handle.page_id);
+  return stateManager.generateResponse(snapshot);
 }
 
 /**
@@ -162,24 +277,18 @@ export async function connectBrowser(
   }
 
   // Auto-capture snapshot
-  const snapshot = await compileSnapshot(handle.cdp, handle.page, handle.page_id);
+  const captureResult = await captureSnapshotWithRecovery(
+    session,
+    handle,
+    handle.page_id
+  );
+  handle = captureResult.handle;
+  const snapshot = captureResult.snapshot;
   snapshotStore.store(handle.page_id, snapshot);
 
-  // Extract FactPack and generate page_summary
-  const factpack = extractFactPack(snapshot);
-  const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
-
-  return {
-    session_id: 'default', // TODO: Track actual session ID
-    page_id: handle.page_id,
-    url: handle.url ?? handle.page.url(),
-    title: await handle.page.title(),
-    snapshot_id: snapshot.snapshot_id,
-    node_count: snapshot.meta.node_count,
-    interactive_count: snapshot.meta.interactive_count,
-    page_summary,
-    page_summary_tokens,
-  };
+  // Return XML state response directly
+  const stateManager = getStateManager(handle.page_id);
+  return stateManager.generateResponse(snapshot);
 }
 
 /**
@@ -199,10 +308,7 @@ export async function closePage(
   snapshotStore.removeByPageId(input.page_id);
   removeStateManager(input.page_id); // Clean up state manager
 
-  return {
-    closed: true,
-    page_id: input.page_id,
-  };
+  return buildClosePageResponse(input.page_id);
 }
 
 /**
@@ -222,7 +328,7 @@ export async function closeSession(
   snapshotStore.clear();
   clearAllStateManagers(); // Clean up all state managers
 
-  return { closed: true };
+  return buildCloseSessionResponse();
 }
 
 /**
@@ -238,30 +344,21 @@ export async function navigate(
   const input = NavigateInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = await session.resolvePageOrCreate(input.page_id);
+  let handle = await session.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
   session.touchPage(page_id);
 
   await session.navigateTo(page_id, input.url);
 
   // Auto-capture snapshot after navigation
-  const snapshot = await compileSnapshot(handle.cdp, handle.page, page_id);
+  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  handle = captureResult.handle;
+  const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  // Extract FactPack and generate page_summary
-  const factpack = extractFactPack(snapshot);
-  const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
-
-  return {
-    page_id,
-    url: handle.page.url(),
-    title: await handle.page.title(),
-    snapshot_id: snapshot.snapshot_id,
-    node_count: snapshot.meta.node_count,
-    interactive_count: snapshot.meta.interactive_count,
-    page_summary,
-    page_summary_tokens,
-  };
+  // Return XML state response directly
+  const stateManager = getStateManager(page_id);
+  return stateManager.generateResponse(snapshot);
 }
 
 /**
@@ -277,30 +374,21 @@ export async function goBack(
   const input = GoBackInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = await session.resolvePageOrCreate(input.page_id);
+  let handle = await session.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
   session.touchPage(page_id);
 
   await handle.page.goBack();
 
   // Auto-capture snapshot after navigation
-  const snapshot = await compileSnapshot(handle.cdp, handle.page, page_id);
+  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  handle = captureResult.handle;
+  const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  // Extract FactPack and generate page_summary
-  const factpack = extractFactPack(snapshot);
-  const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
-
-  return {
-    page_id,
-    url: handle.page.url(),
-    title: await handle.page.title(),
-    snapshot_id: snapshot.snapshot_id,
-    node_count: snapshot.meta.node_count,
-    interactive_count: snapshot.meta.interactive_count,
-    page_summary,
-    page_summary_tokens,
-  };
+  // Return XML state response directly
+  const stateManager = getStateManager(page_id);
+  return stateManager.generateResponse(snapshot);
 }
 
 /**
@@ -316,30 +404,21 @@ export async function goForward(
   const input = GoForwardInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = await session.resolvePageOrCreate(input.page_id);
+  let handle = await session.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
   session.touchPage(page_id);
 
   await handle.page.goForward();
 
   // Auto-capture snapshot after navigation
-  const snapshot = await compileSnapshot(handle.cdp, handle.page, page_id);
+  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  handle = captureResult.handle;
+  const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  // Extract FactPack and generate page_summary
-  const factpack = extractFactPack(snapshot);
-  const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
-
-  return {
-    page_id,
-    url: handle.page.url(),
-    title: await handle.page.title(),
-    snapshot_id: snapshot.snapshot_id,
-    node_count: snapshot.meta.node_count,
-    interactive_count: snapshot.meta.interactive_count,
-    page_summary,
-    page_summary_tokens,
-  };
+  // Return XML state response directly
+  const stateManager = getStateManager(page_id);
+  return stateManager.generateResponse(snapshot);
 }
 
 /**
@@ -355,30 +434,21 @@ export async function reload(
   const input = ReloadInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = await session.resolvePageOrCreate(input.page_id);
+  let handle = await session.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
   session.touchPage(page_id);
 
   await handle.page.reload();
 
   // Auto-capture snapshot after navigation
-  const snapshot = await compileSnapshot(handle.cdp, handle.page, page_id);
+  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  handle = captureResult.handle;
+  const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  // Extract FactPack and generate page_summary
-  const factpack = extractFactPack(snapshot);
-  const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
-
-  return {
-    page_id,
-    url: handle.page.url(),
-    title: await handle.page.title(),
-    snapshot_id: snapshot.snapshot_id,
-    node_count: snapshot.meta.node_count,
-    interactive_count: snapshot.meta.interactive_count,
-    page_summary,
-    page_summary_tokens,
-  };
+  // Return XML state response directly
+  const stateManager = getStateManager(page_id);
+  return stateManager.generateResponse(snapshot);
 }
 
 /**
@@ -394,25 +464,17 @@ export async function captureSnapshot(
   const input = CaptureSnapshotInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
+  let handle = resolveExistingPage(session, input.page_id);
   const page_id = handle.page_id;
 
-  const snapshot = await compileSnapshot(handle.cdp, handle.page, page_id);
+  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  handle = captureResult.handle;
+  const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  const factpack = extractFactPack(snapshot);
-  const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
-
-  return {
-    page_id,
-    url: handle.page.url(),
-    title: await handle.page.title(),
-    snapshot_id: snapshot.snapshot_id,
-    node_count: snapshot.meta.node_count,
-    interactive_count: snapshot.meta.interactive_count,
-    page_summary,
-    page_summary_tokens,
-  };
+  // Return XML state response directly
+  const stateManager = getStateManager(page_id);
+  return stateManager.generateResponse(snapshot);
 }
 
 /**
@@ -454,17 +516,8 @@ export async function findElements(
   const engine = new QueryEngine(snap);
   const response = engine.find(request);
 
-  const matches = response.matches.map((m) => {
-    const match: {
-      node_id: string;
-      backend_node_id: number;
-      kind: string;
-      label: string;
-      selector: string;
-      region: string;
-      state?: Record<string, boolean | undefined>;
-      attributes?: Record<string, string>;
-    } = {
+  const matches: FindElementsMatch[] = response.matches.map((m) => {
+    const match: FindElementsMatch = {
       node_id: m.node.node_id,
       backend_node_id: m.node.backend_node_id,
       kind: m.node.kind,
@@ -495,11 +548,7 @@ export async function findElements(
     return match;
   });
 
-  return {
-    page_id,
-    snapshot_id: snap.snapshot_id,
-    matches,
-  };
+  return buildFindElementsResponse(page_id, snap.snapshot_id, matches);
 }
 
 /**
@@ -556,15 +605,12 @@ export async function getNodeDetails(
     details.attributes = { ...node.attributes };
   }
 
-  return {
-    page_id,
-    snapshot_id: snap.snapshot_id,
-    node: details,
-  };
+  return buildGetNodeDetailsResponse(page_id, snap.snapshot_id, details);
 }
 
 /**
  * Scroll an element into view.
+ * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Scroll options (will be validated)
  * @returns Scroll result with delta
@@ -576,42 +622,54 @@ export async function scrollElementIntoView(
   const input = ScrollElementIntoViewInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
-  const page_id = handle.page_id;
+  const handleRef = { current: resolveExistingPage(session, input.page_id) };
+  const page_id = handleRef.current.page_id;
+  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  const captureSnapshot = createActionCapture(session, handleRef, page_id);
 
   const snap = snapshotStore.getByPageId(page_id);
   if (!snap) {
     throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
   }
 
-  const node = snap.nodes.find((n) => n.node_id === input.node_id);
-  if (!node) {
-    throw new Error(`Node ${input.node_id} not found in snapshot`);
+  // Resolve target element (eid preferred, node_id deprecated)
+  let node;
+  if (input.eid) {
+    const stateManager = getStateManager(page_id);
+    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
+    if (!elementRef) {
+      throw new Error(`Element with eid ${input.eid} not found`);
+    }
+    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
+    if (!node) {
+      throw new Error(`Element with eid ${input.eid} has stale reference`);
+    }
+  } else if (input.node_id) {
+    node = snap.nodes.find((n) => n.node_id === input.node_id);
+    if (!node) {
+      throw new Error(`Node ${input.node_id} not found in snapshot`);
+    }
+    console.warn(`[DEPRECATED] scrollElementIntoView with node_id - use eid instead`);
+  } else {
+    throw new Error('Either eid or node_id is required');
   }
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
-    handle,
+    handleRef.current,
     node,
     async (backendNodeId) => {
-      await scrollIntoView(handle.cdp, backendNodeId);
+      await scrollIntoView(handleRef.current.cdp, backendNodeId);
     },
-    snapshotStore
+    snapshotStore,
+    captureSnapshot
   );
 
   // Store snapshot for future queries
   snapshotStore.store(page_id, result.snapshot);
 
-  return {
-    success: result.success,
-    node_id: input.node_id,
-    snapshot_id: result.snapshot_id,
-    node_count: result.node_count,
-    interactive_count: result.interactive_count,
-    page_summary: result.page_summary,
-    page_summary_tokens: result.page_summary_tokens,
-    error: result.error,
-  };
+  // Return XML state response directly
+  return result.state_response;
 }
 
 /**
@@ -627,35 +685,33 @@ export async function scrollPage(
   const input = ScrollPageInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
-  const page_id = handle.page_id;
+  const handleRef = { current: resolveExistingPage(session, input.page_id) };
+  const page_id = handleRef.current.page_id;
+  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  const captureSnapshot = createActionCapture(session, handleRef, page_id);
 
   // Execute action with new simplified wrapper
-  const result = await executeAction(handle, async () => {
-    await scrollPageByAmount(handle.cdp, input.direction, input.amount);
-  });
+  const result = await executeAction(
+    handleRef.current,
+    async () => {
+      await scrollPageByAmount(handleRef.current.cdp, input.direction, input.amount);
+    },
+    captureSnapshot
+  );
 
   // Store snapshot for future queries
   snapshotStore.store(page_id, result.snapshot);
 
-  return {
-    success: result.success,
-    direction: input.direction,
-    amount: input.amount ?? 500,
-    snapshot_id: result.snapshot_id,
-    node_count: result.node_count,
-    interactive_count: result.interactive_count,
-    page_summary: result.page_summary,
-    page_summary_tokens: result.page_summary_tokens,
-    error: result.error,
-  };
+  // Return XML state response directly
+  return result.state_response;
 }
 
 /**
- * Click an element (no agent_version).
+ * Click an element.
+ * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Click options (will be validated)
- * @returns Click result with delta
+ * @returns Click result with navigation-aware outcome
  */
 export async function click(
   rawInput: unknown
@@ -664,47 +720,66 @@ export async function click(
   const input = ClickInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
-  const page_id = handle.page_id;
+  const handleRef = { current: resolveExistingPage(session, input.page_id) };
+  const page_id = handleRef.current.page_id;
+  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  const captureSnapshot = createActionCapture(session, handleRef, page_id);
 
   const snap = snapshotStore.getByPageId(page_id);
   if (!snap) {
     throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
   }
 
-  const node = snap.nodes.find((n) => n.node_id === input.node_id);
-  if (!node) {
-    throw new Error(`Node ${input.node_id} not found in snapshot`);
+  // Resolve target element (eid preferred, node_id deprecated)
+  let node;
+
+  if (input.eid) {
+    // New path: use eid to look up via ElementRegistry
+    const stateManager = getStateManager(page_id);
+    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
+
+    if (!elementRef) {
+      throw new Error(`Element with eid ${input.eid} not found`);
+    }
+
+    // Find node by backend_node_id
+    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
+    if (!node) {
+      throw new Error(`Element with eid ${input.eid} has stale reference`);
+    }
+  } else if (input.node_id) {
+    // Legacy path: use node_id directly (deprecated)
+    node = snap.nodes.find((n) => n.node_id === input.node_id);
+    if (!node) {
+      throw new Error(`Node ${input.node_id} not found in snapshot`);
+    }
+    // Log deprecation warning
+    console.warn(`[DEPRECATED] click with node_id - use eid instead`);
+  } else {
+    throw new Error('Either eid or node_id is required');
   }
 
-  // Execute action with automatic retry on stale elements
-  const result = await executeActionWithRetry(
-    handle,
+  // Execute action with navigation-aware outcome detection
+  const result = await executeActionWithOutcome(
+    handleRef.current,
     node,
     async (backendNodeId) => {
-      await clickByBackendNodeId(handle.cdp, backendNodeId);
+      await clickByBackendNodeId(handleRef.current.cdp, backendNodeId);
     },
-    snapshotStore
+    snapshotStore,
+    captureSnapshot
   );
 
   // Store snapshot for future queries
   snapshotStore.store(page_id, result.snapshot);
 
-  return {
-    success: result.success,
-    node_id: input.node_id,
-    clicked_element: node.label,
-    snapshot_id: result.snapshot_id,
-    node_count: result.node_count,
-    interactive_count: result.interactive_count,
-    page_summary: result.page_summary,
-    page_summary_tokens: result.page_summary_tokens,
-    error: result.error,
-  };
+  // Return XML state response directly
+  return result.state_response;
 }
 
 /**
- * Type text into an element (node_id required, no agent_version).
+ * Type text into an element.
+ * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Type options (will be validated)
  * @returns Type result with delta
@@ -716,44 +791,56 @@ export async function type(
   const input = TypeInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
-  const page_id = handle.page_id;
+  const handleRef = { current: resolveExistingPage(session, input.page_id) };
+  const page_id = handleRef.current.page_id;
+  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  const captureSnapshot = createActionCapture(session, handleRef, page_id);
 
   const snap = snapshotStore.getByPageId(page_id);
   if (!snap) {
     throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
   }
 
-  const node = snap.nodes.find((n) => n.node_id === input.node_id);
-  if (!node) {
-    throw new Error(`Node ${input.node_id} not found in snapshot`);
+  // Resolve target element (eid preferred, node_id deprecated)
+  let node;
+  if (input.eid) {
+    const stateManager = getStateManager(page_id);
+    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
+    if (!elementRef) {
+      throw new Error(`Element with eid ${input.eid} not found`);
+    }
+    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
+    if (!node) {
+      throw new Error(`Element with eid ${input.eid} has stale reference`);
+    }
+  } else if (input.node_id) {
+    node = snap.nodes.find((n) => n.node_id === input.node_id);
+    if (!node) {
+      throw new Error(`Node ${input.node_id} not found in snapshot`);
+    }
+    console.warn(`[DEPRECATED] type with node_id - use eid instead`);
+  } else {
+    throw new Error('Either eid or node_id is required');
   }
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
-    handle,
+    handleRef.current,
     node,
     async (backendNodeId) => {
-      await typeByBackendNodeId(handle.cdp, backendNodeId, input.text, { clear: input.clear });
+      await typeByBackendNodeId(handleRef.current.cdp, backendNodeId, input.text, {
+        clear: input.clear,
+      });
     },
-    snapshotStore
+    snapshotStore,
+    captureSnapshot
   );
 
   // Store snapshot for future queries
   snapshotStore.store(page_id, result.snapshot);
 
-  return {
-    success: result.success,
-    typed_text: input.text,
-    node_id: input.node_id,
-    element_label: node.label,
-    snapshot_id: result.snapshot_id,
-    node_count: result.node_count,
-    interactive_count: result.interactive_count,
-    page_summary: result.page_summary,
-    page_summary_tokens: result.page_summary_tokens,
-    error: result.error,
-  };
+  // Return XML state response directly
+  return result.state_response;
 }
 
 /**
@@ -769,32 +856,30 @@ export async function press(
   const input = PressInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
-  const page_id = handle.page_id;
+  const handleRef = { current: resolveExistingPage(session, input.page_id) };
+  const page_id = handleRef.current.page_id;
+  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  const captureSnapshot = createActionCapture(session, handleRef, page_id);
 
   // Execute action with new simplified wrapper
-  const result = await executeAction(handle, async () => {
-    await pressKey(handle.cdp, input.key, input.modifiers);
-  });
+  const result = await executeAction(
+    handleRef.current,
+    async () => {
+      await pressKey(handleRef.current.cdp, input.key, input.modifiers);
+    },
+    captureSnapshot
+  );
 
   // Store snapshot for future queries
   snapshotStore.store(page_id, result.snapshot);
 
-  return {
-    success: result.success,
-    key: input.key,
-    modifiers: input.modifiers,
-    snapshot_id: result.snapshot_id,
-    node_count: result.node_count,
-    interactive_count: result.interactive_count,
-    page_summary: result.page_summary,
-    page_summary_tokens: result.page_summary_tokens,
-    error: result.error,
-  };
+  // Return XML state response directly
+  return result.state_response;
 }
 
 /**
- * Select a dropdown option (no agent_version).
+ * Select a dropdown option.
+ * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Select options (will be validated)
  * @returns Select result with delta
@@ -806,50 +891,59 @@ export async function select(
   const input = SelectInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
-  const page_id = handle.page_id;
+  const handleRef = { current: resolveExistingPage(session, input.page_id) };
+  const page_id = handleRef.current.page_id;
+  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  const captureSnapshot = createActionCapture(session, handleRef, page_id);
 
   const snap = snapshotStore.getByPageId(page_id);
   if (!snap) {
     throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
   }
 
-  const node = snap.nodes.find((n) => n.node_id === input.node_id);
-  if (!node) {
-    throw new Error(`Node ${input.node_id} not found in snapshot`);
+  // Resolve target element (eid preferred, node_id deprecated)
+  let node;
+  if (input.eid) {
+    const stateManager = getStateManager(page_id);
+    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
+    if (!elementRef) {
+      throw new Error(`Element with eid ${input.eid} not found`);
+    }
+    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
+    if (!node) {
+      throw new Error(`Element with eid ${input.eid} has stale reference`);
+    }
+  } else if (input.node_id) {
+    node = snap.nodes.find((n) => n.node_id === input.node_id);
+    if (!node) {
+      throw new Error(`Node ${input.node_id} not found in snapshot`);
+    }
+    console.warn(`[DEPRECATED] select with node_id - use eid instead`);
+  } else {
+    throw new Error('Either eid or node_id is required');
   }
-
-  let selectedText = '';
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
-    handle,
+    handleRef.current,
     node,
     async (backendNodeId) => {
-      selectedText = await selectOption(handle.cdp, backendNodeId, input.value);
+      await selectOption(handleRef.current.cdp, backendNodeId, input.value);
     },
-    snapshotStore
+    snapshotStore,
+    captureSnapshot
   );
 
   // Store snapshot for future queries
   snapshotStore.store(page_id, result.snapshot);
 
-  return {
-    success: result.success,
-    node_id: input.node_id,
-    selected_value: input.value,
-    selected_text: selectedText,
-    snapshot_id: result.snapshot_id,
-    node_count: result.node_count,
-    interactive_count: result.interactive_count,
-    page_summary: result.page_summary,
-    page_summary_tokens: result.page_summary_tokens,
-    error: result.error,
-  };
+  // Return XML state response directly
+  return result.state_response;
 }
 
 /**
- * Hover over an element (no agent_version).
+ * Hover over an element.
+ * Accepts either eid (preferred) or node_id (deprecated) for element targeting.
  *
  * @param rawInput - Hover options (will be validated)
  * @returns Hover result with delta
@@ -861,41 +955,52 @@ export async function hover(
   const input = HoverInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
-  const page_id = handle.page_id;
+  const handleRef = { current: resolveExistingPage(session, input.page_id) };
+  const page_id = handleRef.current.page_id;
+  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  const captureSnapshot = createActionCapture(session, handleRef, page_id);
 
   const snap = snapshotStore.getByPageId(page_id);
   if (!snap) {
     throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
   }
 
-  const node = snap.nodes.find((n) => n.node_id === input.node_id);
-  if (!node) {
-    throw new Error(`Node ${input.node_id} not found in snapshot`);
+  // Resolve target element (eid preferred, node_id deprecated)
+  let node;
+  if (input.eid) {
+    const stateManager = getStateManager(page_id);
+    const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
+    if (!elementRef) {
+      throw new Error(`Element with eid ${input.eid} not found`);
+    }
+    node = snap.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
+    if (!node) {
+      throw new Error(`Element with eid ${input.eid} has stale reference`);
+    }
+  } else if (input.node_id) {
+    node = snap.nodes.find((n) => n.node_id === input.node_id);
+    if (!node) {
+      throw new Error(`Node ${input.node_id} not found in snapshot`);
+    }
+    console.warn(`[DEPRECATED] hover with node_id - use eid instead`);
+  } else {
+    throw new Error('Either eid or node_id is required');
   }
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
-    handle,
+    handleRef.current,
     node,
     async (backendNodeId) => {
-      await hoverByBackendNodeId(handle.cdp, backendNodeId);
+      await hoverByBackendNodeId(handleRef.current.cdp, backendNodeId);
     },
-    snapshotStore
+    snapshotStore,
+    captureSnapshot
   );
 
   // Store snapshot for future queries
   snapshotStore.store(page_id, result.snapshot);
 
-  return {
-    success: result.success,
-    node_id: input.node_id,
-    element_label: node.label,
-    snapshot_id: result.snapshot_id,
-    node_count: result.node_count,
-    interactive_count: result.interactive_count,
-    page_summary: result.page_summary,
-    page_summary_tokens: result.page_summary_tokens,
-    error: result.error,
-  };
+  // Return XML state response directly
+  return result.state_response;
 }

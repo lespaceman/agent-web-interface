@@ -109,8 +109,11 @@ export class BrowserAutomationServer implements McpNotificationSender {
             };
           }
 
+          // If result is already a string (e.g., XML), use it directly
+          // Otherwise JSON.stringify it
+          const textContent = typeof result === 'string' ? result : JSON.stringify(result);
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+            content: [{ type: 'text' as const, text: textContent }],
           };
         } catch (error) {
           const executionTime = Date.now() - startTime;

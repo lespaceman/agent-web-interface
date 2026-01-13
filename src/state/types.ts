@@ -13,8 +13,14 @@ import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
 
 /**
  * Complete state response returned after every action.
+ * Now returned as a dense XML string.
  */
-export interface StateResponse {
+export type StateResponse = string;
+
+/**
+ * Internal state response object before rendering.
+ */
+export interface StateResponseObject {
   /** Current state metadata */
   state: StateHandle;
 
@@ -148,6 +154,21 @@ export interface AtomChange {
 // ============================================================================
 
 /**
+ * Element target reference for direct interaction.
+ * Enables action tools to target elements directly without re-querying.
+ */
+export interface ElementTargetRef {
+  /** Snapshot that produced this ref */
+  snapshot_id: string;
+  /** CDP backend node ID - primary targeting method */
+  backend_node_id: number;
+  /** CDP frame ID - for cross-frame targeting */
+  frame_id?: string;
+  /** CDP loader ID - changes on navigation */
+  loader_id?: string;
+}
+
+/**
  * Actionable element information (returned to LLM).
  */
 export interface ActionableInfo {
@@ -168,6 +189,9 @@ export interface ActionableInfo {
 
   /** Enabled */
   ena: boolean;
+
+  /** Element target reference for direct interaction */
+  ref: ElementTargetRef;
 
   /** Locators for this element */
   loc: LocatorInfo;

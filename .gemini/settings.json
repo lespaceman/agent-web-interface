@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "athena-browser-mcp-local": {
+      "command": "node",
+      "args": [
+        "/home/nadeemm/Projects/ai-projects/athena-browser-mcp/dist/src/index.js"
+      ]
+    }
+  }
+}

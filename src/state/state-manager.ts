@@ -12,6 +12,7 @@ import { createHash, randomUUID } from 'crypto';
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
 import type {
   StateResponse,
+  StateResponseObject,
   StateHandle,
   StateManagerContext,
   StateManagerConfig,
@@ -19,6 +20,8 @@ import type {
   BaselineResponse,
   DiffResponse,
   ScoringContext,
+  ElementTargetRef,
+  Atoms,
 } from './types.js';
 import { computeEid, resolveEidCollision } from './element-identity.js';
 import { detectLayers } from './layer-detector.js';
@@ -26,13 +29,16 @@ import { computeDiff } from './diff-engine.js';
 import { selectActionables, isInteractiveKind } from './actionables-filter.js';
 import { extractAtoms } from './atoms-extractor.js';
 import { generateLocator } from './locator-generator.js';
+import { ElementRegistry } from './element-registry.js';
+import { validateSnapshotHealth, isErrorHealth } from '../snapshot/snapshot-health.js';
+import { renderStateXml } from './state-renderer.js';
 
 // ============================================================================
 // Default Configuration
 // ============================================================================
 
 const DEFAULT_CONFIG: StateManagerConfig = {
-  maxActionables: 15,
+  maxActionables: 1000, // Show all elements (practically unlimited)
   diffThreshold: 0.3, // 30% change triggers baseline
   forceBaselineEveryN: 5, // Force baseline every 5 steps
 };
@@ -107,6 +113,7 @@ export class StateManager {
   private context: StateManagerContext;
   private isProcessing = false;
   private pendingSnapshot: BaseSnapshot | null = null;
+  private elementRegistry: ElementRegistry;
 
   /**
    * Create a new state manager.
@@ -123,6 +130,25 @@ export class StateManager {
       currentDocId: null,
       config: { ...DEFAULT_CONFIG, ...options.config },
     };
+    this.elementRegistry = new ElementRegistry();
+  }
+
+  /**
+   * Get the element registry for this page.
+   * Used by action tools to resolve eid to ElementRef.
+   */
+  getElementRegistry(): ElementRegistry {
+    return this.elementRegistry;
+  }
+
+  /**
+   * Generate an error response.
+   *
+   * @param errorMessage - The error message to include
+   * @returns XML state response with error baseline
+   */
+  generateErrorResponse(errorMessage: string): StateResponse {
+    return this.createErrorBaseline('error', errorMessage);
   }
 
   /**
@@ -171,6 +197,13 @@ export class StateManager {
     // Increment step counter
     this.context.stepCounter++;
 
+    // Validate snapshot health (Bug #2: handle empty snapshots)
+    const health = validateSnapshotHealth(snapshot);
+    if (isErrorHealth(health)) {
+      // Return error baseline for empty/failed snapshots
+      return this.createErrorBaseline('error', health.message ?? 'Empty snapshot');
+    }
+
     // Compute document ID
     const docId = computeDocId(snapshot);
     const isNavigation = docId !== this.context.currentDocId;
@@ -178,6 +211,9 @@ export class StateManager {
 
     // Detect layers
     const layerResult = detectLayers(snapshot);
+
+    // Update element registry with new snapshot
+    this.elementRegistry.updateFromSnapshot(snapshot, layerResult.active);
 
     // Decide baseline vs diff and get reason
     const baselineInfo = this.getBaselineInfo(snapshot, isNavigation);
@@ -202,8 +238,12 @@ export class StateManager {
       context
     );
 
-    // Format actionables (with sensitive value masking)
-    const actionables = this.formatActionables(actionableNodes, layerResult.active);
+    // Format actionables (with sensitive value masking and ref for direct targeting)
+    const actionables = this.formatActionables(
+      actionableNodes,
+      layerResult.active,
+      snapshot.snapshot_id
+    );
 
     // Count total actionables in active layer
     const totalInLayer = snapshot.nodes.filter(
@@ -234,7 +274,7 @@ export class StateManager {
     // Estimate tokens
     const tokens = this.estimateTokens({ state, diff, actionables, atoms, counts, limits });
 
-    return {
+    const response: StateResponseObject = {
       state,
       diff,
       actionables,
@@ -243,6 +283,9 @@ export class StateManager {
       atoms,
       tokens,
     };
+
+    // Return dense XML representation
+    return renderStateXml(response);
   }
 
   /**
@@ -277,40 +320,47 @@ export class StateManager {
    * Always uses 'error' reason - the specific error type is in the message.
    */
   private createErrorBaseline(_reason: 'error' | 'concurrent_call', errorMessage: string): StateResponse {
-    return {
-      state: {
-        sid: this.context.sessionId,
-        step: this.context.stepCounter,
-        doc: {
-          url: '',
-          origin: '',
-          title: '',
-          doc_id: '',
-          nav_type: 'soft',
-          history_idx: 0,
-        },
-        layer: {
-          active: 'main',
-          stack: ['main'],
-          pointer_lock: false,
-        },
-        timing: {
-          ts: new Date().toISOString(),
-          dom_ready: false,
-          network_busy: false,
-        },
-        hash: {
-          ui: '',
-          layer: '',
-        },
+    // Minimal state for error baseline
+    const state: StateHandle = {
+      sid: this.context.sessionId,
+      step: this.context.stepCounter,
+      doc: {
+        url: '',
+        origin: '',
+        title: '',
+        doc_id: '',
+        nav_type: 'soft',
+        history_idx: 0,
       },
+      layer: {
+        active: 'main',
+        stack: ['main'],
+        pointer_lock: false,
+      },
+      timing: {
+        ts: new Date().toISOString(),
+        dom_ready: false,
+        network_busy: false,
+      },
+      hash: {
+        ui: '',
+        layer: '',
+      },
+    };
+
+    const atoms: Atoms = { viewport: { w: 0, h: 0, dpr: 1 }, scroll: { x: 0, y: 0 } };
+
+    const response: StateResponseObject = {
+      state,
       diff: { mode: 'baseline', reason: 'error', error: errorMessage },
       actionables: [],
       counts: { shown: 0, total_in_layer: 0 },
       limits: { max_actionables: this.context.config.maxActionables, actionables_capped: false },
-      atoms: { viewport: { w: 0, h: 0, dpr: 1 }, scroll: { x: 0, y: 0 } },
+      atoms,
       tokens: 0,
     };
+
+    return renderStateXml(response);
   }
 
   /**
@@ -427,6 +477,11 @@ export class StateManager {
   ): StateHandle {
     const sanitizedUrl = sanitizeUrl(snapshot.url);
     const url = new URL(snapshot.url);
+    const dom_ready =
+      snapshot.meta.node_count > 0 &&
+      !snapshot.meta.warnings?.some((warning) =>
+        warning.toLowerCase().includes('dom extraction failed')
+      );
 
     return {
       sid: this.context.sessionId,
@@ -447,7 +502,7 @@ export class StateManager {
       },
       timing: {
         ts: new Date().toISOString(),
-        dom_ready: true,
+        dom_ready,
         network_busy: false,
       },
       hash: {
@@ -459,8 +514,13 @@ export class StateManager {
 
   /**
    * Format actionables with sensitive value masking.
+   * Now includes ref for direct element targeting.
    */
-  private formatActionables(nodes: ReadableNode[], activeLayer: string): ActionableInfo[] {
+  private formatActionables(
+    nodes: ReadableNode[],
+    activeLayer: string,
+    snapshotId: string
+  ): ActionableInfo[] {
     const actionables: ActionableInfo[] = [];
     const usedEids = new Set<string>();
 
@@ -471,6 +531,12 @@ export class StateManager {
 
       const loc = generateLocator(node, activeLayer);
 
+      // Build element target ref for direct interaction
+      const ref: ElementTargetRef = {
+        snapshot_id: snapshotId,
+        backend_node_id: node.backend_node_id,
+      };
+
       const actionable: ActionableInfo = {
         eid,
         kind: node.kind,
@@ -478,6 +544,7 @@ export class StateManager {
         role: node.attributes?.role ?? node.kind,
         vis: node.state?.visible ?? false,
         ena: node.state?.enabled ?? false,
+        ref,
         loc,
         ctx: {
           layer: getNodeLayer(node),
@@ -521,7 +588,7 @@ export class StateManager {
   /**
    * Estimate token count for response.
    */
-  private estimateTokens(response: Omit<StateResponse, 'tokens'>): number {
+  private estimateTokens(response: Omit<StateResponseObject, 'tokens'>): number {
     const jsonString = JSON.stringify(response);
     return Math.ceil(jsonString.length / 4);
   }

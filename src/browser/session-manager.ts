@@ -10,6 +10,7 @@ import { PlaywrightCdpClient } from '../cdp/playwright-cdp-client.js';
 import { PageRegistry, type PageHandle } from './page-registry.js';
 import { getLogger } from '../shared/services/logging.service.js';
 import { BrowserSessionError } from '../shared/errors/browser-session.error.js';
+import type { ConnectionHealth } from '../state/health.types.js';
 
 /**
  * Connection state machine states
@@ -688,6 +689,97 @@ export class SessionManager {
       return this.context !== null && this._connectionState === 'connected';
     }
     return this.browser?.isConnected() ?? false;
+  }
+
+  /**
+   * Get connection health status.
+   *
+   * Goes beyond binary connected/not-connected to detect degraded CDP sessions:
+   * - 'healthy': Browser connected, all CDP sessions operational
+   * - 'degraded': Browser connected, but some CDP sessions dead (recoverable)
+   * - 'failed': Browser disconnected
+   *
+   * @returns Connection health status
+   */
+  async getConnectionHealth(): Promise<ConnectionHealth> {
+    if (this._connectionState !== 'connected' || !this.context) {
+      return 'failed';
+    }
+
+    const pages = this.registry.list();
+    if (pages.length === 0) {
+      return 'healthy';
+    }
+
+    const results = await Promise.all(
+      pages.map(async (page) => {
+        if (page.page.isClosed()) {
+          return false;
+        }
+        if (!page.cdp.isActive()) {
+          return false;
+        }
+
+        try {
+          await page.cdp.send('Page.getFrameTree', undefined);
+          return true;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warning('CDP probe failed', { page_id: page.page_id, error: message });
+          return false;
+        }
+      })
+    );
+
+    return results.every(Boolean) ? 'healthy' : 'degraded';
+  }
+
+  /**
+   * Rebind CDP session for a page.
+   *
+   * Use when CDP session is dead but page is still valid.
+   * This creates a new CDP session and updates the registry.
+   *
+   * @param page_id - Page ID to rebind
+   * @returns New PageHandle with fresh CDP session
+   * @throws Error if page not found, page is closed, or browser context unavailable
+   */
+  async rebindCdpSession(page_id: string): Promise<PageHandle> {
+    const handle = this.registry.get(page_id);
+    if (!handle) {
+      throw new Error(`Page not found: ${page_id}`);
+    }
+
+    if (handle.page.isClosed()) {
+      throw new Error(`Page is closed: ${page_id}`);
+    }
+
+    if (!this.context) {
+      throw new Error('Browser context not available');
+    }
+
+    // Close old CDP session (best effort)
+    try {
+      await handle.cdp.close();
+    } catch {
+      // Ignore - may already be closed
+    }
+
+    // Create new CDP session
+    const cdpSession = await this.context.newCDPSession(handle.page);
+    const newCdp = new PlaywrightCdpClient(cdpSession);
+
+    // Update registry with new handle
+    const newHandle: PageHandle = {
+      ...handle,
+      cdp: newCdp,
+    };
+
+    this.registry.replace(page_id, newHandle);
+
+    this.logger.info('Rebound CDP session', { page_id });
+
+    return newHandle;
   }
 
   /**

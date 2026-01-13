@@ -10,7 +10,7 @@ import { BrowserAutomationServer } from './server/mcp-server.js';
 import { SessionManager } from './browser/session-manager.js';
 import {
   initializeTools,
-  // Simplified tool handlers
+  // Tool handlers
   launchBrowser,
   connectBrowser,
   closePage,
@@ -29,43 +29,25 @@ import {
   press,
   select,
   hover,
-  // Simplified schemas
+  // Input schemas only (all outputs are XML strings now)
   LaunchBrowserInputSchema,
-  LaunchBrowserOutputSchema,
   ConnectBrowserInputSchema,
-  ConnectBrowserOutputSchema,
   ClosePageInputSchema,
-  ClosePageOutputSchema,
   CloseSessionInputSchema,
-  CloseSessionOutputSchema,
   NavigateInputSchema,
-  NavigateOutputSchema,
   GoBackInputSchema,
-  GoBackOutputSchema,
   GoForwardInputSchema,
-  GoForwardOutputSchema,
   ReloadInputSchema,
-  ReloadOutputSchema,
   CaptureSnapshotInputSchema,
-  CaptureSnapshotOutputSchema,
   FindElementsInputSchema,
-  FindElementsOutputSchema,
   GetNodeDetailsInputSchema,
-  GetNodeDetailsOutputSchema,
-  ScrollElementIntoViewInputSchema,
-  ScrollElementIntoViewOutputSchema,
+  ScrollElementIntoViewInputSchemaBase,
   ScrollPageInputSchema,
-  ScrollPageOutputSchema,
-  ClickInputSchema,
-  ClickOutputSchema,
-  TypeInputSchema,
-  TypeOutputSchema,
+  ClickInputSchemaBase,
+  TypeInputSchemaBase,
   PressInputSchema,
-  PressOutputSchema,
-  SelectInputSchema,
-  SelectOutputSchema,
-  HoverInputSchema,
-  HoverOutputSchema,
+  SelectInputSchemaBase,
+  HoverInputSchemaBase,
 } from './tools/index.js';
 
 // Singleton session manager (initialized lazily on first tool use)
@@ -105,7 +87,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Launch Browser',
       description: 'Launch a new browser instance and return the initial page snapshot.',
       inputSchema: LaunchBrowserInputSchema.shape,
-      outputSchema: LaunchBrowserOutputSchema.shape,
     },
     launchBrowser
   );
@@ -117,7 +98,6 @@ function initializeServer(): BrowserAutomationServer {
       description:
         'Connect to an existing browser instance via CDP. Defaults to the Athena CEF bridge endpoint.',
       inputSchema: ConnectBrowserInputSchema.shape,
-      outputSchema: ConnectBrowserOutputSchema.shape,
     },
     connectBrowser
   );
@@ -128,7 +108,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Close Page',
       description: 'Close a specific page by page_id.',
       inputSchema: ClosePageInputSchema.shape,
-      outputSchema: ClosePageOutputSchema.shape,
     },
     closePage
   );
@@ -139,7 +118,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Close Session',
       description: 'Close the entire browser session.',
       inputSchema: CloseSessionInputSchema.shape,
-      outputSchema: CloseSessionOutputSchema.shape,
     },
     closeSession
   );
@@ -154,7 +132,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Navigate',
       description: 'Navigate directly to a URL and return the new snapshot.',
       inputSchema: NavigateInputSchema.shape,
-      outputSchema: NavigateOutputSchema.shape,
     },
     navigate
   );
@@ -165,7 +142,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Go Back',
       description: 'Navigate back in browser history.',
       inputSchema: GoBackInputSchema.shape,
-      outputSchema: GoBackOutputSchema.shape,
     },
     goBack
   );
@@ -176,7 +152,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Go Forward',
       description: 'Navigate forward in browser history.',
       inputSchema: GoForwardInputSchema.shape,
-      outputSchema: GoForwardOutputSchema.shape,
     },
     goForward
   );
@@ -187,7 +162,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Reload',
       description: 'Reload the current page and return the refreshed snapshot.',
       inputSchema: ReloadInputSchema.shape,
-      outputSchema: ReloadOutputSchema.shape,
     },
     reload
   );
@@ -198,7 +172,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Capture Snapshot',
       description: 'Capture a fresh snapshot of the current page.',
       inputSchema: CaptureSnapshotInputSchema.shape,
-      outputSchema: CaptureSnapshotOutputSchema.shape,
     },
     captureSnapshot
   );
@@ -213,7 +186,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Find Elements',
       description: 'Find elements by kind, label, or region in the current snapshot.',
       inputSchema: FindElementsInputSchema.shape,
-      outputSchema: FindElementsOutputSchema.shape,
     },
     findElements
   );
@@ -224,7 +196,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Get Node Details',
       description: 'Return full details for a single node_id.',
       inputSchema: GetNodeDetailsInputSchema.shape,
-      outputSchema: GetNodeDetailsOutputSchema.shape,
     },
     getNodeDetails
   );
@@ -238,8 +209,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Scroll Element Into View',
       description: 'Scroll a specific element into view and return a delta.',
-      inputSchema: ScrollElementIntoViewInputSchema.shape,
-      outputSchema: ScrollElementIntoViewOutputSchema.shape,
+      inputSchema: ScrollElementIntoViewInputSchemaBase.shape,
     },
     scrollElementIntoView
   );
@@ -250,7 +220,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Scroll Page',
       description: 'Scroll the page up or down by a specified amount and return a delta.',
       inputSchema: ScrollPageInputSchema.shape,
-      outputSchema: ScrollPageOutputSchema.shape,
     },
     scrollPage
   );
@@ -259,9 +228,8 @@ function initializeServer(): BrowserAutomationServer {
     'click',
     {
       title: 'Click Element',
-      description: 'Click an element by node_id with automatic delta reporting.',
-      inputSchema: ClickInputSchema.shape,
-      outputSchema: ClickOutputSchema.shape,
+      description: 'Click an element by eid (or node_id) with automatic delta reporting.',
+      inputSchema: ClickInputSchemaBase.shape,
     },
     click
   );
@@ -270,9 +238,8 @@ function initializeServer(): BrowserAutomationServer {
     'type',
     {
       title: 'Type Text',
-      description: 'Type text into a specific node_id with optional clearing.',
-      inputSchema: TypeInputSchema.shape,
-      outputSchema: TypeOutputSchema.shape,
+      description: 'Type text into a specific element (by eid or node_id) with optional clearing.',
+      inputSchema: TypeInputSchemaBase.shape,
     },
     type
   );
@@ -283,7 +250,6 @@ function initializeServer(): BrowserAutomationServer {
       title: 'Press Key',
       description: 'Press a keyboard key with optional modifiers.',
       inputSchema: PressInputSchema.shape,
-      outputSchema: PressOutputSchema.shape,
     },
     press
   );
@@ -292,9 +258,8 @@ function initializeServer(): BrowserAutomationServer {
     'select',
     {
       title: 'Select Option',
-      description: 'Select an option from a <select> element by value or text.',
-      inputSchema: SelectInputSchema.shape,
-      outputSchema: SelectOutputSchema.shape,
+      description: 'Select an option from a <select> element (by eid or node_id) by value or text.',
+      inputSchema: SelectInputSchemaBase.shape,
     },
     select
   );
@@ -303,9 +268,8 @@ function initializeServer(): BrowserAutomationServer {
     'hover',
     {
       title: 'Hover Element',
-      description: 'Hover over an element by node_id and return a delta.',
-      inputSchema: HoverInputSchema.shape,
-      outputSchema: HoverOutputSchema.shape,
+      description: 'Hover over an element by eid (or node_id) and return a delta.',
+      inputSchema: HoverInputSchemaBase.shape,
     },
     hover
   );

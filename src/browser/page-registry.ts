@@ -133,6 +133,24 @@ export class PageRegistry {
   }
 
   /**
+   * Replace a page handle in the registry.
+   *
+   * Used for CDP session rebinding - keeps the same page_id but
+   * updates the handle with a new CDP session.
+   *
+   * @param page_id - Page ID to replace
+   * @param handle - New handle to store
+   * @returns true if replaced, false if page_id not found
+   */
+  replace(page_id: string, handle: PageHandle): boolean {
+    if (!this.pages.has(page_id)) {
+      return false;
+    }
+    this.pages.set(page_id, handle);
+    return true;
+  }
+
+  /**
    * Update metadata for a page
    *
    * @param page_id - The page identifier

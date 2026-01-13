@@ -202,5 +202,90 @@ describe('PlaywrightCdpClient', () => {
 
       expect(client.isActive()).toBe(false);
     });
+
+    it('should return false after "Target closed" error', async () => {
+      mockCdpSession.send.mockRejectedValue(new Error('Target closed'));
+
+      await expect(client.send('DOM.getDocument')).rejects.toThrow('Target closed');
+      expect(client.isActive()).toBe(false);
+    });
+
+    it('should return false after "Session closed" error', async () => {
+      // First call (DOM.enable) succeeds
+      mockCdpSession.send.mockResolvedValueOnce({});
+      // Second call fails with session closed
+      mockCdpSession.send.mockRejectedValueOnce(new Error('Session closed'));
+
+      await expect(client.send('DOM.getDocument')).rejects.toThrow('Session closed');
+      expect(client.isActive()).toBe(false);
+    });
+
+    it('should return false after "detached" error', async () => {
+      mockCdpSession.send.mockRejectedValue(new Error('Target page or frame detached'));
+
+      await expect(client.send('DOM.getDocument')).rejects.toThrow('detached');
+      expect(client.isActive()).toBe(false);
+    });
+  });
+
+  describe('getHealth()', () => {
+    it('should return active=true and no error initially', () => {
+      const health = client.getHealth();
+
+      expect(health.active).toBe(true);
+      expect(health.lastError).toBeUndefined();
+      expect(health.lastErrorTime).toBeUndefined();
+    });
+
+    it('should return active=false after close()', async () => {
+      await client.close();
+
+      const health = client.getHealth();
+      expect(health.active).toBe(false);
+    });
+
+    it('should track last error after failed send()', async () => {
+      mockCdpSession.send.mockRejectedValue(new Error('Target closed'));
+
+      await expect(client.send('DOM.getDocument')).rejects.toThrow();
+
+      const health = client.getHealth();
+      expect(health.active).toBe(false);
+      expect(health.lastError).toBe('Target closed');
+      expect(health.lastErrorTime).toBeInstanceOf(Date);
+    });
+
+    it('should track non-fatal errors without marking inactive', async () => {
+      // First call (DOM.enable) succeeds
+      mockCdpSession.send.mockResolvedValueOnce({});
+      // Second call fails with non-fatal error
+      mockCdpSession.send.mockRejectedValueOnce(new Error('Could not compute box model'));
+
+      await expect(client.send('DOM.getBoxModel', { nodeId: 123 })).rejects.toThrow(
+        'Could not compute box model'
+      );
+
+      const health = client.getHealth();
+      // Non-fatal error should NOT mark session inactive
+      expect(health.active).toBe(true);
+      expect(health.lastError).toBe('Could not compute box model');
+      expect(health.lastErrorTime).toBeInstanceOf(Date);
+    });
+
+    it('should update lastError on subsequent errors', async () => {
+      // First error
+      mockCdpSession.send.mockRejectedValueOnce(new Error('First error'));
+      await expect(client.send('Browser.getVersion')).rejects.toThrow();
+
+      const health1 = client.getHealth();
+      expect(health1.lastError).toBe('First error');
+
+      // Second error
+      mockCdpSession.send.mockRejectedValueOnce(new Error('Second error'));
+      await expect(client.send('Browser.getWindowBounds')).rejects.toThrow();
+
+      const health2 = client.getHealth();
+      expect(health2.lastError).toBe('Second error');
+    });
   });
 });
