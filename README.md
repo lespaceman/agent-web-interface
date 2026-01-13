@@ -194,6 +194,12 @@ Add to your Claude Desktop config:
 }
 ```
 
+### Claude Code
+
+```bash
+claude mcp add athena-browser-mcp npx athena-browser-mcp@latest
+```
+
 ### VS Code
 
 ```bash
