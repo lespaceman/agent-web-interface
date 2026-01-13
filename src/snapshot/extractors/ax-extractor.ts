@@ -99,24 +99,20 @@ function convertProperty(cdpProp: CdpAxProperty): AxProperty {
 }
 
 /**
- * Extract accessibility tree from page via CDP.
+ * Process CDP AX nodes and add them to result collections.
  *
- * @param ctx - Extractor context with CDP client and options
- * @returns AxExtractionResult with nodes map and classification sets
+ * @param cdpNodes - Array of CDP AX nodes
+ * @param nodes - Map to add processed nodes to
+ * @param interactiveIds - Set to add interactive node IDs to
+ * @param readableIds - Set to add readable node IDs to
  */
-export async function extractAx(ctx: ExtractorContext): Promise<AxExtractionResult> {
-  const { cdp } = ctx;
-
-  // Request full accessibility tree
-  const response = await cdp.send<AxGetFullTreeResponse>('Accessibility.getFullAXTree', {
-    depth: -1, // Full depth
-  });
-
-  const nodes = new Map<number, RawAxNode>();
-  const interactiveIds = new Set<number>();
-  const readableIds = new Set<number>();
-
-  for (const cdpNode of response.nodes) {
+function processAxNodes(
+  cdpNodes: CdpAxNode[],
+  nodes: Map<number, RawAxNode>,
+  interactiveIds: Set<number>,
+  readableIds: Set<number>
+): void {
+  for (const cdpNode of cdpNodes) {
     // Skip ignored nodes
     if (cdpNode.ignored) {
       continue;
@@ -155,6 +151,57 @@ export async function extractAx(ctx: ExtractorContext): Promise<AxExtractionResu
       readableIds.add(backendDOMNodeId);
     }
     // Structural nodes are tracked implicitly in the nodes map
+  }
+}
+
+/**
+ * Extract accessibility tree from page via CDP.
+ *
+ * Supports multi-frame extraction for pages with iframes (e.g., cookie consent
+ * dialogs, embedded widgets). When frameIds are provided, the function extracts
+ * AX trees from each frame and merges them into a single result.
+ *
+ * @param ctx - Extractor context with CDP client and options
+ * @param frameIds - Optional array of iframe frame IDs to also extract from
+ * @returns AxExtractionResult with nodes map and classification sets
+ */
+export async function extractAx(
+  ctx: ExtractorContext,
+  frameIds?: string[]
+): Promise<AxExtractionResult> {
+  const { cdp } = ctx;
+
+  const nodes = new Map<number, RawAxNode>();
+  const interactiveIds = new Set<number>();
+  const readableIds = new Set<number>();
+
+  // Request full accessibility tree for main frame
+  const mainResponse = await cdp.send<AxGetFullTreeResponse>('Accessibility.getFullAXTree', {
+    depth: -1, // Full depth
+  });
+  processAxNodes(mainResponse.nodes, nodes, interactiveIds, readableIds);
+
+  // Extract AX trees from additional frames (iframes)
+  if (frameIds && frameIds.length > 0) {
+    // Process frames in parallel for better performance
+    const framePromises = frameIds.map(async (frameId) => {
+      try {
+        const frameResponse = await cdp.send<AxGetFullTreeResponse>('Accessibility.getFullAXTree', {
+          depth: -1,
+          frameId, // Scope to specific frame
+        });
+        return frameResponse.nodes;
+      } catch {
+        // Frame may have been removed, navigated away, or be cross-origin
+        // Silently skip failed frames - this is expected for some iframe types
+        return [];
+      }
+    });
+
+    const frameResults = await Promise.all(framePromises);
+    for (const frameNodes of frameResults) {
+      processAxNodes(frameNodes, nodes, interactiveIds, readableIds);
+    }
   }
 
   return {

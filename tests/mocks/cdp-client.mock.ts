@@ -9,11 +9,18 @@ import { vi, type Mock } from 'vitest';
 import type { CdpClient, CdpEventHandler } from '../../src/cdp/cdp-client.interface.js';
 
 /**
+ * Response handler type - can be a static value or function receiving params
+ */
+export type ResponseHandler =
+  | Record<string, unknown>
+  | ((params?: Record<string, unknown>) => unknown);
+
+/**
  * Configuration for mock CDP responses
  */
 export interface MockCdpConfig {
   /** Map of CDP method -> response */
-  responses?: Map<string, unknown>;
+  responses?: Map<string, ResponseHandler>;
   /** Map of CDP method -> error to throw */
   errors?: Map<string, Error>;
   /** Default response for unregistered methods */
@@ -34,7 +41,7 @@ export function createMockCdpClient(config: MockCdpConfig = {}): MockCdpClient {
  */
 export class MockCdpClient implements CdpClient {
   private _active: boolean;
-  private readonly responses: Map<string, unknown>;
+  private readonly responses: Map<string, ResponseHandler>;
   private readonly errors: Map<string, Error>;
   private readonly defaultResponse: unknown;
   private readonly eventHandlers: Map<string, Set<CdpEventHandler>>;
@@ -48,7 +55,7 @@ export class MockCdpClient implements CdpClient {
 
   constructor(config: MockCdpConfig = {}) {
     this._active = config.active ?? true;
-    this.responses = config.responses ?? new Map<string, unknown>();
+    this.responses = config.responses ?? new Map<string, ResponseHandler>();
     this.errors = config.errors ?? new Map<string, Error>();
     this.defaultResponse = config.defaultResponse ?? {};
     this.eventHandlers = new Map();
@@ -68,7 +75,7 @@ export class MockCdpClient implements CdpClient {
     return this.sendSpy(method, params) as Promise<T>;
   }
 
-  private _send<T = unknown>(method: string, _params?: Record<string, unknown>): T {
+  private _send<T = unknown>(method: string, params?: Record<string, unknown>): T {
     if (!this._active) {
       throw new Error('CDP session is closed');
     }
@@ -81,7 +88,12 @@ export class MockCdpClient implements CdpClient {
 
     // Check for configured response
     if (this.responses.has(method)) {
-      return this.responses.get(method) as T;
+      const handler = this.responses.get(method);
+      // If handler is a function, call it with params
+      if (typeof handler === 'function') {
+        return (handler as (params?: Record<string, unknown>) => unknown)(params) as T;
+      }
+      return handler as T;
     }
 
     return this.defaultResponse as T;
@@ -149,9 +161,22 @@ export class MockCdpClient implements CdpClient {
   // ========== Test Helpers ==========
 
   /**
-   * Set a response for a specific CDP method
+   * Set a response for a specific CDP method.
+   * Can be a static value or a function that receives params.
+   *
+   * @example
+   * // Static response
+   * mock.setResponse('DOM.getDocument', { root: {...} });
+   *
+   * // Dynamic response based on params
+   * mock.setResponse('Accessibility.getFullAXTree', (params) => {
+   *   if (params?.frameId === 'frame-1') {
+   *     return { nodes: [...frame1Nodes] };
+   *   }
+   *   return { nodes: [...mainFrameNodes] };
+   * });
    */
-  setResponse(method: string, response: unknown): void {
+  setResponse(method: string, response: ResponseHandler): void {
     this.responses.set(method, response);
   }
 

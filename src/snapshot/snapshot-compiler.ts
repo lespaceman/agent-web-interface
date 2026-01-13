@@ -450,29 +450,28 @@ export class SnapshotCompiler {
     let partial = false;
     const warnings: string[] = [];
 
-    // Phase 1: Parallel extraction of DOM and AX trees
+    // Phase 1: Extract DOM first to discover frame IDs, then AX with frame context
     let domResult: DomExtractionResult | undefined;
     let axResult: AxExtractionResult | undefined;
     let domOrderAvailable = false;
 
+    // Step 1: Extract DOM tree (discovers iframes and their frame IDs)
     try {
-      [domResult, axResult] = await Promise.all([
-        extractDom(ctx).catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : String(err);
-          warnings.push(`DOM extraction failed: ${message}`);
-          partial = true;
-          return undefined;
-        }),
-        extractAx(ctx).catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : String(err);
-          warnings.push(`AX extraction failed: ${message}`);
-          partial = true;
-          return undefined;
-        }),
-      ]);
+      domResult = await extractDom(ctx);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      warnings.push(`Extraction failed: ${message}`);
+      warnings.push(`DOM extraction failed: ${message}`);
+      partial = true;
+    }
+
+    // Step 2: Extract AX tree with discovered frame IDs for multi-frame support
+    // This enables accessibility extraction from iframes (e.g., cookie consent popups)
+    try {
+      const iframeFrameIds = domResult?.frameIds ?? [];
+      axResult = await extractAx(ctx, iframeFrameIds);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      warnings.push(`AX extraction failed: ${message}`);
       partial = true;
     }
 

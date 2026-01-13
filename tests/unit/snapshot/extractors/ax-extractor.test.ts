@@ -246,6 +246,139 @@ describe('AX Extractor', () => {
     });
   });
 
+  describe('multi-frame extraction', () => {
+    it('should extract AX nodes from multiple frames when frameIds provided', async () => {
+      // Setup: main frame has a button, iframe has a checkbox (like cookie consent)
+      mockCdp.setResponse('Accessibility.getFullAXTree', (params?: Record<string, unknown>) => {
+        const frameId = params?.frameId as string | undefined;
+
+        if (frameId === 'iframe-cookie-consent') {
+          // Cookie consent iframe content
+          return {
+            nodes: [
+              {
+                nodeId: 'iframe-1',
+                backendDOMNodeId: 1001,
+                role: { type: 'role', value: 'checkbox' },
+                name: { type: 'computedString', value: 'Accept all cookies' },
+                ignored: false,
+              },
+              {
+                nodeId: 'iframe-2',
+                backendDOMNodeId: 1002,
+                role: { type: 'role', value: 'button' },
+                name: { type: 'computedString', value: 'Save preferences' },
+                ignored: false,
+              },
+            ],
+          };
+        }
+
+        // Main frame content
+        return {
+          nodes: [
+            {
+              nodeId: 'main-1',
+              backendDOMNodeId: 10,
+              role: { type: 'role', value: 'button' },
+              name: { type: 'computedString', value: 'Submit' },
+              ignored: false,
+            },
+            {
+              nodeId: 'main-2',
+              backendDOMNodeId: 20,
+              role: { type: 'role', value: 'dialog' },
+              name: { type: 'computedString', value: 'Cookie Consent' },
+              ignored: false,
+            },
+          ],
+        };
+      });
+
+      const ctx = createExtractorContext(mockCdp, { width: 1280, height: 720 });
+
+      // Extract with frame IDs (main frame + cookie consent iframe)
+      const result = await extractAx(ctx, ['iframe-cookie-consent']);
+
+      // Should have nodes from both frames
+      expect(result.nodes.size).toBe(4);
+
+      // Main frame nodes
+      expect(result.nodes.has(10)).toBe(true);
+      expect(result.nodes.get(10)?.role).toBe('button');
+      expect(result.nodes.get(10)?.name).toBe('Submit');
+
+      expect(result.nodes.has(20)).toBe(true);
+      expect(result.nodes.get(20)?.role).toBe('dialog');
+
+      // Iframe nodes (cookie consent)
+      expect(result.nodes.has(1001)).toBe(true);
+      expect(result.nodes.get(1001)?.role).toBe('checkbox');
+      expect(result.nodes.get(1001)?.name).toBe('Accept all cookies');
+
+      expect(result.nodes.has(1002)).toBe(true);
+      expect(result.nodes.get(1002)?.role).toBe('button');
+      expect(result.nodes.get(1002)?.name).toBe('Save preferences');
+
+      // Interactive IDs should include iframe elements
+      expect(result.interactiveIds.has(10)).toBe(true); // Main frame button
+      expect(result.interactiveIds.has(1001)).toBe(true); // Iframe checkbox
+      expect(result.interactiveIds.has(1002)).toBe(true); // Iframe button
+    });
+
+    it('should handle frame extraction failures gracefully', async () => {
+      mockCdp.setResponse('Accessibility.getFullAXTree', (params?: Record<string, unknown>) => {
+        const frameId = params?.frameId as string | undefined;
+
+        if (frameId === 'broken-frame') {
+          throw new Error('Frame not found');
+        }
+
+        return {
+          nodes: [
+            {
+              nodeId: 'main-1',
+              backendDOMNodeId: 10,
+              role: { type: 'role', value: 'button' },
+              name: { type: 'computedString', value: 'Submit' },
+              ignored: false,
+            },
+          ],
+        };
+      });
+
+      const ctx = createExtractorContext(mockCdp, { width: 1280, height: 720 });
+
+      // Should not throw, should return main frame nodes
+      const result = await extractAx(ctx, ['broken-frame']);
+
+      expect(result.nodes.size).toBe(1);
+      expect(result.nodes.has(10)).toBe(true);
+    });
+
+    it('should work without frameIds (backwards compatible)', async () => {
+      mockCdp.setResponse('Accessibility.getFullAXTree', {
+        nodes: [
+          {
+            nodeId: '1',
+            backendDOMNodeId: 10,
+            role: { type: 'role', value: 'button' },
+            name: { type: 'computedString', value: 'Submit' },
+            ignored: false,
+          },
+        ],
+      });
+
+      const ctx = createExtractorContext(mockCdp, { width: 1280, height: 720 });
+
+      // No frameIds - should work as before
+      const result = await extractAx(ctx);
+
+      expect(result.nodes.size).toBe(1);
+      expect(result.nodes.has(10)).toBe(true);
+    });
+  });
+
   describe('classifyAxRole', () => {
     it('should classify interactive roles', () => {
       expect(classifyAxRole('button')).toBe('interactive');
