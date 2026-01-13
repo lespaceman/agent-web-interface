@@ -187,11 +187,37 @@ Add to your Claude Desktop config:
 {
   "mcpServers": {
     "browser": {
-      "command": "node",
-      "args": ["/path/to/athena-browser-mcp/dist/src/index.js"]
+      "command": "npx",
+      "args": ["athena-browser-mcp@latest"]
     }
   }
 }
+```
+
+### VS Code
+
+```bash
+code --add-mcp '{"name":"athena-browser-mcp","command":"npx","args":["athena-browser-mcp@latest"]}'
+```
+
+### Cursor
+
+Go to **Cursor Settings → MCP → Add new MCP Server**. Use command type with:
+
+```
+npx athena-browser-mcp@latest
+```
+
+### Codex
+
+```bash
+codex mcp add athena-browser-mcp npx athena-browser-mcp@latest
+```
+
+### Gemini CLI
+
+```bash
+gemini mcp add -s user athena-browser-mcp -- npx athena-browser-mcp@latest
 ```
 
 ### Connect to Existing Browser
