@@ -97,11 +97,19 @@ export interface StateHandle {
 
 /**
  * Baseline response (full state, no diff).
+ *
+ * Baselines are only sent when the LLM truly needs full context:
+ * - first: No previous snapshot (LLM has no prior context)
+ * - navigation: URL changed (old elements no longer exist)
+ * - error: State corrupted, need to resync
+ *
+ * For same-page mutations, diffs are always used regardless of
+ * how many elements changed - the LLM already has context.
  */
 export interface BaselineResponse {
   mode: 'baseline';
   /** Reason for sending baseline instead of diff */
-  reason: 'first' | 'navigation' | 'threshold' | 'periodic' | 'error';
+  reason: 'first' | 'navigation' | 'error';
   /** Error message if reason is 'error' */
   error?: string;
 }
@@ -199,6 +207,7 @@ export interface ActionableInfo {
   /** Context metadata */
   ctx: {
     layer: string;
+    region: string;
     group?: string;
   };
 
@@ -339,12 +348,6 @@ export interface StateManagerContext {
 export interface StateManagerConfig {
   /** Maximum actionables to return */
   maxActionables: number;
-
-  /** Diff threshold (ratio of changes that triggers baseline) */
-  diffThreshold: number;
-
-  /** Force baseline every N steps */
-  forceBaselineEveryN: number;
 }
 
 /**

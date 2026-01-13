@@ -39,8 +39,6 @@ import { renderStateXml } from './state-renderer.js';
 
 const DEFAULT_CONFIG: StateManagerConfig = {
   maxActionables: 1000, // Show all elements (practically unlimited)
-  diffThreshold: 0.3, // 30% change triggers baseline
-  forceBaselineEveryN: 5, // Force baseline every 5 steps
 };
 
 // ============================================================================
@@ -197,6 +195,10 @@ export class StateManager {
     // Increment step counter
     this.context.stepCounter++;
 
+    // Shift current snapshot to previous BEFORE baseline check
+    // This ensures the second call has previousSnapshot set correctly
+    this.context.previousSnapshot = this.context.currentSnapshot;
+
     // Validate snapshot health (Bug #2: handle empty snapshots)
     const health = validateSnapshotHealth(snapshot);
     if (isErrorHealth(health)) {
@@ -267,8 +269,7 @@ export class StateManager {
     // Extract atoms
     const atoms = extractAtoms(snapshot);
 
-    // Update state (swap current -> previous, new -> current)
-    this.context.previousSnapshot = this.context.currentSnapshot;
+    // Store current snapshot (previous was already shifted at the start)
     this.context.currentSnapshot = snapshot;
 
     // Estimate tokens
@@ -290,9 +291,19 @@ export class StateManager {
 
   /**
    * Get baseline decision info with reason.
+   *
+   * Baselines are only sent when absolutely necessary:
+   * - first: No previous snapshot (LLM has no context)
+   * - navigation: URL changed (old elements no longer exist)
+   * - error: State corrupted, need to resync
+   *
+   * For same-page mutations (autocomplete, dropdowns, modals), we always
+   * send diffs regardless of how many elements changed. The LLM already
+   * has context from the previous response - repeating unchanged elements
+   * wastes context window tokens.
    */
   private getBaselineInfo(
-    snapshot: BaseSnapshot,
+    _snapshot: BaseSnapshot,
     isNavigation: boolean
   ): { sendBaseline: boolean; reason: BaselineResponse['reason'] } {
     if (!this.context.previousSnapshot) {
@@ -303,15 +314,7 @@ export class StateManager {
       return { sendBaseline: true, reason: 'navigation' };
     }
 
-    if (this.context.stepCounter % this.context.config.forceBaselineEveryN === 0) {
-      return { sendBaseline: true, reason: 'periodic' };
-    }
-
-    const changeRatio = this.computeChangeRatio(this.context.previousSnapshot, snapshot);
-    if (changeRatio > this.context.config.diffThreshold) {
-      return { sendBaseline: true, reason: 'threshold' };
-    }
-
+    // Always use diff for same-page mutations - no threshold or periodic baselines
     return { sendBaseline: false, reason: 'first' }; // reason unused when not baseline
   }
 
@@ -442,31 +445,6 @@ export class StateManager {
     return result;
   }
 
-  /**
-   * Compute change ratio between snapshots.
-   */
-  private computeChangeRatio(prev: BaseSnapshot, curr: BaseSnapshot): number {
-    const prevEids = new Set<string>();
-    const currEids = new Set<string>();
-
-    for (const node of prev.nodes) {
-      if (isInteractiveKind(node.kind) && node.state?.visible) {
-        prevEids.add(computeEid(node));
-      }
-    }
-
-    for (const node of curr.nodes) {
-      if (isInteractiveKind(node.kind) && node.state?.visible) {
-        currEids.add(computeEid(node));
-      }
-    }
-
-    const added = [...currEids].filter((eid) => !prevEids.has(eid)).length;
-    const removed = [...prevEids].filter((eid) => !currEids.has(eid)).length;
-    const total = Math.max(prevEids.size, currEids.size);
-
-    return total === 0 ? 0 : (added + removed) / total;
-  }
 
   /**
    * Generate state handle with sanitized URL.
@@ -548,6 +526,7 @@ export class StateManager {
         loc,
         ctx: {
           layer: getNodeLayer(node),
+          region: node.where.region ?? 'unknown',
         },
       };
 
@@ -704,21 +683,20 @@ function sanitizeHref(href: string): string {
 
 /**
  * Compute document ID from snapshot.
+ *
+ * Uses only URL origin + pathname for navigation detection.
+ * This ensures DOM mutations (like autocomplete suggestions appearing)
+ * are NOT falsely detected as navigation events.
+ *
+ * NOTE: Previously this included a hash of the first 10 interactive node IDs,
+ * which caused false navigation detection when typing triggered autocomplete
+ * or other dynamic UI updates. See: https://github.com/anthropics/athena-browser-mcp/issues/XXX
  */
 function computeDocId(snapshot: BaseSnapshot): string {
   const url = new URL(snapshot.url);
-
-  const interactiveNodes = snapshot.nodes
-    .filter((n) => isInteractiveKind(n.kind))
-    .slice(0, 10);
-
-  const signature = hashNodeIds(interactiveNodes.map((n) => n.node_id));
-
-  return hash(`${url.origin}:${url.pathname}:${signature}`);
-}
-
-function hashNodeIds(nodeIds: string[]): string {
-  return hash(nodeIds.join(','));
+  // Only use origin + pathname for navigation detection
+  // Query params and fragments are ignored (same page, different state)
+  return hash(`${url.origin}:${url.pathname}`);
 }
 
 function computeUiHash(snapshot: BaseSnapshot): string {

@@ -3,6 +3,9 @@
  *
  * Converts internal state representation (StateResponse) into a dense XML format
  * optimized for LLM context windows.
+ *
+ * In diff mode, only renders changed elements (added + changed) to minimize tokens.
+ * In baseline mode, renders all actionables.
  */
 
 import type { StateResponseObject, ActionableInfo } from './types.js';
@@ -25,7 +28,7 @@ export function renderStateXml(response: StateResponseObject): string {
   const scroll = `${atoms.scroll.x},${atoms.scroll.y}`;
   lines.push(`  <meta view="${view}" scroll="${scroll}" layer="${state.layer.active}" />`);
 
-  // 2. Diff/Baseline
+  // 2. Diff/Baseline indicator
   if (diff.mode === 'baseline') {
     lines.push(`  <baseline reason="${diff.reason}"${diff.error ? ` error="${escapeXml(diff.error)}"` : ''} />`);
   } else {
@@ -41,11 +44,15 @@ export function renderStateXml(response: StateResponseObject): string {
   }
 
   // 3. Actionables (Grouped by Region)
-  const regions = groupActionablesByRegion(actionables);
+  // In diff mode: only render added/changed elements
+  // In baseline mode: render all elements
+  const filteredActionables = filterActionablesForMode(actionables, diff);
+  const regions = groupActionablesByRegion(filteredActionables);
+
   for (const [regionName, items] of Object.entries(regions)) {
     lines.push(`  <region name="${regionName}">`);
     for (const item of items) {
-      lines.push(`    ${renderActionable(item)}`);
+      lines.push(`    ${renderActionable(item, diff)}`);
     }
     lines.push(`  </region>`);
   }
@@ -56,9 +63,33 @@ export function renderStateXml(response: StateResponseObject): string {
 }
 
 /**
- * Render a single actionable element as XML.
+ * Filter actionables based on diff mode.
+ *
+ * In baseline mode: return all actionables
+ * In diff mode: return only added elements + elements with state changes
  */
-function renderActionable(item: ActionableInfo): string {
+function filterActionablesForMode(
+  actionables: ActionableInfo[],
+  diff: StateResponseObject['diff']
+): ActionableInfo[] {
+  // Baseline mode: return all
+  if (diff.mode === 'baseline') {
+    return actionables;
+  }
+
+  // Diff mode: only include added and changed elements
+  const d = diff;
+  const addedSet = new Set(d.diff.actionables.added);
+  const changedSet = new Set(d.diff.actionables.changed.map((c) => c.eid));
+
+  return actionables.filter((item) => addedSet.has(item.eid) || changedSet.has(item.eid));
+}
+
+/**
+ * Render a single actionable element as XML.
+ * In diff mode, can optionally mark elements as 'new' if they were just added.
+ */
+function renderActionable(item: ActionableInfo, _diff?: StateResponseObject['diff']): string {
   const tag = mapKindToTag(item.kind);
   const attrs: string[] = [`id="${item.eid}"`];
 
@@ -99,12 +130,13 @@ function mapKindToTag(kind: string): string {
 }
 
 /**
- * Group actionables by their region context.
+ * Group actionables by their semantic region.
  */
 function groupActionablesByRegion(actionables: ActionableInfo[]): Record<string, ActionableInfo[]> {
   const regions: Record<string, ActionableInfo[]> = {};
   for (const item of actionables) {
-    const region = item.ctx.layer || 'unknown';
+    // Use semantic region, fallback to 'main' if unknown
+    const region = item.ctx.region === 'unknown' ? 'main' : item.ctx.region;
     if (!regions[region]) regions[region] = [];
     regions[region].push(item);
   }
