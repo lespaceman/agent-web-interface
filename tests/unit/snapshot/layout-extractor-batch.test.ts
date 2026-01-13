@@ -14,8 +14,9 @@ interface CdpParams {
 }
 
 // Define mock type using interface
+type CdpSendFn = (method: string, params?: unknown) => Promise<unknown>;
 interface MockCdp {
-  send: ReturnType<typeof vi.fn>;
+  send: ReturnType<typeof vi.fn<CdpSendFn>>;
 }
 
 describe('extractLayout (Batch Strategy)', () => {
@@ -25,7 +26,7 @@ describe('extractLayout (Batch Strategy)', () => {
 
   beforeEach(() => {
     mockCdp = {
-      send: vi.fn(),
+      send: vi.fn<CdpSendFn>(),
     };
     ctx = {
       cdp: mockCdp as unknown as CdpClient,
