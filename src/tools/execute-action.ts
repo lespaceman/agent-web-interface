@@ -1,8 +1,8 @@
 /**
  * Execute Action
  *
- * Simplified action execution wrapper that captures snapshot and generates FactPack summary.
- * No version tracking, no delta computation - just execute, stabilize, and return page state.
+ * Action execution wrapper with StateManager integration.
+ * Captures snapshot and generates StateHandle + Diff + Actionables response.
  * Includes automatic retry logic for stale element errors.
  */
 
@@ -12,6 +12,50 @@ import { extractFactPack } from '../factpack/index.js';
 import { generatePageSummary, type PageSummary } from '../renderer/index.js';
 import { stabilizeDom } from '../delta/dom-stabilizer.js';
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
+import { StateManager } from '../state/state-manager.js';
+import type { StateResponse } from '../state/types.js';
+
+// ============================================================================
+// State Manager Registry
+// ============================================================================
+
+/**
+ * Global registry of state managers (one per page).
+ */
+const stateManagers = new Map<string, StateManager>();
+
+/**
+ * Get or create state manager for a page.
+ *
+ * @param pageId - Page ID
+ * @returns State manager instance
+ */
+export function getStateManager(pageId: string): StateManager {
+  if (!stateManagers.has(pageId)) {
+    stateManagers.set(pageId, new StateManager({ pageId }));
+  }
+  return stateManagers.get(pageId)!;
+}
+
+/**
+ * Remove state manager for a page (call on page close).
+ *
+ * @param pageId - Page ID
+ */
+export function removeStateManager(pageId: string): void {
+  stateManagers.delete(pageId);
+}
+
+/**
+ * Clear all state managers (call on session close).
+ */
+export function clearAllStateManagers(): void {
+  stateManagers.clear();
+}
+
+// ============================================================================
+// Action Result Types
+// ============================================================================
 
 /**
  * Result of executing an action.
@@ -25,10 +69,15 @@ export interface ActionResult {
   node_count: number;
   /** Interactive nodes captured */
   interactive_count: number;
-  /** Comprehensive JSON page summary for LLM context */
+
+  /** NEW: State response (StateHandle + Diff + Actionables) */
+  state_response: StateResponse;
+
+  /** DEPRECATED: Old page_summary format (kept for backward compatibility) */
   page_summary: PageSummary;
-  /** Token count for page_summary */
+  /** DEPRECATED: Old token count */
   page_summary_tokens: number;
+
   /** Error message if action failed */
   error?: string;
   /** The full snapshot (for internal use) */
@@ -85,7 +134,11 @@ export async function executeAction(
   // Capture snapshot
   const snapshot = await compileSnapshot(handle.cdp, handle.page, handle.page_id);
 
-  // Extract FactPack and generate page_summary
+  // Generate state response using StateManager
+  const stateManager = getStateManager(handle.page_id);
+  const state_response = stateManager.generateResponse(snapshot);
+
+  // DEPRECATED: Generate old page_summary for backward compatibility
   const factpack = extractFactPack(snapshot);
   const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
 
@@ -94,6 +147,7 @@ export async function executeAction(
     snapshot_id: snapshot.snapshot_id,
     node_count: snapshot.meta.node_count,
     interactive_count: snapshot.meta.interactive_count,
+    state_response,
     page_summary,
     page_summary_tokens,
     error,
@@ -172,7 +226,11 @@ export async function executeActionWithRetry(
   // Capture final snapshot
   const snapshot = await compileSnapshot(handle.cdp, handle.page, handle.page_id);
 
-  // Extract FactPack and generate page_summary
+  // Generate state response using StateManager
+  const stateManager = getStateManager(handle.page_id);
+  const state_response = stateManager.generateResponse(snapshot);
+
+  // DEPRECATED: Generate old page_summary for backward compatibility
   const factpack = extractFactPack(snapshot);
   const { page_summary, page_summary_tokens } = generatePageSummary(snapshot, factpack);
 
@@ -186,6 +244,7 @@ export async function executeActionWithRetry(
     snapshot_id: snapshot.snapshot_id,
     node_count: snapshot.meta.node_count,
     interactive_count: snapshot.meta.interactive_count,
+    state_response,
     page_summary,
     page_summary_tokens,
     error,

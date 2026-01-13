@@ -22,7 +22,12 @@ import type { FindElementsRequest } from '../query/types/query.types.js';
 import type { NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
 import { extractFactPack } from '../factpack/index.js';
 import { generatePageSummary } from '../renderer/index.js';
-import { executeAction, executeActionWithRetry } from './execute-action.js';
+import {
+  executeAction,
+  executeActionWithRetry,
+  removeStateManager,
+  clearAllStateManagers,
+} from './execute-action.js';
 
 // Module-level state
 let sessionManager: SessionManager | null = null;
@@ -192,6 +197,7 @@ export async function closePage(
 
   await session.closePage(input.page_id);
   snapshotStore.removeByPageId(input.page_id);
+  removeStateManager(input.page_id); // Clean up state manager
 
   return {
     closed: true,
@@ -214,6 +220,7 @@ export async function closeSession(
 
   await session.shutdown();
   snapshotStore.clear();
+  clearAllStateManagers(); // Clean up all state managers
 
   return { closed: true };
 }
