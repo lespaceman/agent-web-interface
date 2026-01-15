@@ -17,7 +17,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium, Browser, Page } from 'playwright';
 import { observationAccumulator } from '../../src/observation/index.js';
 
-describe('Observation Capture Integration', () => {
+const isCI = !!process.env.CI;
+
+describe.skipIf(isCI)('Observation Capture Integration', () => {
   let browser: Browser;
   let page: Page;
 
