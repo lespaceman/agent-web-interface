@@ -6,6 +6,7 @@
  */
 
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
+import type { ObservationGroups } from '../observation/observation.types.js';
 
 // ============================================================================
 // State Handle Types
@@ -47,6 +48,12 @@ export interface StateResponseObject {
 
   /** Estimated token count for this response */
   tokens: number;
+
+  /**
+   * DOM observations - significant elements that appeared or disappeared.
+   * Optional, only present if observations were captured.
+   */
+  observations?: ObservationGroups;
 }
 
 /**

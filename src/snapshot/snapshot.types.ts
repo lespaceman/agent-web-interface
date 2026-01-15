@@ -10,6 +10,7 @@
  */
 
 import { BBox } from '../shared/types/base.types.js';
+import type { ObservationGroups } from '../observation/observation.types.js';
 
 // Re-export BBox as BoundingBox for semantic clarity in this module
 export type { BBox };
@@ -47,6 +48,12 @@ export interface BaseSnapshot {
 
   /** Metadata about the snapshot */
   meta: SnapshotMeta;
+
+  /**
+   * DOM observations - significant elements that appeared or disappeared.
+   * Split by when they occurred for clarity.
+   */
+  observations?: ObservationGroups;
 }
 
 /**

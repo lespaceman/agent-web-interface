@@ -674,88 +674,154 @@ Comprehensive test plan for all MCP tools with the new simplified API.
 
 - [ ] `snapshot` eventually captures the dynamically loaded element
 
-### 11.6 Cookie Consent Popup (Multi-Frame)
+### 11.6 Cookie Consent - Accept All
 
-**Test Site:** https://www.economist.com (or any site with iframe-based cookie consent)
+**Test Site:** https://www.economist.com
 
-```json
-1. connect_browser {} // Connect to existing Athena session
-2. navigate { "url": "https://www.economist.com" }
-3. find_elements { "label": "cookie" }
-4. click { "eid": "<manage_cookies_btn>" }
-5. capture_snapshot {}
-6. find_elements { "label": "accept" }
-7. click { "eid": "<accept_all_btn>" }
-```
+**Task:** Accept all cookies.
 
 **Verify:**
 
-- [ ] Cookie consent dialog elements are detected (buttons, checkboxes, toggles)
+- [ ] Cookie consent dialog detected
 - [ ] Layer changes to `modal` when dialog opens
-- [ ] Internal iframe elements have valid eids (not `unknown-*`)
-- [ ] Can interact with dialog elements (Accept all, Reject all, individual toggles)
-- [ ] Layer returns to `main` after dialog dismissed
-- [ ] Works for common CMPs: OneTrust, TrustArc, Didomi, CookieBot
+- [ ] Iframe elements have valid eids (not `unknown-*`)
+- [ ] Cookies accepted successfully
+- [ ] Dialog dismisses after acceptance
 
-**Technical Note:** This tests multi-frame accessibility extraction where the AX tree is fetched from both the main frame and iframe frames discovered during DOM extraction.
-
-### 11.7 Cookie Consent - Efficient Extraction Pattern
+### 11.7 Cookie Consent - Full Extraction
 
 **Test Site:** https://www.economist.com
 
-**Purpose:** Validate the optimized tool call pattern for cookie consent extraction.
-
-```
-1. launch_browser { "headless": false }
-2. navigate { "url": "https://www.economist.com" }
-3. find_elements { "label": "Manage cookies", "kind": "button" }
-4. click { "eid": "<from_step_3>" }
-5. Verify layer="modal" in response
-6. If modal closes: re-trigger find_elements + click (expected for "Manage" navigation)
-7. Parallel search: find_elements with label="advertising", "analytics", "marketing" (include_readable=true)
-8. Parallel search: find_elements with label="Accept", "Reject" (kind="button")
-9. Tab navigation: find_elements label="PURPOSES" → click, repeat for "FEATURES", "PARTNERS"
-10. close_session {}
-```
+**Task:** Extract all cookie consent information including purposes, features, and partners.
 
 **Verify:**
 
-- [ ] Total tool calls ≤ 20 for full extraction
-- [ ] No hardcoded eids used (all discovered via label search)
-- [ ] Toggles detected as `kind="switch"` (not checkbox)
-- [ ] `include_readable=true` returns descriptions in label field
-- [ ] Parallel searches executed in single message
-- [ ] Modal re-trigger works after "Manage" navigation closes modal
+- [ ] All cookie purposes/categories extracted
+- [ ] All features extracted
+- [ ] All partners/vendors extracted
+- [ ] Descriptions captured for each item
 
-**Anti-patterns to avoid:**
-
-- [ ] `get_node_details` on `rd-*` elements (will fail)
-- [ ] `region` filter for modal content (returns main page)
-- [ ] `scroll_page` for modal scrolling (scrolls main viewport)
-
-### 11.8 Cookie Consent - Enable Specific Non-Essential Cookies
+### 11.8 Cookie Consent - Enable Specific Cookies
 
 **Test Site:** https://www.economist.com
 
-**Goal:** Enable exactly 3 non-essential cookie purposes and save preferences.
+**Task:** Enable only these 3 specific cookie purposes and save:
 
-```
-1. launch_browser { "headless": false }
-2. navigate { "url": "https://www.economist.com" }
-3. Open cookie preferences
-4. Navigate to detailed purpose management
-5. Enable: "Create profiles for personalised advertising"
-6. Enable: "Measure advertising performance"
-7. Enable: "Analytics"
-8. Save preferences
-9. close_session {}
-```
+1. Create profiles for personalised advertising
+2. Measure advertising performance
+3. Analytics
 
 **Verify:**
 
-- [ ] Only 3 specified purposes enabled
+- [ ] Only the 3 specified purposes enabled
+- [ ] Other purposes remain disabled
 - [ ] Preferences saved successfully
-- [ ] Modal dismisses after save
+- [ ] Dialog dismisses after save
+
+---
+
+## Suite 12: DOM Observations
+
+Tests for ephemeral DOM mutation capture (toasts, alerts, notifications).
+
+### 12.1 Toast Capture - Local Test Page
+
+**Test Site:** `file:///path/to/athena-browser-mcp/tests/manual/toast-test.html`
+
+**Task:** Trigger an error toast notification.
+
+**Verify:**
+
+- [ ] Response contains `<observations>` section
+- [ ] `<during_action>` shows `<appeared>` with `role="alert"`
+- [ ] Significance score >= 3
+- [ ] Content text captured correctly
+
+### 12.2 Toast Capture - Real Website
+
+**Test Site:** https://react-hot-toast.com/
+
+**Task:** Trigger a toast notification.
+
+**Verify:**
+
+- [ ] Toast notification captured with `role="status"`
+- [ ] Semantic signals (`alert-role`, `aria-live`) detected
+- [ ] `delayed="true"` signal present (appeared after page load)
+
+### 12.3 Dialog Toast Capture
+
+**Test Site:** Local toast test page
+
+**Task:** Trigger a dialog toast, then dismiss it.
+
+**Verify:**
+
+- [ ] Dialog toast captured with `role="alertdialog"`
+- [ ] `layer="modal"` in response
+- [ ] Dismissal captured as `<disappeared>`
+- [ ] `has-interactives="true"` when dialog has buttons
+
+### 12.4 Observation Deduplication
+
+**Test Site:** Local toast test page
+
+**Task:** Trigger a toast, then capture another snapshot without triggering new toasts.
+
+**Verify:**
+
+- [ ] Toast appears in first response
+- [ ] Same toast does NOT appear in subsequent snapshot
+- [ ] Deduplication prevents duplicate reporting
+
+### 12.5 Accumulated Observations (sincePrevious)
+
+**Test Site:** Local toast test page
+
+**Task:** Trigger a toast, wait for it to disappear, then trigger another toast.
+
+**Verify:**
+
+- [ ] `<during_action>` shows new toast appearance
+- [ ] `<since_previous>` shows first toast disappearance
+- [ ] `age_ms` attribute present on since_previous items
+
+### 12.6 Below-Threshold Elements NOT Captured
+
+**Test Site:** Any page with dynamic content
+
+**Task:** Trigger small, non-significant DOM changes (e.g., minor text updates, hidden element changes).
+
+**Verify:**
+
+- [ ] Only elements with significance >= 3 captured
+- [ ] Small divs without ARIA roles NOT captured
+- [ ] Insignificant text changes NOT captured
+
+### 12.7 Login Error Toast
+
+**Test Site:** https://the-internet.herokuapp.com/login
+
+**Task:** Navigate to the login page, enter invalid credentials, and submit the form.
+
+**Verify:**
+
+- [ ] Error flash message captured in `<observations>` section
+- [ ] Appears in `<during_action>` (triggered by form submission)
+- [ ] Error message text content preserved
+- [ ] Significance score >= 3
+
+### 12.8 Observer Staleness Recovery
+
+**Test Site:** Any two different sites (e.g., example.com then google.com)
+
+**Task:** Navigate to one site, then navigate to a different site, then perform an action that triggers a DOM change.
+
+**Verify:**
+
+- [ ] Observer re-injects after navigation to new site
+- [ ] Observations captured correctly on the new page
+- [ ] No stale observer errors
 
 ---
 
@@ -815,6 +881,14 @@ Comprehensive test plan for all MCP tools with the new simplified API.
 | 11    | 11.6 Cookie Consent    |      |      |       |
 | 11    | 11.7 Efficient Extract |      |      |       |
 | 11    | 11.8 Specific Cookies  |      |      |       |
+| 12    | 12.1 Toast Local       |      |      |       |
+| 12    | 12.2 Toast Real Site   |      |      |       |
+| 12    | 12.3 Dialog Toast      |      |      |       |
+| 12    | 12.4 Deduplication     |      |      |       |
+| 12    | 12.5 Accumulated Obs   |      |      |       |
+| 12    | 12.6 Below Threshold   |      |      |       |
+| 12    | 12.7 Login Error       |      |      |       |
+| 12    | 12.8 Staleness Recov   |      |      |       |
 
 ---
 
@@ -822,10 +896,11 @@ Comprehensive test plan for all MCP tools with the new simplified API.
 
 After code changes:
 
-- [ ] All 11 suites pass
+- [ ] All 12 suites pass
 - [ ] Error messages are descriptive
 - [ ] No memory leaks (browser cleanup)
 - [ ] Headless mode works
 - [ ] Connect mode works
+- [ ] DOM observations capture toasts/alerts
 - [ ] Delta responses accurate
 - [ ] Page state updates correctly

@@ -28,6 +28,7 @@ import { detectLayers } from './layer-detector.js';
 import { computeDiff } from './diff-engine.js';
 import { selectActionables, isInteractiveKind } from './actionables-filter.js';
 import { extractAtoms } from './atoms-extractor.js';
+import { linkObservationsToSnapshot } from '../observation/index.js';
 import { generateLocator } from './locator-generator.js';
 import { ElementRegistry } from './element-registry.js';
 import { validateSnapshotHealth, isErrorHealth } from '../snapshot/snapshot-health.js';
@@ -233,6 +234,11 @@ export class StateManager {
     // Update element registry with new snapshot
     this.elementRegistry.updateFromSnapshot(snapshot, layerResult.active);
 
+    // Link observations to snapshot nodes (set eid for interactivity)
+    if (snapshot.observations) {
+      linkObservationsToSnapshot(snapshot.observations, snapshot, this.elementRegistry);
+    }
+
     // Decide baseline vs diff and get reason
     const baselineInfo = this.getBaselineInfo(snapshot, isNavigation);
 
@@ -297,6 +303,11 @@ export class StateManager {
       atoms,
       tokens,
     };
+
+    // Add observations if present in snapshot
+    if (snapshot.observations) {
+      response.observations = snapshot.observations;
+    }
 
     // Return dense XML representation
     return renderStateXml(response);

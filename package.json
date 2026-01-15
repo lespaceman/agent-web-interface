@@ -49,7 +49,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "chrome-remote-interface": "^0.33.3",
     "playwright": "^1.40.0",
     "zod": "^3.25.0"

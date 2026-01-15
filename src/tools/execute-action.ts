@@ -18,6 +18,7 @@ import type { StateResponse } from '../state/types.js';
 import type { ClickOutcome } from '../state/element-ref.types.js';
 import type { RuntimeHealth } from '../state/health.types.js';
 import { createHealthyRuntime } from '../state/health.types.js';
+import { observationAccumulator } from '../observation/index.js';
 
 // ============================================================================
 // State Manager Registry
@@ -185,12 +186,13 @@ async function stabilizeAfterAction(page: Page): Promise<StabilizationResult> {
  * Execute a mutating action with automatic snapshot capture and FactPack generation.
  *
  * Simple flow:
- * 1. Execute action (try/catch with retry for stale elements)
- * 2. Stabilize DOM
- * 3. Capture snapshot
- * 4. Extract FactPack
- * 5. Generate page_summary
- * 6. Return {success, page_summary, metadata}
+ * 1. Record pre-action timestamp for observation capture
+ * 2. Execute action (try/catch with retry for stale elements)
+ * 3. Stabilize DOM
+ * 4. Capture observations from the action window
+ * 5. Capture snapshot
+ * 6. Generate page_summary
+ * 7. Return {success, page_summary, metadata}
  *
  * @param handle - Page handle with CDP client
  * @param action - The action to execute
@@ -204,6 +206,12 @@ export async function executeAction(
   let success = true;
   let error: string | undefined;
 
+  // Record pre-action timestamp for observation capture
+  const actionStartTime = Date.now();
+
+  // Ensure observation accumulator is injected
+  await observationAccumulator.ensureInjected(handle.page);
+
   // Execute action - if this throws, we catch and return error
   try {
     await action();
@@ -215,10 +223,18 @@ export async function executeAction(
   // Stabilize page after action (handles both SPA updates and full navigations)
   await stabilizeAfterAction(handle.page);
 
+  // Capture observations from the action window
+  const observations = await observationAccumulator.getObservations(handle.page, actionStartTime);
+
   // Capture snapshot
   const capture = captureSnapshot ?? (() => captureSnapshotFallback(handle));
   const captureResult = await capture();
   const snapshot = captureResult.snapshot;
+
+  // Attach observations to snapshot if any were captured
+  if (observations.duringAction.length > 0 || observations.sincePrevious.length > 0) {
+    snapshot.observations = observations;
+  }
 
   // Generate state response using StateManager
   const stateManager = getStateManager(handle.page_id);
@@ -244,6 +260,8 @@ export async function executeAction(
  * 2. Find the element by label
  * 3. Retry the action once with the fresh backend_node_id
  *
+ * Also captures DOM observations during the action window.
+ *
  * @param handle - Page handle with CDP client
  * @param node - The target node from snapshot
  * @param action - The action to execute (takes backend_node_id)
@@ -260,6 +278,12 @@ export async function executeActionWithRetry(
   let success = true;
   let error: string | undefined;
   let retried = false;
+
+  // Record pre-action timestamp for observation capture
+  const actionStartTime = Date.now();
+
+  // Ensure observation accumulator is injected
+  await observationAccumulator.ensureInjected(handle.page);
 
   const capture = captureSnapshot ?? (() => captureSnapshotFallback(handle));
 
@@ -307,9 +331,17 @@ export async function executeActionWithRetry(
   // Stabilize page after action (handles both SPA updates and full navigations)
   await stabilizeAfterAction(handle.page);
 
+  // Capture observations from the action window
+  const observations = await observationAccumulator.getObservations(handle.page, actionStartTime);
+
   // Capture final snapshot
   const captureResult = await capture();
   const snapshot = captureResult.snapshot;
+
+  // Attach observations to snapshot if any were captured
+  if (observations.duringAction.length > 0 || observations.sincePrevious.length > 0) {
+    snapshot.observations = observations;
+  }
 
   // Generate state response using StateManager
   const stateManager = getStateManager(handle.page_id);
@@ -471,6 +503,7 @@ async function handleStaleElementRetry(
  * - Pre-click URL/loaderId capture
  * - Post-click navigation detection
  * - ClickOutcome classification (success/navigated vs stale_element)
+ * - DOM observation capture during the action window
  *
  * @param handle - Page handle with CDP client
  * @param node - The target node from snapshot
@@ -489,6 +522,12 @@ export async function executeActionWithOutcome(
   let error: string | undefined;
   let retried = false;
   let outcome: ClickOutcome;
+
+  // Record pre-action timestamp for observation capture
+  const actionStartTime = Date.now();
+
+  // Ensure observation accumulator is injected
+  await observationAccumulator.ensureInjected(handle.page);
 
   const capture = captureSnapshot ?? (() => captureSnapshotFallback(handle));
 
@@ -540,9 +579,17 @@ export async function executeActionWithOutcome(
   // Stabilize page after action (handles both SPA updates and full navigations)
   await stabilizeAfterAction(handle.page);
 
+  // Capture observations from the action window
+  const observations = await observationAccumulator.getObservations(handle.page, actionStartTime);
+
   // Capture final snapshot
   const captureResult = await capture();
   const snapshot = captureResult.snapshot;
+
+  // Attach observations to snapshot if any were captured
+  if (observations.duringAction.length > 0 || observations.sincePrevious.length > 0) {
+    snapshot.observations = observations;
+  }
 
   // Generate state response using StateManager
   const stateManager = getStateManager(handle.page_id);

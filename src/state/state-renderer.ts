@@ -9,6 +9,11 @@
  */
 
 import type { StateResponseObject, ActionableInfo } from './types.js';
+import type {
+  DOMObservation,
+  ObservationGroups,
+  SignificanceSignals,
+} from '../observation/observation.types.js';
 
 /**
  * Render a StateResponseObject as a dense XML string.
@@ -49,7 +54,15 @@ export function renderStateXml(response: StateResponseObject): string {
     lines.push(`  </diff>`);
   }
 
-  // 3. Actionables (Grouped by Region)
+  // 3. Observations (if present)
+  if (response.observations) {
+    const obsLines = renderObservations(response.observations);
+    if (obsLines.length > 0) {
+      lines.push(...obsLines);
+    }
+  }
+
+  // 4. Actionables (Grouped by Region)
   // In diff mode: only render added/changed elements
   // In baseline mode: render all elements
   const filteredActionables = filterActionablesForMode(actionables, diff);
@@ -179,4 +192,102 @@ function escapeXml(unsafe: string): string {
         return c;
     }
   });
+}
+
+// ============================================================================
+// Observation Rendering
+// ============================================================================
+
+/**
+ * Render observations section if there are any significant observations.
+ */
+export function renderObservations(observations: ObservationGroups): string[] {
+  const { duringAction, sincePrevious } = observations;
+
+  if (duringAction.length === 0 && sincePrevious.length === 0) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  lines.push('  <observations>');
+
+  // Observations from this action
+  if (duringAction.length > 0) {
+    lines.push('    <during_action>');
+    for (const obs of duringAction) {
+      lines.push(renderSingleObservation(obs, 6));
+    }
+    lines.push('    </during_action>');
+  }
+
+  // Observations accumulated since previous tool call
+  if (sincePrevious.length > 0) {
+    lines.push('    <since_previous>');
+    for (const obs of sincePrevious) {
+      lines.push(renderSingleObservation(obs, 6));
+    }
+    lines.push('    </since_previous>');
+  }
+
+  lines.push('  </observations>');
+  return lines;
+}
+
+/**
+ * Render a single observation as XML.
+ */
+export function renderSingleObservation(obs: DOMObservation, indent: number): string {
+  const pad = ' '.repeat(indent);
+
+  // Build attributes
+  const attrs: string[] = [`significance="${obs.significance}"`];
+  if (obs.eid) attrs.push(`eid="${obs.eid}"`);
+  if (obs.ageMs) attrs.push(`age_ms="${obs.ageMs}"`);
+  if (obs.durationMs) attrs.push(`duration_ms="${obs.durationMs}"`);
+
+  // Build signals summary
+  const signals = summarizeSignals(obs.signals);
+
+  // Build content attributes
+  const contentAttrs: string[] = [`tag="${obs.content.tag}"`];
+  if (obs.content.role) contentAttrs.push(`role="${obs.content.role}"`);
+  if (obs.content.hasInteractives) contentAttrs.push('interactive="true"');
+
+  const text = escapeXml(obs.content.text);
+
+  return `${pad}<${obs.type} ${attrs.join(' ')}>
+${pad}  <signals ${signals} />
+${pad}  <content ${contentAttrs.join(' ')}>${text}</content>
+${pad}</${obs.type}>`;
+}
+
+/**
+ * Summarize significance signals as XML attributes.
+ */
+export function summarizeSignals(signals: SignificanceSignals): string {
+  const parts: string[] = [];
+
+  // Semantic
+  const semantic: string[] = [];
+  if (signals.hasAlertRole) semantic.push('alert-role');
+  if (signals.hasAriaLive) semantic.push('aria-live');
+  if (signals.isDialog) semantic.push('dialog');
+  if (semantic.length) parts.push(`semantic="${semantic.join(',')}"`);
+
+  // Visual
+  const visual: string[] = [];
+  if (signals.isFixedOrSticky) visual.push('fixed');
+  if (signals.hasHighZIndex) visual.push('high-z');
+  if (signals.coversSignificantViewport) visual.push('viewport');
+  if (visual.length) parts.push(`visual="${visual.join(',')}"`);
+
+  // Structural
+  if (signals.isBodyDirectChild) parts.push('body-child="true"');
+  if (signals.containsInteractiveElements) parts.push('has-interactives="true"');
+
+  // Temporal
+  if (signals.appearedAfterDelay) parts.push('delayed="true"');
+  if (signals.wasShortLived) parts.push('ephemeral="true"');
+
+  return parts.join(' ');
 }

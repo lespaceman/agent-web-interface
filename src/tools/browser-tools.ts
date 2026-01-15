@@ -15,6 +15,7 @@ import {
   scrollIntoView,
   scrollPage as scrollPageByAmount,
 } from '../snapshot/index.js';
+import { observationAccumulator } from '../observation/index.js';
 import type { NodeDetails } from './tool-schemas.js';
 import {
   LaunchBrowserInputSchema,
@@ -347,6 +348,9 @@ async function executeNavigationAction(
       break;
   }
 
+  // Re-inject observation accumulator (new document context after navigation)
+  await observationAccumulator.inject(handle.page);
+
   // Auto-capture snapshot after navigation
   const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
   handle = captureResult.handle;
@@ -550,9 +554,18 @@ export async function captureSnapshot(
   let handle = resolveExistingPage(session, input.page_id);
   const page_id = handle.page_id;
 
+  // Capture any accumulated observations (no action window)
+  const observations = await observationAccumulator.getAccumulatedObservations(handle.page);
+
   const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
   handle = captureResult.handle;
   const snapshot = captureResult.snapshot;
+
+  // Attach accumulated observations to snapshot if any
+  if (observations.sincePrevious.length > 0) {
+    snapshot.observations = observations;
+  }
+
   snapshotStore.store(page_id, snapshot);
 
   // Return XML state response directly

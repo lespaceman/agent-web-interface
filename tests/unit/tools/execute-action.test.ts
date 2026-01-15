@@ -30,6 +30,17 @@ vi.mock('../../../src/snapshot/index.js', () => ({
   compileSnapshot: vi.fn().mockResolvedValue(createMockSnapshot()),
 }));
 
+// Mock the observationAccumulator
+vi.mock('../../../src/observation/index.js', () => ({
+  observationAccumulator: {
+    ensureInjected: vi.fn().mockResolvedValue(undefined),
+    getObservations: vi.fn().mockResolvedValue({ duringAction: [], sincePrevious: [] }),
+    getAccumulatedObservations: vi.fn().mockResolvedValue({ duringAction: [], sincePrevious: [] }),
+    inject: vi.fn().mockResolvedValue(undefined),
+    reset: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 /**
  * Create a mock ReadableNode.
  */

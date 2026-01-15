@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toast Observation Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+    }
+    .toast {
+      padding: 16px 24px;
+      border-radius: 8px;
+      color: white;
+      margin-bottom: 10px;
+      animation: slideIn 0.3s ease;
+    }
+    .toast.success { background: #22c55e; }
+    .toast.error { background: #ef4444; }
+    .toast.dialog { background: #3b82f6; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .buttons { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+    button { padding: 10px 20px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Toast Observation Test</h1>
+  <p>Click buttons to trigger toasts. These are dynamically added/removed from DOM with proper ARIA.</p>
+
+  <div class="buttons">
+    <button id="success-btn">Success Toast (role=status, 3s)</button>
+    <button id="error-btn">Error Toast (role=alert, 3s)</button>
+    <button id="dialog-btn">Dialog Toast (role=alertdialog)</button>
+    <button id="fixed-btn">Fixed Position Toast (2pts)</button>
+    <button id="body-child-btn">Body Child + Interactive (2pts)</button>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script>
+    const container = document.getElementById('toast-container');
+    let toastId = 0;
+
+    function createToast(config) {
+      const toast = document.createElement('div');
+      toast.id = 'toast-' + (++toastId);
+      toast.className = 'toast ' + config.className;
+      toast.textContent = config.text;
+
+      // Set ARIA attributes
+      if (config.role) toast.setAttribute('role', config.role);
+      if (config.ariaLive) toast.setAttribute('aria-live', config.ariaLive);
+      if (config.ariaModal) toast.setAttribute('aria-modal', config.ariaModal);
+
+      // Add interactive element if needed
+      if (config.hasButton) {
+        const btn = document.createElement('button');
+        btn.textContent = 'Dismiss';
+        btn.onclick = () => toast.remove();
+        toast.appendChild(btn);
+      }
+
+      container.appendChild(toast);
+
+      // Auto-remove after duration
+      if (config.duration > 0) {
+        setTimeout(() => toast.remove(), config.duration);
+      }
+
+      return toast;
+    }
+
+    // Toast with role="status" (should score 3 - meets threshold)
+    document.getElementById('success-btn').addEventListener('click', () => {
+      createToast({
+        className: 'success',
+        text: 'Success! Operation completed.',
+        role: 'status',
+        ariaLive: 'polite',
+        duration: 3000
+      });
+    });
+
+    // Toast with role="alert" (should score 3 - meets threshold)
+    document.getElementById('error-btn').addEventListener('click', () => {
+      createToast({
+        className: 'error',
+        text: 'Error! Something went wrong.',
+        role: 'alert',
+        ariaLive: 'assertive',
+        duration: 3000
+      });
+    });
+
+    // Toast with role="alertdialog" (should score 3 - meets threshold)
+    document.getElementById('dialog-btn').addEventListener('click', () => {
+      createToast({
+        className: 'dialog',
+        text: 'Alert Dialog: Action required!',
+        role: 'alertdialog',
+        ariaModal: 'true',
+        hasButton: true,
+        duration: 0
+      });
+    });
+
+    // Fixed position toast (2 pts - below threshold)
+    document.getElementById('fixed-btn').addEventListener('click', () => {
+      const toast = document.createElement('div');
+      toast.className = 'toast success';
+      toast.textContent = 'Fixed position only (no ARIA)';
+      toast.style.position = 'fixed';
+      toast.style.top = '100px';
+      toast.style.right = '20px';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    });
+
+    // Body child + interactive (2 pts - below threshold)
+    document.getElementById('body-child-btn').addEventListener('click', () => {
+      const toast = document.createElement('div');
+      toast.className = 'toast success';
+      toast.textContent = 'Body child with button ';
+      const btn = document.createElement('button');
+      btn.textContent = 'Click';
+      toast.appendChild(btn);
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    });
+  </script>
+</body>
+</html>

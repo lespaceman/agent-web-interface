@@ -11,6 +11,7 @@ import { PageRegistry, type PageHandle } from './page-registry.js';
 import { getLogger } from '../shared/services/logging.service.js';
 import { BrowserSessionError } from '../shared/errors/browser-session.error.js';
 import type { ConnectionHealth } from '../state/health.types.js';
+import { observationAccumulator } from '../observation/index.js';
 
 /**
  * Connection state machine states
@@ -421,6 +422,9 @@ export class SessionManager {
       url: page.url(),
     });
 
+    // Inject observation accumulator for DOM mutation tracking
+    await observationAccumulator.inject(page);
+
     this.logger.debug('Adopted page', { page_id: handle.page_id, url: page.url() });
 
     return handle;
@@ -457,6 +461,9 @@ export class SessionManager {
         url: page.url(),
       });
     }
+
+    // Inject observation accumulator for DOM mutation tracking
+    await observationAccumulator.inject(page);
 
     return handle;
   }
@@ -582,6 +589,9 @@ export class SessionManager {
       this.registry.updateMetadata(page_id, {
         url: handle.page.url(),
       });
+
+      // Re-inject observation accumulator (new document context)
+      await observationAccumulator.inject(handle.page);
 
       this.logger.debug('Navigated page', { page_id, url });
     } catch (error) {
