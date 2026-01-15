@@ -6,7 +6,14 @@
  */
 
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
-import type { DiffResponse, DiffChange, AtomChange, EidMap } from './types.js';
+import type {
+  DiffResponse,
+  DiffChange,
+  AtomChange,
+  EidMap,
+  TextChange,
+  StatusNode,
+} from './types.js';
 import { computeEid } from './element-identity.js';
 import { isInteractiveKind } from './actionables-filter.js';
 import { detectLayers } from './layer-detector.js';
@@ -30,7 +37,7 @@ import { extractAtoms } from './atoms-extractor.js';
  * @returns Diff response
  */
 export function computeDiff(prev: BaseSnapshot, curr: BaseSnapshot): DiffResponse {
-  // Build EID maps
+  // Build EID maps for interactive elements
   const prevMap = buildEidMap(prev);
   const currMap = buildEidMap(curr);
 
@@ -50,6 +57,17 @@ export function computeDiff(prev: BaseSnapshot, curr: BaseSnapshot): DiffRespons
   // Compute atomic diffs
   const atoms = computeAtomicDiffs(prev, curr);
 
+  // Compute mutations (status-bearing readable elements)
+  const mutations = computeMutations(prev, curr);
+
+  // Determine if diff is empty (no meaningful changes)
+  const isEmpty =
+    added.length === 0 &&
+    removed.length === 0 &&
+    changed.length === 0 &&
+    mutations.textChanged.length === 0 &&
+    mutations.statusAppeared.length === 0;
+
   return {
     mode: 'diff',
     diff: {
@@ -60,6 +78,8 @@ export function computeDiff(prev: BaseSnapshot, curr: BaseSnapshot): DiffRespons
         removed,
         changed,
       },
+      mutations,
+      isEmpty,
       atoms,
     },
   };
@@ -401,4 +421,141 @@ function computeAtomicDiffs(prev: BaseSnapshot, curr: BaseSnapshot): AtomChange[
   }
 
   return changes;
+}
+
+// ============================================================================
+// Mutations Detection (Status-bearing Readable Elements)
+// ============================================================================
+
+/**
+ * EVALUATION FLAG: Track all readable element mutations, not just ARIA status roles.
+ *
+ * When true: Tracks ALL visible readable nodes (text, heading, paragraph, etc.)
+ * When false: Only tracks nodes with ARIA roles: status, alert, log, progressbar
+ *
+ * This flag is for evaluation to determine if broader mutation tracking is useful.
+ * Search for "TRACK_ALL_READABLE_MUTATIONS" to find this flag.
+ *
+ * TODO: Remove or make permanent after evaluation is complete.
+ */
+const TRACK_ALL_READABLE_MUTATIONS = true;
+
+/**
+ * Maximum character length for mutation text content.
+ * Text exceeding this limit will be truncated with "..." suffix.
+ */
+const MUTATION_TEXT_MAX_LENGTH = 100;
+
+/**
+ * ARIA roles that indicate state-bearing elements.
+ * Only used when TRACK_ALL_READABLE_MUTATIONS is false.
+ */
+const STATUS_ROLES = new Set(['status', 'alert', 'log', 'progressbar']);
+
+/**
+ * Node kinds considered "readable" for mutation tracking.
+ * Used when TRACK_ALL_READABLE_MUTATIONS is true.
+ */
+const READABLE_KINDS = new Set([
+  'text',
+  'heading',
+  'paragraph',
+  'listitem',
+  'generic', // often used for dynamic content
+]);
+
+/**
+ * Check if a node should be tracked for mutations.
+ *
+ * When TRACK_ALL_READABLE_MUTATIONS is true: tracks any readable node kind
+ * When false: only tracks nodes with specific ARIA roles (status, alert, log, progressbar)
+ */
+function isTrackableNode(node: ReadableNode): boolean {
+  if (TRACK_ALL_READABLE_MUTATIONS) {
+    // Track any readable node kind
+    return READABLE_KINDS.has(node.kind);
+  }
+
+  // Only track nodes with status-bearing ARIA roles
+  const role = node.attributes?.role?.toLowerCase();
+  return role !== undefined && STATUS_ROLES.has(role);
+}
+
+/**
+ * Truncate text to max length, adding "..." if truncated.
+ */
+function truncateText(text: string, maxLength: number = MUTATION_TEXT_MAX_LENGTH): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return trimmed.substring(0, maxLength - 3) + '...';
+}
+
+/**
+ * Generate a readable element ID (rd-* prefix).
+ */
+function computeReadableEid(node: ReadableNode): string {
+  const baseEid = computeEid(node);
+  return `rd-${baseEid.substring(0, 10)}`;
+}
+
+/**
+ * Build a map of trackable nodes keyed by a stable identifier.
+ * Uses backend_node_id as the key since it's stable within a session.
+ */
+function buildTrackableNodeMap(snapshot: BaseSnapshot): Map<number, ReadableNode> {
+  const map = new Map<number, ReadableNode>();
+
+  for (const node of snapshot.nodes) {
+    if (isTrackableNode(node) && node.state?.visible) {
+      map.set(node.backend_node_id, node);
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Compute mutations in readable elements.
+ *
+ * Tracks:
+ * - Text changes in existing readable elements
+ * - New readable elements that appeared (with ARIA roles or all readable when flag is set)
+ */
+function computeMutations(
+  prev: BaseSnapshot,
+  curr: BaseSnapshot
+): { textChanged: TextChange[]; statusAppeared: StatusNode[] } {
+  const prevMap = buildTrackableNodeMap(prev);
+  const currMap = buildTrackableNodeMap(curr);
+
+  const textChanged: TextChange[] = [];
+  const statusAppeared: StatusNode[] = [];
+
+  // Find text changes and new elements
+  for (const [backendNodeId, currNode] of currMap) {
+    const prevNode = prevMap.get(backendNodeId);
+
+    if (prevNode) {
+      // Node existed before - check for text change
+      if (prevNode.label !== currNode.label) {
+        textChanged.push({
+          eid: computeReadableEid(currNode),
+          from: truncateText(prevNode.label),
+          to: truncateText(currNode.label),
+        });
+      }
+    } else {
+      // New element appeared
+      const role = currNode.attributes?.role?.toLowerCase() ?? currNode.kind;
+      statusAppeared.push({
+        eid: computeReadableEid(currNode),
+        role,
+        text: truncateText(currNode.label),
+      });
+    }
+  }
+
+  return { textChanged, statusAppeared };
 }

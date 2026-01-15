@@ -122,6 +122,30 @@ export interface BaselineResponse {
 }
 
 /**
+ * Text content change in a readable element.
+ */
+export interface TextChange {
+  /** Element ID (rd-* prefix for readable nodes) */
+  eid: string;
+  /** Previous text content */
+  from: string;
+  /** Current text content */
+  to: string;
+}
+
+/**
+ * Status/alert element that appeared.
+ */
+export interface StatusNode {
+  /** Element ID (rd-* prefix for readable nodes) */
+  eid: string;
+  /** ARIA role (status, alert, log, progressbar) */
+  role: string;
+  /** Text content */
+  text: string;
+}
+
+/**
  * Diff response (incremental changes).
  */
 export interface DiffResponse {
@@ -141,6 +165,15 @@ export interface DiffResponse {
       removed: string[]; // eids
       changed: DiffChange[];
     };
+    /** Readable content mutations (status changes, text updates) */
+    mutations: {
+      /** Text content that changed in status/alert/log/progressbar elements */
+      textChanged: TextChange[];
+      /** Status/alert/log/progressbar elements that appeared */
+      statusAppeared: StatusNode[];
+    };
+    /** True if no actionables or mutations changed */
+    isEmpty: boolean;
     atoms: AtomChange[];
   };
 }

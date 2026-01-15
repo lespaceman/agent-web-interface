@@ -14,6 +14,7 @@ import {
 import type { BaseSnapshot } from '../../../src/snapshot/snapshot.types.js';
 import type { CdpClient } from '../../../src/cdp/cdp-client.interface.js';
 import type { Page } from 'playwright';
+import { createMockPage } from '../../mocks/playwright.mock.js';
 
 // Mock the snapshot compiler
 vi.mock('../../../src/snapshot/index.js', () => ({
@@ -76,12 +77,12 @@ function createMockCdp(): CdpClient {
   } as unknown as CdpClient;
 }
 
-function createMockPage(): Page {
-  return {
-    url: vi.fn().mockReturnValue('https://example.com'),
-    title: vi.fn().mockResolvedValue('Test Page'),
-    evaluate: vi.fn().mockResolvedValue(undefined),
-  } as unknown as Page;
+/** Create a mock page for snapshot health tests */
+function createSnapshotHealthMockPage(): Page {
+  return createMockPage({
+    url: 'https://example.com',
+    title: 'Test Page',
+  }) as unknown as Page;
 }
 
 describe('validateSnapshotHealth', () => {
@@ -235,7 +236,7 @@ describe('captureWithStabilization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCdp = createMockCdp();
-    mockPage = createMockPage();
+    mockPage = createSnapshotHealthMockPage();
   });
 
   it('should return healthy snapshot on first attempt', async () => {

@@ -19,6 +19,7 @@ import type { PageHandle } from '../../../src/browser/page-registry.js';
 import type { BaseSnapshot, ReadableNode } from '../../../src/snapshot/snapshot.types.js';
 import type { RuntimeHealth } from '../../../src/state/health.types.js';
 import { createHealthyRuntime } from '../../../src/state/health.types.js';
+import { createMockPage } from '../../mocks/playwright.mock.js';
 
 // Mock the stabilizeDom function
 vi.mock('../../../src/delta/dom-stabilizer.js', () => ({
@@ -83,10 +84,7 @@ function createMockSnapshot(nodes: ReadableNode[] = []): BaseSnapshot {
 function createMockPageHandle(overrides: Partial<PageHandle> = {}): PageHandle {
   return {
     page_id: 'page-test-123',
-    page: {
-      url: vi.fn().mockReturnValue('https://example.com/page'),
-      waitForLoadState: vi.fn().mockResolvedValue(undefined),
-    } as unknown as PageHandle['page'],
+    page: createMockPage({ url: 'https://example.com/page' }) as unknown as PageHandle['page'],
     cdp: {
       send: vi.fn().mockResolvedValue({
         frameTree: { frame: { loaderId: 'loader-1' } },
@@ -381,6 +379,8 @@ describe('Execute Action', () => {
           return callCount === 1 ? 'https://example.com/page1' : 'https://example.com/page2';
         }),
         waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
       };
 
       const handle = createMockPageHandle({
@@ -439,6 +439,8 @@ describe('Execute Action', () => {
           return callCount === 1 ? 'https://example.com/page1' : 'https://example.com/page2';
         }),
         waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
       };
 
       const handle = createMockPageHandle({
@@ -464,6 +466,8 @@ describe('Execute Action', () => {
       const mockPage = {
         url: vi.fn().mockReturnValue('https://example.com/page'),
         waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const mockCdp = {
         send: vi.fn().mockResolvedValue({
@@ -501,6 +505,8 @@ describe('Execute Action', () => {
       const mockPage = {
         url: vi.fn().mockReturnValue('https://example.com/page'),
         waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const mockCdp = {
         send: vi.fn().mockResolvedValue({

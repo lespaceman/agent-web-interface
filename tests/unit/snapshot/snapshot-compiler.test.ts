@@ -4,20 +4,11 @@
  * Tests for the SnapshotCompiler orchestration layer.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { SnapshotCompiler } from '../../../src/snapshot/snapshot-compiler.js';
 import { createMockCdpClient, MockCdpClient } from '../../mocks/cdp-client.mock.js';
 import type { Page } from 'playwright';
-
-// Mock Playwright Page
-function createMockPage(overrides: Partial<Page> = {}): Page {
-  return {
-    url: vi.fn().mockReturnValue('https://example.com/'),
-    title: vi.fn().mockResolvedValue('Test Page'),
-    viewportSize: vi.fn().mockReturnValue({ width: 1280, height: 720 }),
-    ...overrides,
-  } as unknown as Page;
-}
+import { createMockPage } from '../../mocks/playwright.mock.js';
 
 // Create realistic CDP mock responses
 function setupCdpMocks(mockCdp: MockCdpClient): void {
@@ -192,7 +183,10 @@ describe('SnapshotCompiler', () => {
 
   beforeEach(() => {
     mockCdp = createMockCdpClient();
-    mockPage = createMockPage();
+    mockPage = createMockPage({
+      url: 'https://example.com/',
+      title: 'Test Page',
+    }) as unknown as Page;
     setupCdpMocks(mockCdp);
   });
 

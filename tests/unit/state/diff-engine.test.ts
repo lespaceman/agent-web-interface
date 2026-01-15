@@ -564,6 +564,247 @@ describe('Diff Engine', () => {
     });
   });
 
+  describe('Evidence Tracking', () => {
+    it('should track text content changes in readable elements', () => {
+      // Status text that changes from "Loading..." to "Loaded!"
+      // Use same backend_node_id to identify as same element
+      const sharedBackendNodeId = 12345;
+      const statusBefore = createNode({
+        backend_node_id: sharedBackendNodeId,
+        kind: 'text',
+        label: 'Loading...',
+        where: { region: 'main', group_path: ['Card'] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'status' },
+      });
+      const statusAfter = createNode({
+        backend_node_id: sharedBackendNodeId,
+        kind: 'text',
+        label: 'Loaded!',
+        where: { region: 'main', group_path: ['Card'] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'status' },
+      });
+
+      const prev = createSnapshot([statusBefore]);
+      const curr = createSnapshot([statusAfter]);
+
+      const result = computeDiff(prev, curr);
+
+      // Mutations should track the text change
+      expect(result.diff.mutations).toBeDefined();
+      expect(result.diff.mutations.textChanged).toHaveLength(1);
+      expect(result.diff.mutations.textChanged[0].eid).toMatch(/^rd-/);
+      expect(result.diff.mutations.textChanged[0].from).toBe('Loading...');
+      expect(result.diff.mutations.textChanged[0].to).toBe('Loaded!');
+    });
+
+    it('should detect status elements that appeared', () => {
+      // Status element appears after action (wasn't in previous snapshot)
+      const statusNode = createNode({
+        kind: 'text',
+        label: 'Success!',
+        where: { region: 'main', group_path: ['Form'] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'status' },
+      });
+
+      const prev = createSnapshot([]);
+      const curr = createSnapshot([statusNode]);
+
+      const result = computeDiff(prev, curr);
+
+      expect(result.diff.mutations).toBeDefined();
+      expect(result.diff.mutations.statusAppeared).toHaveLength(1);
+      expect(result.diff.mutations.statusAppeared[0].eid).toMatch(/^rd-/);
+      expect(result.diff.mutations.statusAppeared[0].role).toBe('status');
+      expect(result.diff.mutations.statusAppeared[0].text).toBe('Success!');
+    });
+
+    it('should detect alert elements that appeared', () => {
+      const alertNode = createNode({
+        kind: 'text',
+        label: 'Error: Invalid input',
+        where: { region: 'main', group_path: ['Form'] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'alert' },
+      });
+
+      const prev = createSnapshot([]);
+      const curr = createSnapshot([alertNode]);
+
+      const result = computeDiff(prev, curr);
+
+      expect(result.diff.mutations).toBeDefined();
+      expect(result.diff.mutations.statusAppeared).toHaveLength(1);
+      expect(result.diff.mutations.statusAppeared[0]).toMatchObject({
+        role: 'alert',
+        text: 'Error: Invalid input',
+      });
+    });
+
+    it('should detect progressbar state changes', () => {
+      // Use same backend_node_id to identify as same element
+      const sharedBackendNodeId = 54321;
+      const progressBefore = createNode({
+        backend_node_id: sharedBackendNodeId,
+        kind: 'generic',
+        label: '50%',
+        where: { region: 'main', group_path: ['Upload'] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'progressbar' },
+      });
+      const progressAfter = createNode({
+        backend_node_id: sharedBackendNodeId,
+        kind: 'generic',
+        label: '100%',
+        where: { region: 'main', group_path: ['Upload'] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'progressbar' },
+      });
+
+      const prev = createSnapshot([progressBefore]);
+      const curr = createSnapshot([progressAfter]);
+
+      const result = computeDiff(prev, curr);
+
+      expect(result.diff.mutations.textChanged).toHaveLength(1);
+      expect(result.diff.mutations.textChanged[0]).toMatchObject({
+        from: '50%',
+        to: '100%',
+      });
+    });
+
+    it('should set isEmpty=false when evidence changes detected', () => {
+      const statusNode = createNode({
+        kind: 'text',
+        label: 'Done',
+        where: { region: 'main', group_path: [] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'status' },
+      });
+
+      const prev = createSnapshot([]);
+      const curr = createSnapshot([statusNode]);
+
+      const result = computeDiff(prev, curr);
+
+      expect(result.diff.isEmpty).toBe(false);
+    });
+
+    it('should set isEmpty=true when no actionable or evidence changes', () => {
+      // Same interactive elements, no text changes, no status elements
+      const button = createInteractiveNode('button', 'Submit');
+      const prev = createSnapshot([button]);
+      const curr = createSnapshot([button]);
+
+      const result = computeDiff(prev, curr);
+
+      // No actionables changed, no evidence tracked
+      expect(result.diff.actionables.added).toHaveLength(0);
+      expect(result.diff.actionables.removed).toHaveLength(0);
+      expect(result.diff.actionables.changed).toHaveLength(0);
+      expect(result.diff.mutations.textChanged).toHaveLength(0);
+      expect(result.diff.mutations.statusAppeared).toHaveLength(0);
+      expect(result.diff.isEmpty).toBe(true);
+    });
+
+    it('should track log role elements', () => {
+      const logNode = createNode({
+        kind: 'text',
+        label: 'Request completed successfully',
+        where: { region: 'main', group_path: ['Console'] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'log' },
+      });
+
+      const prev = createSnapshot([]);
+      const curr = createSnapshot([logNode]);
+
+      const result = computeDiff(prev, curr);
+
+      expect(result.diff.mutations.statusAppeared).toHaveLength(1);
+      expect(result.diff.mutations.statusAppeared[0].role).toBe('log');
+    });
+
+    it('should track all readable elements when TRACK_ALL_READABLE_MUTATIONS is true', () => {
+      // With TRACK_ALL_READABLE_MUTATIONS flag enabled, paragraphs are tracked
+      // Note: This test documents current evaluation mode behavior
+      const paragraph = createNode({
+        kind: 'paragraph',
+        label: 'Some dynamic text',
+        where: { region: 'main', group_path: [] },
+        state: { visible: true, enabled: true },
+      });
+
+      const prev = createSnapshot([]);
+      const curr = createSnapshot([paragraph]);
+
+      const result = computeDiff(prev, curr);
+
+      // With flag enabled, paragraphs ARE tracked (evaluation mode)
+      expect(result.diff.mutations.statusAppeared).toHaveLength(1);
+      expect(result.diff.mutations.statusAppeared[0].role).toBe('paragraph');
+      expect(result.diff.mutations.statusAppeared[0].text).toBe('Some dynamic text');
+    });
+
+    it('should truncate long text in mutations', () => {
+      // Text over 100 chars should be truncated with "..."
+      const longText = 'A'.repeat(150);
+      const statusNode = createNode({
+        kind: 'text',
+        label: longText,
+        where: { region: 'main', group_path: [] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'status' },
+      });
+
+      const prev = createSnapshot([]);
+      const curr = createSnapshot([statusNode]);
+
+      const result = computeDiff(prev, curr);
+
+      expect(result.diff.mutations.statusAppeared).toHaveLength(1);
+      // Should be truncated to 97 chars + "..."
+      expect(result.diff.mutations.statusAppeared[0].text).toHaveLength(100);
+      expect(result.diff.mutations.statusAppeared[0].text).toMatch(/\.\.\.$/);
+    });
+
+    it('should truncate long text in text changes', () => {
+      const sharedBackendNodeId = 99999;
+      const longTextBefore = 'B'.repeat(120);
+      const longTextAfter = 'C'.repeat(130);
+
+      const before = createNode({
+        backend_node_id: sharedBackendNodeId,
+        kind: 'text',
+        label: longTextBefore,
+        where: { region: 'main', group_path: [] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'status' },
+      });
+      const after = createNode({
+        backend_node_id: sharedBackendNodeId,
+        kind: 'text',
+        label: longTextAfter,
+        where: { region: 'main', group_path: [] },
+        state: { visible: true, enabled: true },
+        attributes: { role: 'status' },
+      });
+
+      const prev = createSnapshot([before]);
+      const curr = createSnapshot([after]);
+
+      const result = computeDiff(prev, curr);
+
+      expect(result.diff.mutations.textChanged).toHaveLength(1);
+      expect(result.diff.mutations.textChanged[0].from).toHaveLength(100);
+      expect(result.diff.mutations.textChanged[0].from).toMatch(/\.\.\.$/);
+      expect(result.diff.mutations.textChanged[0].to).toHaveLength(100);
+      expect(result.diff.mutations.textChanged[0].to).toMatch(/\.\.\.$/);
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle empty snapshots', () => {
       const prev = createSnapshot([]);

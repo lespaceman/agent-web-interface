@@ -305,7 +305,7 @@ describe('StateManager', () => {
       const response = stateManager.generateResponse(snapshot2);
 
       // Should return diff since URL didn't change and change is below threshold
-      expect(response).toContain('<diff type="mutation">');
+      expect(response).toContain('<diff type="mutation"');
       expect(response).not.toContain('<baseline reason="navigation"');
     });
 
@@ -338,7 +338,7 @@ describe('StateManager', () => {
       const response = stateManager.generateResponse(snapshot2);
 
       // Query param changes within same page should NOT be navigation
-      expect(response).toContain('<diff type="mutation">');
+      expect(response).toContain('<diff type="mutation"');
     });
   });
 
@@ -372,7 +372,7 @@ describe('StateManager', () => {
       const response = stateManager.generateResponse(snapshot2);
 
       // Should be diff, not baseline - we always diff for same-page mutations
-      expect(response).toContain('<diff type="mutation">');
+      expect(response).toContain('<diff type="mutation"');
       // Should show the added/removed counts
       expect(response).toContain('added="20"');
       expect(response).toContain('removed="20"');
@@ -393,7 +393,7 @@ describe('StateManager', () => {
       // Steps 2-10: all should be diffs (no periodic baseline)
       for (let i = 2; i <= 10; i++) {
         const r = sm.generateResponse(snapshot);
-        expect(r).toContain('<diff type="mutation">');
+        expect(r).toContain('<diff type="mutation"');
       }
     });
   });

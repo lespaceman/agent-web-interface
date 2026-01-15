@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { Page } from 'playwright';
 import { SnapshotCompiler, compileSnapshot } from '../../src/snapshot/snapshot-compiler.js';
 import { createMockCdpClient, MockCdpClient } from '../mocks/cdp-client.mock.js';
+import { createMockPage } from '../mocks/playwright.mock.js';
 
 // Import test fixtures
 import loginPageDom from '../fixtures/cdp-responses/login-page-dom.json' with { type: 'json' };
@@ -18,14 +19,10 @@ import dialogOverlayDom from '../fixtures/cdp-responses/dialog-overlay-dom.json'
 import dialogOverlayAx from '../fixtures/cdp-responses/dialog-overlay-ax.json' with { type: 'json' };
 
 /**
- * Create a mock Playwright Page
+ * Create a mock page for integration tests with specific URL and title.
  */
-function createMockPage(url = 'https://example.com', title = 'Test Page'): Page {
-  return {
-    url: () => url,
-    title: () => Promise.resolve(title),
-    viewportSize: () => ({ width: 1280, height: 720 }),
-  } as unknown as Page;
+function createIntegrationMockPage(url = 'https://example.com', title = 'Test Page'): Page {
+  return createMockPage({ url, title }) as unknown as Page;
 }
 
 /**
@@ -77,7 +74,7 @@ describe('Snapshot Compiler Integration', () => {
 
   describe('Login Page Scenario', () => {
     beforeEach(() => {
-      mockPage = createMockPage('https://example.com/login', 'Login - Example.com');
+      mockPage = createIntegrationMockPage('https://example.com/login', 'Login - Example.com');
 
       mockCdp.sendSpy.mockImplementation((method: string, params?: Record<string, unknown>) => {
         if (method === 'DOM.getDocument') {
@@ -180,7 +177,7 @@ describe('Snapshot Compiler Integration', () => {
 
   describe('E-commerce Listing Scenario', () => {
     beforeEach(() => {
-      mockPage = createMockPage('https://shop.example.com/products', 'Products | Shop');
+      mockPage = createIntegrationMockPage('https://shop.example.com/products', 'Products | Shop');
 
       mockCdp.sendSpy.mockImplementation((method: string, params?: Record<string, unknown>) => {
         if (method === 'DOM.getDocument') {
@@ -302,7 +299,7 @@ describe('Snapshot Compiler Integration', () => {
 
   describe('Dialog Overlay Scenario', () => {
     beforeEach(() => {
-      mockPage = createMockPage('https://example.com/page', 'Page with Dialog');
+      mockPage = createIntegrationMockPage('https://example.com/page', 'Page with Dialog');
 
       mockCdp.sendSpy.mockImplementation((method: string, params?: Record<string, unknown>) => {
         if (method === 'DOM.getDocument') {
@@ -397,7 +394,7 @@ describe('Snapshot Compiler Integration', () => {
 
   describe('Compiler Options', () => {
     beforeEach(() => {
-      mockPage = createMockPage();
+      mockPage = createIntegrationMockPage();
       setupLayoutMocks(mockCdp);
     });
 
@@ -464,7 +461,7 @@ describe('Snapshot Compiler Integration', () => {
 
   describe('Error Handling', () => {
     beforeEach(() => {
-      mockPage = createMockPage();
+      mockPage = createIntegrationMockPage();
     });
 
     it('should handle AX extraction failure gracefully', async () => {
@@ -543,7 +540,7 @@ describe('Snapshot Compiler Integration', () => {
 
   describe('Snapshot Metadata', () => {
     beforeEach(() => {
-      mockPage = createMockPage();
+      mockPage = createIntegrationMockPage();
       setupLayoutMocks(mockCdp);
     });
 
@@ -594,7 +591,7 @@ describe('Snapshot Compiler Integration', () => {
 
   describe('Convenience Function', () => {
     beforeEach(() => {
-      mockPage = createMockPage();
+      mockPage = createIntegrationMockPage();
       setupLayoutMocks(mockCdp);
     });
 

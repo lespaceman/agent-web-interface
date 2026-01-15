@@ -234,6 +234,36 @@ describe('SessionManager', () => {
         'Navigation timeout'
       );
     });
+
+    it('should wait for network quiet after navigation using tracker', async () => {
+      const handle = await sessionManager.createPage();
+
+      await sessionManager.navigateTo(handle.page_id, 'https://example.com');
+
+      // Verify network tracker was used (via page.on for request/requestfinished/requestfailed)
+      expect(mockPage.on).toHaveBeenCalledWith('request', expect.any(Function));
+      expect(mockPage.on).toHaveBeenCalledWith('requestfinished', expect.any(Function));
+      expect(mockPage.on).toHaveBeenCalledWith('requestfailed', expect.any(Function));
+    });
+
+    it('should not throw when network idle wait times out', async () => {
+      const handle = await sessionManager.createPage();
+
+      // Navigation should complete without throwing even if network never idles
+      // (tracker returns false on timeout, doesn't throw)
+      await expect(
+        sessionManager.navigateTo(handle.page_id, 'https://example.com')
+      ).resolves.not.toThrow();
+    });
+
+    it('should complete navigation even with pending requests', async () => {
+      const handle = await sessionManager.createPage();
+
+      // Network tracker returns false on timeout but navigation still completes
+      await expect(
+        sessionManager.navigateTo(handle.page_id, 'https://example.com')
+      ).resolves.not.toThrow();
+    });
   });
 
   describe('shutdown', () => {

@@ -51,6 +51,7 @@ import {
   executeAction,
   executeActionWithRetry,
   executeActionWithOutcome,
+  stabilizeAfterNavigation,
   type CaptureSnapshotFn,
   getStateManager,
   removeStateManager,
@@ -321,6 +322,9 @@ type NavigationAction = 'back' | 'forward' | 'reload';
  * Execute a navigation action with snapshot capture.
  * Consolidates goBack, goForward, and reload handlers.
  *
+ * Waits for both DOM stabilization and network idle after navigation
+ * to ensure the page is fully loaded before capturing snapshot.
+ *
  * @param pageId - Optional page ID
  * @param action - Navigation action to execute
  * @returns State response after navigation
@@ -347,6 +351,9 @@ async function executeNavigationAction(
       await handle.page.reload();
       break;
   }
+
+  // Wait for page to stabilize (DOM + network idle)
+  await stabilizeAfterNavigation(handle.page);
 
   // Re-inject observation accumulator (new document context after navigation)
   await observationAccumulator.inject(handle.page);

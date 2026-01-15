@@ -8,7 +8,7 @@
  * In baseline mode, renders all actionables.
  */
 
-import type { StateResponseObject, ActionableInfo } from './types.js';
+import type { StateResponseObject, ActionableInfo, TextChange, StatusNode } from './types.js';
 import type {
   DOMObservation,
   ObservationGroups,
@@ -42,7 +42,7 @@ export function renderStateXml(response: StateResponseObject): string {
     );
   } else {
     const d = diff;
-    lines.push(`  <diff type="mutation">`);
+    lines.push(`  <diff type="mutation" empty="${d.diff.isEmpty}">`);
     if (d.diff.doc) {
       lines.push(`    <nav type="${d.diff.doc.nav_type}" />`);
     }
@@ -50,6 +50,11 @@ export function renderStateXml(response: StateResponseObject): string {
       lines.push(
         `    <nodes added="${d.diff.actionables.added.length}" removed="${d.diff.actionables.removed.length}" />`
       );
+    }
+    // Render mutations (status-bearing readable element changes)
+    const mutationLines = renderMutations(d.diff.mutations);
+    if (mutationLines.length > 0) {
+      lines.push(...mutationLines);
     }
     lines.push(`  </diff>`);
   }
@@ -192,6 +197,49 @@ function escapeXml(unsafe: string): string {
         return c;
     }
   });
+}
+
+// ============================================================================
+// Mutations Rendering
+// ============================================================================
+
+/**
+ * Render mutations section (status-bearing readable element changes).
+ *
+ * Format:
+ * <mutations>
+ *   <text-changed id="rd-abc123">Loading... → Loaded!</text-changed>
+ *   <status id="rd-def456" role="alert">Error occurred</status>
+ * </mutations>
+ */
+function renderMutations(mutations: {
+  textChanged: TextChange[];
+  statusAppeared: StatusNode[];
+}): string[] {
+  const { textChanged, statusAppeared } = mutations;
+
+  if (textChanged.length === 0 && statusAppeared.length === 0) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  lines.push('    <mutations>');
+
+  // Render text changes
+  for (const change of textChanged) {
+    const from = escapeXml(change.from);
+    const to = escapeXml(change.to);
+    lines.push(`      <text-changed id="${change.eid}">${from} → ${to}</text-changed>`);
+  }
+
+  // Render status elements that appeared
+  for (const status of statusAppeared) {
+    const text = escapeXml(status.text);
+    lines.push(`      <status id="${status.eid}" role="${status.role}">${text}</status>`);
+  }
+
+  lines.push('    </mutations>');
+  return lines;
 }
 
 // ============================================================================

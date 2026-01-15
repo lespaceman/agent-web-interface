@@ -12,6 +12,8 @@ import { getLogger } from '../shared/services/logging.service.js';
 import { BrowserSessionError } from '../shared/errors/browser-session.error.js';
 import type { ConnectionHealth } from '../state/health.types.js';
 import { observationAccumulator } from '../observation/index.js';
+import { waitForNetworkQuiet, NAVIGATION_NETWORK_IDLE_TIMEOUT_MS } from './page-stabilization.js';
+import { getOrCreateTracker, removeTracker } from './page-network-tracker.js';
 
 /**
  * Connection state machine states
@@ -425,6 +427,13 @@ export class SessionManager {
     // Inject observation accumulator for DOM mutation tracking
     await observationAccumulator.inject(page);
 
+    // Attach network tracker for this page
+    const tracker = getOrCreateTracker(page);
+    tracker.attach(page);
+
+    // Cleanup tracker on unexpected page close
+    page.on('close', () => removeTracker(page));
+
     this.logger.debug('Adopted page', { page_id: handle.page_id, url: page.url() });
 
     return handle;
@@ -464,6 +473,13 @@ export class SessionManager {
 
     // Inject observation accumulator for DOM mutation tracking
     await observationAccumulator.inject(page);
+
+    // Attach network tracker for this page
+    const tracker = getOrCreateTracker(page);
+    tracker.attach(page);
+
+    // Cleanup tracker on unexpected page close
+    page.on('close', () => removeTracker(page));
 
     return handle;
   }
@@ -542,6 +558,9 @@ export class SessionManager {
       return false;
     }
 
+    // Cleanup network tracker before closing
+    removeTracker(handle.page);
+
     try {
       // Close CDP session first
       await handle.cdp.close();
@@ -573,6 +592,10 @@ export class SessionManager {
   /**
    * Navigate a page to a URL
    *
+   * Waits for both DOM ready and network idle to ensure the page is fully loaded.
+   * Network idle timeout is generous (5s) but never throws - pages with persistent
+   * connections (websockets, long-polling, analytics) may never reach idle.
+   *
    * @param page_id - The page identifier
    * @param url - URL to navigate to
    * @throws Error if page not found or navigation fails
@@ -584,7 +607,21 @@ export class SessionManager {
     }
 
     try {
+      // Wait for DOM ready first (fast baseline)
       await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
+
+      // Mark navigation on tracker (bumps generation to ignore stale events)
+      const tracker = getOrCreateTracker(handle.page);
+      tracker.markNavigation();
+
+      // Then wait for network to settle (catches API calls)
+      const networkIdle = await waitForNetworkQuiet(
+        handle.page,
+        NAVIGATION_NETWORK_IDLE_TIMEOUT_MS
+      );
+      if (!networkIdle) {
+        this.logger.debug('Network did not reach idle state', { page_id, url });
+      }
 
       this.registry.updateMetadata(page_id, {
         url: handle.page.url(),

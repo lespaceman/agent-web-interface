@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { Page } from 'playwright';
 import { SnapshotCompiler } from '../../src/snapshot/snapshot-compiler.js';
 import { createMockCdpClient, MockCdpClient } from '../mocks/cdp-client.mock.js';
+import { createMockPage } from '../mocks/playwright.mock.js';
 
 /**
  * Generate a mock DOM tree with N interactive elements
@@ -187,14 +188,13 @@ function generateMockAxTree(nodeCount: number): Record<string, unknown> {
 }
 
 /**
- * Create a mock Playwright Page
+ * Create a mock page for benchmark tests.
  */
-function createMockPage(): Page {
-  return {
-    url: () => 'https://benchmark.example.com',
-    title: () => Promise.resolve('Benchmark Page'),
-    viewportSize: () => ({ width: 1280, height: 720 }),
-  } as unknown as Page;
+function createBenchmarkMockPage(): Page {
+  return createMockPage({
+    url: 'https://benchmark.example.com',
+    title: 'Benchmark Page',
+  }) as unknown as Page;
 }
 
 describe('Snapshot Compiler Performance Benchmarks', () => {
@@ -204,7 +204,7 @@ describe('Snapshot Compiler Performance Benchmarks', () => {
 
   beforeEach(() => {
     mockCdp = createMockCdpClient();
-    mockPage = createMockPage();
+    mockPage = createBenchmarkMockPage();
     cdpCallCount = 0;
   });
 

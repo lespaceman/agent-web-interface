@@ -7,17 +7,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { stabilizeDom } from '../../../src/delta/dom-stabilizer.js';
 import type { Page } from 'playwright';
+import { createMockPage, type MockPage } from '../../mocks/playwright.mock.js';
+
+/**
+ * Helper to create a mock page with a specific evaluate result.
+ */
+function createMockPageWithEvaluate(evaluateResult: unknown): MockPage {
+  const page = createMockPage();
+  page.evaluate.mockResolvedValue(evaluateResult);
+  return page;
+}
 
 describe('stabilizeDom', () => {
-  function createMockPage(evaluateResult: unknown) {
-    return {
-      evaluate: vi.fn().mockResolvedValue(evaluateResult),
-    };
-  }
-
   describe('stable page (no mutations)', () => {
     it('should return stable status when no mutations within quiet window', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: true,
         elapsed: 100,
         mutationCount: 0,
@@ -31,7 +35,7 @@ describe('stabilizeDom', () => {
     });
 
     it('should return stable status with mutation count when mutations settled', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: true,
         elapsed: 250,
         mutationCount: 5,
@@ -47,7 +51,7 @@ describe('stabilizeDom', () => {
 
   describe('timeout path (continuous mutations)', () => {
     it('should return timeout status when mutations continue past max timeout', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: false,
         elapsed: 2000,
         mutationCount: 100,
@@ -62,7 +66,7 @@ describe('stabilizeDom', () => {
     });
 
     it('should respect custom maxTimeoutMs option', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: false,
         elapsed: 500,
         mutationCount: 10,
@@ -77,7 +81,7 @@ describe('stabilizeDom', () => {
 
   describe('missing document.body (navigation edge case)', () => {
     it('should handle missing document.body gracefully', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: false,
         elapsed: 0,
         mutationCount: 0,
@@ -117,7 +121,7 @@ describe('stabilizeDom', () => {
 
   describe('custom options', () => {
     it('should pass quietWindowMs to page.evaluate', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: true,
         elapsed: 50,
         mutationCount: 0,
@@ -132,7 +136,7 @@ describe('stabilizeDom', () => {
     });
 
     it('should pass maxTimeoutMs to page.evaluate', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: true,
         elapsed: 100,
         mutationCount: 0,
@@ -147,7 +151,7 @@ describe('stabilizeDom', () => {
     });
 
     it('should use default options when none provided', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: true,
         elapsed: 100,
         mutationCount: 0,
@@ -164,7 +168,7 @@ describe('stabilizeDom', () => {
 
   describe('waitTimeMs tracking', () => {
     it('should track actual wall-clock time', async () => {
-      const mockPage = createMockPage({
+      const mockPage = createMockPageWithEvaluate({
         stable: true,
         elapsed: 100,
         mutationCount: 0,

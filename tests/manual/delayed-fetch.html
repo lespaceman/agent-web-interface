@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<body>
+  <h1>Network Idle Stabilization Test</h1>
+  <button id="load">Load Data</button>
+  <div id="status" role="status">Idle</div>
+
+  <script>
+    document.getElementById('load').onclick = async () => {
+      document.getElementById('status').textContent = 'Loading...';
+
+      await fetch('https://httpbin.org/delay/2'); // 2s delay
+
+      document.getElementById('status').textContent = 'Loaded!';
+    };
+  </script>
+</body>
+</html>

@@ -9,7 +9,14 @@ import {
   renderObservations,
   renderSingleObservation,
   summarizeSignals,
+  renderStateXml,
 } from '../../../src/state/state-renderer.js';
+import type {
+  StateResponseObject,
+  DiffResponse,
+  BaselineResponse,
+  Atoms,
+} from '../../../src/state/types.js';
 import type {
   DOMObservation,
   ObservationGroups,
@@ -424,5 +431,214 @@ describe('renderObservations', () => {
     // Count occurrences of "Error message" - should only appear once after deduplication
     const matches = xml.match(/Error message/g) ?? [];
     expect(matches.length).toBe(1);
+  });
+});
+
+// ============================================================================
+// Mutations Rendering Tests (via renderStateXml)
+// ============================================================================
+
+describe('renderStateXml mutations', () => {
+  /**
+   * Create a minimal StateResponseObject for testing.
+   */
+  function createStateResponse(
+    diffOverrides: Partial<DiffResponse['diff']> = {}
+  ): StateResponseObject {
+    const atoms: Atoms = {
+      viewport: { w: 1280, h: 720, dpr: 1 },
+      scroll: { x: 0, y: 0 },
+    };
+
+    const diff: DiffResponse = {
+      mode: 'diff',
+      diff: {
+        actionables: { added: [], removed: [], changed: [] },
+        mutations: { textChanged: [], statusAppeared: [] },
+        isEmpty: true,
+        atoms: [],
+        ...diffOverrides,
+      },
+    };
+
+    return {
+      state: {
+        sid: 'test-session',
+        step: 1,
+        doc: {
+          url: 'https://example.com/',
+          origin: 'https://example.com',
+          title: 'Test Page',
+          doc_id: 'test-doc',
+          nav_type: 'soft',
+          history_idx: 0,
+        },
+        layer: {
+          active: 'main',
+          stack: ['main'],
+          pointer_lock: false,
+        },
+        timing: {
+          ts: '2024-01-01T00:00:00Z',
+          dom_ready: true,
+          network_busy: false,
+        },
+        hash: {
+          ui: 'abc123',
+          layer: 'def456',
+        },
+      },
+      diff,
+      actionables: [],
+      counts: { shown: 0, total_in_layer: 0 },
+      limits: { max_actionables: 1000, actionables_capped: false },
+      atoms,
+      tokens: 0,
+    };
+  }
+
+  it('should render empty mutations section when no mutations', () => {
+    const response = createStateResponse({
+      mutations: { textChanged: [], statusAppeared: [] },
+      isEmpty: true,
+    });
+
+    const xml = renderStateXml(response);
+
+    // Should have empty="true" but no <mutations> section
+    expect(xml).toContain('empty="true"');
+    expect(xml).not.toContain('<mutations>');
+  });
+
+  it('should render text-changed elements in mutations', () => {
+    const response = createStateResponse({
+      mutations: {
+        textChanged: [{ eid: 'rd-abc123', from: 'Loading...', to: 'Loaded!' }],
+        statusAppeared: [],
+      },
+      isEmpty: false,
+    });
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('empty="false"');
+    expect(xml).toContain('<mutations>');
+    expect(xml).toContain('<text-changed id="rd-abc123">Loading... → Loaded!</text-changed>');
+    expect(xml).toContain('</mutations>');
+  });
+
+  it('should render status elements in mutations', () => {
+    const response = createStateResponse({
+      mutations: {
+        textChanged: [],
+        statusAppeared: [{ eid: 'rd-def456', role: 'status', text: 'Success!' }],
+      },
+      isEmpty: false,
+    });
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<mutations>');
+    expect(xml).toContain('<status id="rd-def456" role="status">Success!</status>');
+    expect(xml).toContain('</mutations>');
+  });
+
+  it('should render alert elements in mutations', () => {
+    const response = createStateResponse({
+      mutations: {
+        textChanged: [],
+        statusAppeared: [{ eid: 'rd-alert1', role: 'alert', text: 'Error occurred!' }],
+      },
+      isEmpty: false,
+    });
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<status id="rd-alert1" role="alert">Error occurred!</status>');
+  });
+
+  it('should render both text changes and status appearances', () => {
+    const response = createStateResponse({
+      mutations: {
+        textChanged: [{ eid: 'rd-progress', from: '50%', to: '100%' }],
+        statusAppeared: [{ eid: 'rd-done', role: 'status', text: 'Complete!' }],
+      },
+      isEmpty: false,
+    });
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<mutations>');
+    expect(xml).toContain('<text-changed id="rd-progress">50% → 100%</text-changed>');
+    expect(xml).toContain('<status id="rd-done" role="status">Complete!</status>');
+    expect(xml).toContain('</mutations>');
+  });
+
+  it('should escape XML special characters in mutations', () => {
+    const response = createStateResponse({
+      mutations: {
+        textChanged: [{ eid: 'rd-special', from: '<script>', to: '</script>' }],
+        statusAppeared: [{ eid: 'rd-amp', role: 'status', text: 'Save & Continue' }],
+      },
+      isEmpty: false,
+    });
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('&lt;script&gt;');
+    expect(xml).toContain('&lt;/script&gt;');
+    expect(xml).toContain('Save &amp; Continue');
+  });
+
+  it('should not render mutations section for baseline response', () => {
+    const atoms: Atoms = {
+      viewport: { w: 1280, h: 720, dpr: 1 },
+      scroll: { x: 0, y: 0 },
+    };
+
+    const baseline: BaselineResponse = {
+      mode: 'baseline',
+      reason: 'first',
+    };
+
+    const response: StateResponseObject = {
+      state: {
+        sid: 'test-session',
+        step: 1,
+        doc: {
+          url: 'https://example.com/',
+          origin: 'https://example.com',
+          title: 'Test Page',
+          doc_id: 'test-doc',
+          nav_type: 'hard',
+          history_idx: 0,
+        },
+        layer: {
+          active: 'main',
+          stack: ['main'],
+          pointer_lock: false,
+        },
+        timing: {
+          ts: '2024-01-01T00:00:00Z',
+          dom_ready: true,
+          network_busy: false,
+        },
+        hash: {
+          ui: 'abc123',
+          layer: 'def456',
+        },
+      },
+      diff: baseline,
+      actionables: [],
+      counts: { shown: 0, total_in_layer: 0 },
+      limits: { max_actionables: 1000, actionables_capped: false },
+      atoms,
+      tokens: 0,
+    };
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<baseline reason="first"');
+    expect(xml).not.toContain('<mutations>');
   });
 });

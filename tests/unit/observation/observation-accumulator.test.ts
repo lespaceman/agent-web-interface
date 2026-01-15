@@ -6,17 +6,22 @@
 
 /* eslint-disable @typescript-eslint/unbound-method */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ObservationAccumulator } from '../../../src/observation/observation-accumulator.js';
 import type { RawMutationEntry } from '../../../src/observation/observation.types.js';
+import { createMockPage } from '../../mocks/playwright.mock.js';
 
 /**
- * Create a mock Page object.
+ * Create a mock Page object with custom evaluate implementation.
  */
-function createMockPage(evaluateImpl?: () => Promise<unknown>) {
-  return {
-    evaluate: vi.fn().mockImplementation(evaluateImpl ?? (() => Promise.resolve(undefined))),
-  } as unknown as Parameters<ObservationAccumulator['inject']>[0];
+function createMockPageWithEvaluate(
+  evaluateImpl?: () => Promise<unknown>
+): Parameters<ObservationAccumulator['inject']>[0] {
+  const page = createMockPage();
+  if (evaluateImpl) {
+    page.evaluate.mockImplementation(evaluateImpl);
+  }
+  return page as unknown as Parameters<ObservationAccumulator['inject']>[0];
 }
 
 /**
@@ -52,13 +57,13 @@ describe('ObservationAccumulator', () => {
 
   describe('inject', () => {
     it('should call page.evaluate with script', async () => {
-      const page = createMockPage();
+      const page = createMockPageWithEvaluate();
       await accumulator.inject(page);
       expect(page.evaluate).toHaveBeenCalled();
     });
 
     it('should not throw on injection failure', async () => {
-      const page = createMockPage(() => Promise.reject(new Error('Navigation')));
+      const page = createMockPageWithEvaluate(() => Promise.reject(new Error('Navigation')));
       await expect(accumulator.inject(page)).resolves.not.toThrow();
     });
   });
@@ -66,7 +71,7 @@ describe('ObservationAccumulator', () => {
   describe('ensureInjected', () => {
     it('should inject when no accumulator exists', async () => {
       // When evaluate returns true (needs reinjection), inject should be called
-      const page = createMockPage(() => Promise.resolve(true));
+      const page = createMockPageWithEvaluate(() => Promise.resolve(true));
       await accumulator.ensureInjected(page);
       // Should be called twice: once to check staleness, once to inject
       expect(page.evaluate).toHaveBeenCalledTimes(2);
@@ -74,7 +79,7 @@ describe('ObservationAccumulator', () => {
 
     it('should not inject when observer is still valid', async () => {
       // When evaluate returns false (observer valid), no re-injection needed
-      const page = createMockPage(() => Promise.resolve(false));
+      const page = createMockPageWithEvaluate(() => Promise.resolve(false));
       await accumulator.ensureInjected(page);
       // Should only be called once (just the staleness check)
       expect(page.evaluate).toHaveBeenCalledTimes(1);
@@ -82,7 +87,7 @@ describe('ObservationAccumulator', () => {
 
     it('should inject when observer is stale', async () => {
       // When evaluate returns true (stale observer detected), inject should be called
-      const page = createMockPage(() => Promise.resolve(true));
+      const page = createMockPageWithEvaluate(() => Promise.resolve(true));
       await accumulator.ensureInjected(page);
       // Should be called twice: once to check/cleanup stale, once to inject
       expect(page.evaluate).toHaveBeenCalledTimes(2);
@@ -90,7 +95,7 @@ describe('ObservationAccumulator', () => {
 
     it('should inject on staleness check error', async () => {
       // When staleness check fails, assume we need to inject
-      const page = createMockPage(() => Promise.reject(new Error('Page navigating')));
+      const page = createMockPageWithEvaluate(() => Promise.reject(new Error('Page navigating')));
       await expect(accumulator.ensureInjected(page)).resolves.not.toThrow();
       // Should be called twice: failed check returns true, then inject
       expect(page.evaluate).toHaveBeenCalledTimes(2);
@@ -99,7 +104,9 @@ describe('ObservationAccumulator', () => {
 
   describe('getObservations', () => {
     it('should return empty arrays when accumulator not present', async () => {
-      const page = createMockPage(() => Promise.resolve({ duringAction: [], sincePrevious: [] }));
+      const page = createMockPageWithEvaluate(() =>
+        Promise.resolve({ duringAction: [], sincePrevious: [] })
+      );
       const result = await accumulator.getObservations(page, Date.now());
       expect(result.duringAction).toEqual([]);
       expect(result.sincePrevious).toEqual([]);
@@ -116,7 +123,7 @@ describe('ObservationAccumulator', () => {
         significance: 3,
       });
 
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -142,7 +149,7 @@ describe('ObservationAccumulator', () => {
         appearedAfterDelay: true,
       });
 
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -163,7 +170,7 @@ describe('ObservationAccumulator', () => {
       const oldTimestamp = Date.now() - 2000; // 2 seconds ago
       const rawEntry = createMockRawEntry({ timestamp: oldTimestamp });
 
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [], sincePrevious: [rawEntry] })
       );
 
@@ -175,7 +182,9 @@ describe('ObservationAccumulator', () => {
     });
 
     it('should return empty arrays on error', async () => {
-      const page = createMockPage(() => Promise.reject(new Error('Navigation occurred')));
+      const page = createMockPageWithEvaluate(() =>
+        Promise.reject(new Error('Navigation occurred'))
+      );
 
       const result = await accumulator.getObservations(page, Date.now());
       expect(result.duringAction).toEqual([]);
@@ -187,7 +196,7 @@ describe('ObservationAccumulator', () => {
     it('should only return sincePrevious observations', async () => {
       const rawEntry = createMockRawEntry();
 
-      const page = createMockPage(() => Promise.resolve({ sincePrevious: [rawEntry] }));
+      const page = createMockPageWithEvaluate(() => Promise.resolve({ sincePrevious: [rawEntry] }));
 
       const result = await accumulator.getAccumulatedObservations(page);
 
@@ -196,7 +205,7 @@ describe('ObservationAccumulator', () => {
     });
 
     it('should return empty arrays on error', async () => {
-      const page = createMockPage(() => Promise.reject(new Error('Page closed')));
+      const page = createMockPageWithEvaluate(() => Promise.reject(new Error('Page closed')));
 
       const result = await accumulator.getAccumulatedObservations(page);
       expect(result.duringAction).toEqual([]);
@@ -206,32 +215,32 @@ describe('ObservationAccumulator', () => {
 
   describe('reset', () => {
     it('should call reset on accumulator', async () => {
-      const page = createMockPage();
+      const page = createMockPageWithEvaluate();
       await accumulator.reset(page);
       expect(page.evaluate).toHaveBeenCalled();
     });
 
     it('should not throw on error', async () => {
-      const page = createMockPage(() => Promise.reject(new Error('Navigation')));
+      const page = createMockPageWithEvaluate(() => Promise.reject(new Error('Navigation')));
       await expect(accumulator.reset(page)).resolves.not.toThrow();
     });
   });
 
   describe('hasUnreported', () => {
     it('should return true when there are unreported observations', async () => {
-      const page = createMockPage(() => Promise.resolve(true));
+      const page = createMockPageWithEvaluate(() => Promise.resolve(true));
       const result = await accumulator.hasUnreported(page);
       expect(result).toBe(true);
     });
 
     it('should return false when no unreported observations', async () => {
-      const page = createMockPage(() => Promise.resolve(false));
+      const page = createMockPageWithEvaluate(() => Promise.resolve(false));
       const result = await accumulator.hasUnreported(page);
       expect(result).toBe(false);
     });
 
     it('should return false on error', async () => {
-      const page = createMockPage(() => Promise.reject(new Error('Error')));
+      const page = createMockPageWithEvaluate(() => Promise.reject(new Error('Error')));
       const result = await accumulator.hasUnreported(page);
       expect(result).toBe(false);
     });
@@ -300,7 +309,7 @@ describe('ObservationAccumulator', () => {
   describe('rawToObservation conversion', () => {
     it('should convert added type to appeared', async () => {
       const rawEntry = createMockRawEntry({ type: 'added' });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -310,7 +319,7 @@ describe('ObservationAccumulator', () => {
 
     it('should convert removed type to disappeared', async () => {
       const rawEntry = createMockRawEntry({ type: 'removed' });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -320,7 +329,7 @@ describe('ObservationAccumulator', () => {
 
     it('should detect dialog from role', async () => {
       const rawEntry = createMockRawEntry({ role: 'dialog' });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -330,7 +339,7 @@ describe('ObservationAccumulator', () => {
 
     it('should detect dialog from tag', async () => {
       const rawEntry = createMockRawEntry({ tag: 'dialog', role: undefined });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -340,7 +349,7 @@ describe('ObservationAccumulator', () => {
 
     it('should detect dialog from aria-modal', async () => {
       const rawEntry = createMockRawEntry({ ariaModal: 'true', role: undefined });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -350,7 +359,7 @@ describe('ObservationAccumulator', () => {
 
     it('should detect high z-index (> 1000)', async () => {
       const rawEntry = createMockRawEntry({ zIndex: 1001 });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -360,7 +369,7 @@ describe('ObservationAccumulator', () => {
 
     it('should not detect high z-index (== 1000)', async () => {
       const rawEntry = createMockRawEntry({ zIndex: 1000 });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -372,7 +381,7 @@ describe('ObservationAccumulator', () => {
       const rawEntry = createMockRawEntry({
         viewportCoverage: { widthPct: 51, heightPct: 0 },
       });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 
@@ -384,7 +393,7 @@ describe('ObservationAccumulator', () => {
       const rawEntry = createMockRawEntry({
         viewportCoverage: { widthPct: 0, heightPct: 31 },
       });
-      const page = createMockPage(() =>
+      const page = createMockPageWithEvaluate(() =>
         Promise.resolve({ duringAction: [rawEntry], sincePrevious: [] })
       );
 

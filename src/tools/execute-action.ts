@@ -19,6 +19,11 @@ import type { ClickOutcome } from '../state/element-ref.types.js';
 import type { RuntimeHealth } from '../state/health.types.js';
 import { createHealthyRuntime } from '../state/health.types.js';
 import { observationAccumulator } from '../observation/index.js';
+import {
+  waitForNetworkQuiet,
+  ACTION_NETWORK_IDLE_TIMEOUT_MS,
+  NAVIGATION_NETWORK_IDLE_TIMEOUT_MS,
+} from '../browser/page-stabilization.js';
 
 // ============================================================================
 // State Manager Registry
@@ -133,42 +138,59 @@ async function captureSnapshotFallback(
 // ============================================================================
 
 /**
- * Stabilize page after an action using Playwright's waiting strategy.
+ * Stabilize page after an action using tiered waiting strategy.
  *
- * This addresses the core issue: our MutationObserver-based stabilizeDom() fails
- * when a navigation occurs (execution context destroyed). This function:
+ * This addresses the core issue: actions may trigger API calls that complete
+ * after DOM mutations settle. The tiered approach:
  *
- * 1. Tries stabilizeDom() first (handles SPA-style DOM updates)
- * 2. If stabilizeDom() fails with 'error' status (likely navigation), falls back
- *    to Playwright's waitForLoadState('domcontentloaded')
+ * 1. Wait for DOM to stabilize (MutationObserver) - catches SPA rendering
+ * 2. Wait for network to quiet down (networkidle) - catches pending API calls
+ * 3. If DOM stabilization fails (navigation), fall back to Playwright load state
  *
- * This gives us the best of both worlds:
- * - Fast response for SPA interactions (MutationObserver)
- * - Proper handling of full navigations (Playwright)
+ * Timeouts are generous but never throw - we proceed even if network stays busy
+ * (common with analytics, long-polling, websockets).
  *
  * @param page - Playwright Page instance
+ * @param networkTimeoutMs - Optional custom timeout for network idle (default: 3000ms)
  * @returns Stabilization result with status
  */
-async function stabilizeAfterAction(page: Page): Promise<StabilizationResult> {
-  // Try MutationObserver-based stabilization first
+async function stabilizeAfterAction(
+  page: Page,
+  networkTimeoutMs: number = ACTION_NETWORK_IDLE_TIMEOUT_MS
+): Promise<StabilizationResult> {
+  // Step 1: Try MutationObserver-based DOM stabilization first
   const result = await stabilizeDom(page);
 
-  // If stabilization succeeded or timed out (DOM still mutating), we're done
+  // Step 2: Handle based on DOM stabilization result
   if (result.status === 'stable' || result.status === 'timeout') {
+    // DOM settled (or timed out) - now wait for network to quiet down
+    // This catches API calls that haven't rendered to DOM yet
+    const networkIdle = await waitForNetworkQuiet(page, networkTimeoutMs);
+
+    if (!networkIdle && result.status === 'stable') {
+      // DOM was stable but network didn't idle - add a note
+      return {
+        ...result,
+        warning: result.warning ?? 'Network did not reach idle state within timeout',
+      };
+    }
+
     return result;
   }
 
   // status === 'error' means page.evaluate() failed, likely due to navigation
   // Fall back to Playwright's load state waiting
   try {
-    // Wait for the new document to be ready
-    // Using 'domcontentloaded' as it's faster than 'load' and sufficient for DOM access
+    // Wait for the new document to be ready first
     await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+
+    // Then wait for network to settle on the new page
+    await waitForNetworkQuiet(page, networkTimeoutMs);
 
     return {
       status: 'stable',
       waitTimeMs: result.waitTimeMs,
-      warning: 'Navigation detected; waited for domcontentloaded',
+      warning: 'Navigation detected; waited for domcontentloaded + networkidle',
     };
   } catch (waitError) {
     // If waitForLoadState also fails, the page might be in an unusual state
@@ -180,6 +202,19 @@ async function stabilizeAfterAction(page: Page): Promise<StabilizationResult> {
       warning: `${result.warning}. Fallback waitForLoadState also failed: ${message}`,
     };
   }
+}
+
+/**
+ * Stabilize page after explicit navigation (goto, back, forward, reload).
+ *
+ * Uses a longer network timeout since navigations typically trigger more
+ * requests than in-page actions.
+ *
+ * @param page - Playwright Page instance
+ * @returns Stabilization result with status
+ */
+export async function stabilizeAfterNavigation(page: Page): Promise<StabilizationResult> {
+  return stabilizeAfterAction(page, NAVIGATION_NETWORK_IDLE_TIMEOUT_MS);
 }
 
 /**
