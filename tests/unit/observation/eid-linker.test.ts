@@ -34,6 +34,8 @@ function createSignals(overrides: Partial<SignificanceSignals> = {}): Significan
     coversSignificantViewport: false,
     isBodyDirectChild: false,
     containsInteractiveElements: false,
+    isVisibleInViewport: false,
+    hasNonTrivialText: false,
     appearedAfterDelay: false,
     wasShortLived: false,
     ...overrides,

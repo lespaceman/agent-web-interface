@@ -25,6 +25,10 @@ export interface SignificanceSignals {
   isBodyDirectChild: boolean; // parent === document.body
   containsInteractiveElements: boolean; // has button, a, input, select, textarea
 
+  // Universal signals (work without ARIA)
+  isVisibleInViewport: boolean; // element visible in viewport, not hidden
+  hasNonTrivialText: boolean; // has meaningful text (>= 3 chars)
+
   // Temporal signals (computed by accumulator)
   appearedAfterDelay: boolean; // appeared > 100ms after page load/action
   wasShortLived: boolean; // existed < 3000ms before removal
@@ -48,6 +52,10 @@ export const SIGNIFICANCE_WEIGHTS: Record<keyof SignificanceSignals, number> = {
   // Structural signals
   isBodyDirectChild: 1,
   containsInteractiveElements: 1,
+
+  // Universal signals (work without ARIA)
+  isVisibleInViewport: 2,
+  hasNonTrivialText: 1,
 
   // Temporal signals
   appearedAfterDelay: 2,
@@ -109,6 +117,9 @@ export interface DOMObservation {
 
   /** Has this observation been included in a response? */
   reported: boolean;
+
+  /** Shadow DOM path - identifiers of shadow host ancestors (for shadow DOM observations) */
+  shadowPath?: string[];
 }
 
 /**
@@ -141,8 +152,16 @@ export interface RawMutationEntry {
   // Structural signals
   isBodyDirectChild: boolean;
 
+  // Universal signals (work without ARIA)
+  isVisibleInViewport?: boolean;
+  hasNonTrivialText?: boolean;
+
   // Temporal signals
   appearedAfterDelay?: boolean;
+
+  // Shadow DOM context
+  /** Shadow path - identifiers of shadow host ancestors (for shadow DOM observations) */
+  shadowPath?: string[];
 
   // Computed significance
   significance: number;

@@ -165,6 +165,8 @@ export class ObservationAccumulator {
         entry.viewportCoverage.widthPct > 50 || entry.viewportCoverage.heightPct > 30,
       isBodyDirectChild: entry.isBodyDirectChild,
       containsInteractiveElements: entry.hasInteractives,
+      isVisibleInViewport: entry.isVisibleInViewport ?? false,
+      hasNonTrivialText: entry.hasNonTrivialText ?? false,
       appearedAfterDelay: entry.appearedAfterDelay ?? false,
       wasShortLived: false, // Computed when we see removal
     };
@@ -182,6 +184,8 @@ export class ObservationAccumulator {
       },
       timestamp: entry.timestamp,
       reported: false,
+      // Include shadow path if present (for shadow DOM observations)
+      shadowPath: entry.shadowPath,
     };
   }
 

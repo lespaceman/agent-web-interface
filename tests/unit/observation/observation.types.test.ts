@@ -26,6 +26,8 @@ describe('Significance Scoring', () => {
       coversSignificantViewport: false,
       isBodyDirectChild: false,
       containsInteractiveElements: false,
+      isVisibleInViewport: false,
+      hasNonTrivialText: false,
       appearedAfterDelay: false,
       wasShortLived: false,
       ...overrides,
