@@ -29,6 +29,8 @@ function createSignals(overrides: Partial<SignificanceSignals> = {}): Significan
     coversSignificantViewport: false,
     isBodyDirectChild: false,
     containsInteractiveElements: false,
+    isVisibleInViewport: false,
+    hasNonTrivialText: false,
     appearedAfterDelay: false,
     wasShortLived: false,
     ...overrides,
@@ -147,6 +149,8 @@ describe('summarizeSignals', () => {
       coversSignificantViewport: true,
       isBodyDirectChild: true,
       containsInteractiveElements: true,
+      isVisibleInViewport: true,
+      hasNonTrivialText: true,
       appearedAfterDelay: true,
       wasShortLived: true,
     };
