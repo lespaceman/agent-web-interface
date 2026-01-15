@@ -199,6 +199,37 @@ function escapeXml(unsafe: string): string {
 // ============================================================================
 
 /**
+ * Deduplicate observations by tag + text content.
+ * When multiple observations have the same tag and text (e.g., nested wrapper divs),
+ * keep only the one with the highest significance score.
+ *
+ * This prevents noisy duplicate entries from nested DOM structures like:
+ * <div class="toast"><div class="wrapper"><span>message</span></div></div>
+ * where multiple divs would all report the same text content.
+ */
+function deduplicateObservations(observations: DOMObservation[]): DOMObservation[] {
+  if (observations.length <= 1) {
+    return observations;
+  }
+
+  // Group by tag + truncated text (first 50 chars to handle slight variations)
+  const byContent = new Map<string, DOMObservation>();
+
+  for (const obs of observations) {
+    const textKey = obs.content.text.substring(0, 50).trim();
+    const key = `${obs.content.tag}:${textKey}`;
+
+    const existing = byContent.get(key);
+    if (!existing || obs.significance > existing.significance) {
+      // Keep the observation with higher significance
+      byContent.set(key, obs);
+    }
+  }
+
+  return Array.from(byContent.values());
+}
+
+/**
  * Render observations section if there are any significant observations.
  */
 export function renderObservations(observations: ObservationGroups): string[] {
@@ -208,22 +239,26 @@ export function renderObservations(observations: ObservationGroups): string[] {
     return [];
   }
 
+  // Deduplicate observations to avoid noisy duplicates from nested elements
+  const dedupedDuringAction = deduplicateObservations(duringAction);
+  const dedupedSincePrevious = deduplicateObservations(sincePrevious);
+
   const lines: string[] = [];
   lines.push('  <observations>');
 
   // Observations from this action
-  if (duringAction.length > 0) {
+  if (dedupedDuringAction.length > 0) {
     lines.push('    <during_action>');
-    for (const obs of duringAction) {
+    for (const obs of dedupedDuringAction) {
       lines.push(renderSingleObservation(obs, 6));
     }
     lines.push('    </during_action>');
   }
 
   // Observations accumulated since previous tool call
-  if (sincePrevious.length > 0) {
+  if (dedupedSincePrevious.length > 0) {
     lines.push('    <since_previous>');
-    for (const obs of sincePrevious) {
+    for (const obs of dedupedSincePrevious) {
       lines.push(renderSingleObservation(obs, 6));
     }
     lines.push('    </since_previous>');

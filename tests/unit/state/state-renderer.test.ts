@@ -386,4 +386,43 @@ describe('renderObservations', () => {
     const previousIndex = xml.indexOf('Previous');
     expect(duringIndex).toBeLessThan(previousIndex);
   });
+
+  it('should deduplicate observations with same tag and text content', () => {
+    // Simulate duplicate observations from nested elements (e.g., toast with wrapper divs)
+    const obs1 = createObservation({
+      significance: 10,
+      signals: createSignals({
+        isFixedOrSticky: true,
+        hasHighZIndex: true,
+        isBodyDirectChild: true,
+        containsInteractiveElements: true,
+        appearedAfterDelay: true,
+      }),
+      content: { tag: 'div', text: 'Error message', hasInteractives: true },
+    });
+    const obs2 = createObservation({
+      significance: 4,
+      signals: createSignals({
+        containsInteractiveElements: true,
+        appearedAfterDelay: true,
+      }),
+      content: { tag: 'div', text: 'Error message', hasInteractives: true },
+    });
+    const obs3 = createObservation({
+      significance: 4,
+      signals: createSignals({
+        containsInteractiveElements: true,
+        appearedAfterDelay: true,
+      }),
+      content: { tag: 'div', text: 'Error message', hasInteractives: true },
+    });
+
+    const groups = createObservationGroups({ sincePrevious: [obs1, obs2, obs3] });
+    const result = renderObservations(groups);
+    const xml = result.join('\n');
+
+    // Count occurrences of "Error message" - should only appear once after deduplication
+    const matches = xml.match(/Error message/g) ?? [];
+    expect(matches.length).toBe(1);
+  });
 });
