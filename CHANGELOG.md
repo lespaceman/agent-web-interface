@@ -1,3 +1,9 @@
+## [2.1.0] - 2026-01-15
+
+- Merge pull request #16 from lespaceman/claude/rewrite-readme-VfUuq
+- style: fix README formatting
+- docs: rewrite README with cleaner structure and tone
+
 ## [2.0.5] - 2026-01-15
 
 - docs: replace Design Philosophy with Why Athena section
