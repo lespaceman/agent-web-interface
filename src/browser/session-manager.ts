@@ -573,6 +573,10 @@ export class SessionManager {
   /**
    * Navigate a page to a URL
    *
+   * Waits for both DOM ready and network idle to ensure the page is fully loaded.
+   * Network idle timeout is generous (5s) but never throws - pages with persistent
+   * connections (websockets, long-polling, analytics) may never reach idle.
+   *
    * @param page_id - The page identifier
    * @param url - URL to navigate to
    * @throws Error if page not found or navigation fails
@@ -584,7 +588,17 @@ export class SessionManager {
     }
 
     try {
+      // Wait for DOM ready first (fast baseline)
       await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
+
+      // Then wait for network to settle (catches API calls)
+      // This never throws - timeout is OK for pages with persistent connections
+      try {
+        await handle.page.waitForLoadState('networkidle', { timeout: 5000 });
+      } catch {
+        // Network didn't idle - that's OK, proceed anyway
+        this.logger.debug('Network did not reach idle state', { page_id, url });
+      }
 
       this.registry.updateMetadata(page_id, {
         url: handle.page.url(),
