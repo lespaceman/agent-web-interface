@@ -16,6 +16,7 @@ import {
   waitForNetworkQuiet,
   NAVIGATION_NETWORK_IDLE_TIMEOUT_MS,
 } from './page-stabilization.js';
+import { getOrCreateTracker, removeTracker } from './page-network-tracker.js';
 
 /**
  * Connection state machine states
@@ -429,6 +430,13 @@ export class SessionManager {
     // Inject observation accumulator for DOM mutation tracking
     await observationAccumulator.inject(page);
 
+    // Attach network tracker for this page
+    const tracker = getOrCreateTracker(page);
+    tracker.attach(page);
+
+    // Cleanup tracker on unexpected page close
+    page.on('close', () => removeTracker(page));
+
     this.logger.debug('Adopted page', { page_id: handle.page_id, url: page.url() });
 
     return handle;
@@ -468,6 +476,13 @@ export class SessionManager {
 
     // Inject observation accumulator for DOM mutation tracking
     await observationAccumulator.inject(page);
+
+    // Attach network tracker for this page
+    const tracker = getOrCreateTracker(page);
+    tracker.attach(page);
+
+    // Cleanup tracker on unexpected page close
+    page.on('close', () => removeTracker(page));
 
     return handle;
   }
@@ -546,6 +561,9 @@ export class SessionManager {
       return false;
     }
 
+    // Cleanup network tracker before closing
+    removeTracker(handle.page);
+
     try {
       // Close CDP session first
       await handle.cdp.close();
@@ -594,6 +612,10 @@ export class SessionManager {
     try {
       // Wait for DOM ready first (fast baseline)
       await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
+
+      // Mark navigation on tracker (bumps generation to ignore stale events)
+      const tracker = getOrCreateTracker(handle.page);
+      tracker.markNavigation();
 
       // Then wait for network to settle (catches API calls)
       const networkIdle = await waitForNetworkQuiet(handle.page, NAVIGATION_NETWORK_IDLE_TIMEOUT_MS);

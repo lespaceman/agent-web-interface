@@ -28,6 +28,8 @@ export interface MockPage {
   isClosed: Mock;
   waitForLoadState: Mock;
   evaluate: Mock;
+  on: Mock;
+  off: Mock;
 }
 
 /**
@@ -77,6 +79,8 @@ export function createMockPage(options: { url?: string; title?: string } = {}): 
     isClosed: vi.fn().mockReturnValue(false),
     waitForLoadState: vi.fn().mockResolvedValue(undefined),
     evaluate: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn(),
+    off: vi.fn(),
   };
 }
 

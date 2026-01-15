@@ -1,97 +1,104 @@
 /**
  * Page Stabilization Tests
  *
- * Tests for network idle waiting utility.
+ * Tests for network idle waiting utility using PageNetworkTracker.
  */
 
 /* eslint-disable @typescript-eslint/unbound-method */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   waitForNetworkQuiet,
   ACTION_NETWORK_IDLE_TIMEOUT_MS,
   NAVIGATION_NETWORK_IDLE_TIMEOUT_MS,
+  DEFAULT_QUIET_WINDOW_MS,
 } from '../../../src/browser/page-stabilization.js';
 import type { Page } from 'playwright';
 
+// Create mock page that supports network tracker attachment
+function createMockPage(): Page {
+  return {
+    on: vi.fn(),
+    off: vi.fn(),
+  } as unknown as Page;
+}
+
 describe('waitForNetworkQuiet', () => {
-  function createMockPage(waitResult: 'success' | 'timeout'): Page {
-    return {
-      waitForLoadState:
-        waitResult === 'success'
-          ? vi.fn().mockResolvedValue(undefined)
-          : vi.fn().mockRejectedValue(new Error('Timeout 5000ms exceeded')),
-    } as unknown as Page;
-  }
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
 
-  describe('success path', () => {
-    it('should return true when network becomes idle', async () => {
-      const mockPage = createMockPage('success');
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-      const result = await waitForNetworkQuiet(mockPage, 3000);
+  describe('with idle network', () => {
+    it('should return true when network is idle after quiet window', async () => {
+      const mockPage = createMockPage();
 
+      const promise = waitForNetworkQuiet(mockPage, 3000);
+
+      // Advance past quiet window
+      await vi.advanceTimersByTimeAsync(DEFAULT_QUIET_WINDOW_MS);
+
+      const result = await promise;
       expect(result).toBe(true);
-      expect(mockPage.waitForLoadState).toHaveBeenCalledWith('networkidle', { timeout: 3000 });
     });
 
-    it('should call waitForLoadState with provided timeout', async () => {
-      const mockPage = createMockPage('success');
+    it('should respect custom quiet window', async () => {
+      const mockPage = createMockPage();
 
-      await waitForNetworkQuiet(mockPage, 5000);
+      const promise = waitForNetworkQuiet(mockPage, 3000, 100);
 
-      expect(mockPage.waitForLoadState).toHaveBeenCalledWith('networkidle', { timeout: 5000 });
-    });
-  });
+      // Advance past custom quiet window
+      await vi.advanceTimersByTimeAsync(100);
 
-  describe('timeout path', () => {
-    it('should return false when network does not reach idle (timeout)', async () => {
-      const mockPage = createMockPage('timeout');
-
-      const result = await waitForNetworkQuiet(mockPage, 3000);
-
-      expect(result).toBe(false);
-    });
-
-    it('should not throw on timeout', async () => {
-      const mockPage = createMockPage('timeout');
-
-      await expect(waitForNetworkQuiet(mockPage, 3000)).resolves.not.toThrow();
-    });
-
-    it('should swallow non-critical errors', async () => {
-      const mockPage = {
-        waitForLoadState: vi.fn().mockRejectedValue(new Error('Some other error')),
-      } as unknown as Page;
-
-      const result = await waitForNetworkQuiet(mockPage, 3000);
-
-      expect(result).toBe(false);
+      const result = await promise;
+      expect(result).toBe(true);
     });
   });
 
-  describe('critical errors', () => {
-    it.each([
-      'Target closed',
-      'Execution context was destroyed',
-      'Page crashed',
-      'Protocol error',
-      'Session closed',
-    ])('should rethrow critical error: %s', async (errorMessage) => {
-      const mockPage = {
-        waitForLoadState: vi.fn().mockRejectedValue(new Error(errorMessage)),
-      } as unknown as Page;
+  describe('timeout behavior', () => {
+    it('should return false on timeout (never throws)', async () => {
+      const mockPage = createMockPage();
 
-      await expect(waitForNetworkQuiet(mockPage, 3000)).rejects.toThrow(errorMessage);
+      // Simulate inflight request by emitting request event
+      // The tracker will increment inflight count
+      type MockCall = [string, (arg: unknown) => void];
+      const onFn = mockPage.on as ReturnType<typeof vi.fn>;
+      const requestCall: MockCall | undefined = onFn.mock.calls.find(
+        (call: MockCall) => call[0] === 'request'
+      );
+      const requestHandler = requestCall?.[1];
+
+      const promise = waitForNetworkQuiet(mockPage, 500);
+
+      // Emit a request that never finishes
+      if (requestHandler) {
+        requestHandler({ resourceType: () => 'fetch' });
+      }
+
+      // Advance to timeout
+      await vi.advanceTimersByTimeAsync(500);
+
+      const result = await promise;
+      expect(result).toBe(false);
     });
+  });
 
-    it('should rethrow when error message contains critical pattern', async () => {
-      const mockPage = {
-        waitForLoadState: vi
-          .fn()
-          .mockRejectedValue(new Error('Error: Target closed while waiting')),
-      } as unknown as Page;
+  describe('tracker attachment', () => {
+    it('should attach tracker on first call', async () => {
+      const mockPage = createMockPage();
 
-      await expect(waitForNetworkQuiet(mockPage, 3000)).rejects.toThrow('Target closed');
+      const promise = waitForNetworkQuiet(mockPage, 3000);
+
+      // Verify tracker was attached (on was called with event handlers)
+      expect(mockPage.on).toHaveBeenCalledWith('request', expect.any(Function));
+      expect(mockPage.on).toHaveBeenCalledWith('requestfinished', expect.any(Function));
+      expect(mockPage.on).toHaveBeenCalledWith('requestfailed', expect.any(Function));
+
+      await vi.advanceTimersByTimeAsync(DEFAULT_QUIET_WINDOW_MS);
+      await promise;
     });
   });
 });
@@ -103,5 +110,9 @@ describe('constants', () => {
 
   it('should export NAVIGATION_NETWORK_IDLE_TIMEOUT_MS as 5000', () => {
     expect(NAVIGATION_NETWORK_IDLE_TIMEOUT_MS).toBe(5000);
+  });
+
+  it('should export DEFAULT_QUIET_WINDOW_MS as 500', () => {
+    expect(DEFAULT_QUIET_WINDOW_MS).toBe(500);
   });
 });

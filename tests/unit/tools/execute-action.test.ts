@@ -86,6 +86,8 @@ function createMockPageHandle(overrides: Partial<PageHandle> = {}): PageHandle {
     page: {
       url: vi.fn().mockReturnValue('https://example.com/page'),
       waitForLoadState: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn(),
+      off: vi.fn(),
     } as unknown as PageHandle['page'],
     cdp: {
       send: vi.fn().mockResolvedValue({
@@ -381,6 +383,8 @@ describe('Execute Action', () => {
           return callCount === 1 ? 'https://example.com/page1' : 'https://example.com/page2';
         }),
         waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
       };
 
       const handle = createMockPageHandle({
@@ -439,6 +443,8 @@ describe('Execute Action', () => {
           return callCount === 1 ? 'https://example.com/page1' : 'https://example.com/page2';
         }),
         waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
       };
 
       const handle = createMockPageHandle({
@@ -464,6 +470,8 @@ describe('Execute Action', () => {
       const mockPage = {
         url: vi.fn().mockReturnValue('https://example.com/page'),
         waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const mockCdp = {
         send: vi.fn().mockResolvedValue({
@@ -501,6 +509,8 @@ describe('Execute Action', () => {
       const mockPage = {
         url: vi.fn().mockReturnValue('https://example.com/page'),
         waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
       };
       const mockCdp = {
         send: vi.fn().mockResolvedValue({

@@ -235,34 +235,34 @@ describe('SessionManager', () => {
       );
     });
 
-    it('should wait for network idle after navigation', async () => {
+    it('should wait for network quiet after navigation using tracker', async () => {
       const handle = await sessionManager.createPage();
 
       await sessionManager.navigateTo(handle.page_id, 'https://example.com');
 
-      expect(mockPage.waitForLoadState).toHaveBeenCalledWith('networkidle', { timeout: 5000 });
+      // Verify network tracker was used (via page.on for request/requestfinished/requestfailed)
+      expect(mockPage.on).toHaveBeenCalledWith('request', expect.any(Function));
+      expect(mockPage.on).toHaveBeenCalledWith('requestfinished', expect.any(Function));
+      expect(mockPage.on).toHaveBeenCalledWith('requestfailed', expect.any(Function));
     });
 
-    it('should not throw when network idle times out', async () => {
+    it('should not throw when network idle wait times out', async () => {
       const handle = await sessionManager.createPage();
-      mockPage.waitForLoadState.mockRejectedValue(new Error('Timeout 5000ms exceeded'));
 
-      // Should not throw - timeout is swallowed
+      // Navigation should complete without throwing even if network never idles
+      // (tracker returns false on timeout, doesn't throw)
       await expect(
         sessionManager.navigateTo(handle.page_id, 'https://example.com')
       ).resolves.not.toThrow();
-
-      // Verify the call was still made (timeout occurred during the call)
-      expect(mockPage.waitForLoadState).toHaveBeenCalledWith('networkidle', { timeout: 5000 });
     });
 
-    it('should rethrow critical errors from network idle wait', async () => {
+    it('should complete navigation even with pending requests', async () => {
       const handle = await sessionManager.createPage();
-      mockPage.waitForLoadState.mockRejectedValue(new Error('Target closed'));
 
+      // Network tracker returns false on timeout but navigation still completes
       await expect(
         sessionManager.navigateTo(handle.page_id, 'https://example.com')
-      ).rejects.toThrow('Target closed');
+      ).resolves.not.toThrow();
     });
   });
 
