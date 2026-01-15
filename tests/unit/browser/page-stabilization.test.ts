@@ -4,8 +4,6 @@
  * Tests for network idle waiting utility using PageNetworkTracker.
  */
 
-/* eslint-disable @typescript-eslint/unbound-method */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   waitForNetworkQuiet,
@@ -14,14 +12,7 @@ import {
   DEFAULT_QUIET_WINDOW_MS,
 } from '../../../src/browser/page-stabilization.js';
 import type { Page } from 'playwright';
-
-// Create mock page that supports network tracker attachment
-function createMockPage(): Page {
-  return {
-    on: vi.fn(),
-    off: vi.fn(),
-  } as unknown as Page;
-}
+import { createMockPageWithEvents } from '../../mocks/playwright.mock.js';
 
 describe('waitForNetworkQuiet', () => {
   beforeEach(() => {
@@ -34,9 +25,9 @@ describe('waitForNetworkQuiet', () => {
 
   describe('with idle network', () => {
     it('should return true when network is idle after quiet window', async () => {
-      const mockPage = createMockPage();
+      const mockPage = createMockPageWithEvents();
 
-      const promise = waitForNetworkQuiet(mockPage, 3000);
+      const promise = waitForNetworkQuiet(mockPage as unknown as Page, 3000);
 
       // Advance past quiet window
       await vi.advanceTimersByTimeAsync(DEFAULT_QUIET_WINDOW_MS);
@@ -46,9 +37,9 @@ describe('waitForNetworkQuiet', () => {
     });
 
     it('should respect custom quiet window', async () => {
-      const mockPage = createMockPage();
+      const mockPage = createMockPageWithEvents();
 
-      const promise = waitForNetworkQuiet(mockPage, 3000, 100);
+      const promise = waitForNetworkQuiet(mockPage as unknown as Page, 3000, 100);
 
       // Advance past custom quiet window
       await vi.advanceTimersByTimeAsync(100);
@@ -60,23 +51,12 @@ describe('waitForNetworkQuiet', () => {
 
   describe('timeout behavior', () => {
     it('should return false on timeout (never throws)', async () => {
-      const mockPage = createMockPage();
+      const mockPage = createMockPageWithEvents();
 
-      // Simulate inflight request by emitting request event
-      // The tracker will increment inflight count
-      type MockCall = [string, (arg: unknown) => void];
-      const onFn = mockPage.on as ReturnType<typeof vi.fn>;
-      const requestCall: MockCall | undefined = onFn.mock.calls.find(
-        (call: MockCall) => call[0] === 'request'
-      );
-      const requestHandler = requestCall?.[1];
+      const promise = waitForNetworkQuiet(mockPage as unknown as Page, 500);
 
-      const promise = waitForNetworkQuiet(mockPage, 500);
-
-      // Emit a request that never finishes
-      if (requestHandler) {
-        requestHandler({ resourceType: () => 'fetch' });
-      }
+      // Emit a request that never finishes (using centralized mock's event emission)
+      mockPage.emitRequest({ resourceType: 'fetch' });
 
       // Advance to timeout
       await vi.advanceTimersByTimeAsync(500);
@@ -88,9 +68,9 @@ describe('waitForNetworkQuiet', () => {
 
   describe('tracker attachment', () => {
     it('should attach tracker on first call', async () => {
-      const mockPage = createMockPage();
+      const mockPage = createMockPageWithEvents();
 
-      const promise = waitForNetworkQuiet(mockPage, 3000);
+      const promise = waitForNetworkQuiet(mockPage as unknown as Page, 3000);
 
       // Verify tracker was attached (on was called with event handlers)
       expect(mockPage.on).toHaveBeenCalledWith('request', expect.any(Function));

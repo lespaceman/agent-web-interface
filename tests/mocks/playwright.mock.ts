@@ -8,6 +8,26 @@
 import { vi, type Mock } from 'vitest';
 
 /**
+ * Mock Request - subset of Playwright Request interface used in tests
+ */
+export interface MockRequest {
+  resourceType: Mock;
+  url: Mock;
+}
+
+/**
+ * Creates a mock Playwright Request
+ */
+export function createMockRequest(
+  options: { resourceType?: string; url?: string } = {}
+): MockRequest {
+  return {
+    resourceType: vi.fn().mockReturnValue(options.resourceType ?? 'fetch'),
+    url: vi.fn().mockReturnValue(options.url ?? 'https://example.com/api'),
+  };
+}
+
+/**
  * Mock CDPSession
  */
 export interface MockCDPSession {
@@ -82,6 +102,76 @@ export function createMockPage(options: { url?: string; title?: string } = {}): 
     on: vi.fn(),
     off: vi.fn(),
   };
+}
+
+/**
+ * Extended mock Page with working event emission for testing event-driven code.
+ * Use this when testing code that listens to page events (request, requestfinished, etc.)
+ */
+export interface MockPageWithEvents extends MockPage {
+  /** Emit any event to registered listeners */
+  emitEvent: (event: string, data: unknown) => void;
+  /** Emit a 'request' event with a mock request */
+  emitRequest: (options?: { resourceType?: string; url?: string }) => MockRequest;
+  /** Emit a 'requestfinished' event */
+  emitRequestFinished: (request: MockRequest) => void;
+  /** Emit a 'requestfailed' event */
+  emitRequestFailed: (request: MockRequest) => void;
+  /** Get all registered handlers for an event */
+  getHandlers: (event: string) => Set<(arg: unknown) => void>;
+}
+
+/**
+ * Creates a mock Page with working event emission.
+ * Unlike createMockPage, this version actually tracks event listeners and
+ * provides helper methods to emit events for testing.
+ */
+export function createMockPageWithEvents(
+  options: { url?: string; title?: string } = {}
+): MockPageWithEvents {
+  const listeners = new Map<string, Set<(arg: unknown) => void>>();
+
+  const getOrCreateListenerSet = (event: string): Set<(arg: unknown) => void> => {
+    if (!listeners.has(event)) {
+      listeners.set(event, new Set());
+    }
+    return listeners.get(event)!;
+  };
+
+  const page: MockPageWithEvents = {
+    url: vi.fn().mockReturnValue(options.url ?? 'about:blank'),
+    title: vi.fn().mockResolvedValue(options.title ?? ''),
+    goto: vi.fn().mockResolvedValue(null),
+    close: vi.fn().mockResolvedValue(undefined),
+    isClosed: vi.fn().mockReturnValue(false),
+    waitForLoadState: vi.fn().mockResolvedValue(undefined),
+    evaluate: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn((event: string, handler: (arg: unknown) => void) => {
+      getOrCreateListenerSet(event).add(handler);
+    }),
+    off: vi.fn((event: string, handler: (arg: unknown) => void) => {
+      listeners.get(event)?.delete(handler);
+    }),
+    emitEvent: (event: string, data: unknown) => {
+      listeners.get(event)?.forEach((handler) => handler(data));
+    },
+    emitRequest: (reqOptions?: { resourceType?: string; url?: string }) => {
+      const request = createMockRequest(reqOptions);
+      page.emitEvent('request', request);
+      return request;
+    },
+    emitRequestFinished: (request: MockRequest) => {
+      page.emitEvent('requestfinished', request);
+    },
+    emitRequestFailed: (request: MockRequest) => {
+      page.emitEvent('requestfailed', request);
+    },
+    getHandlers: (event: string) => {
+      return listeners.get(event) ?? new Set();
+    },
+  };
+
+  return page;
 }
 
 /**
