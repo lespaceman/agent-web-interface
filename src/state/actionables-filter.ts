@@ -160,7 +160,7 @@ export function scoreActionable(node: ReadableNode, context?: ScoringContext): n
   }
 
   // Primary CTA (from FactPack if available)
-  if (context?.primaryCTA && context.primaryCTA.node_id === node.node_id) {
+  if (context?.primaryCTA?.node_id === node.node_id) {
     score += 0.3;
   }
 

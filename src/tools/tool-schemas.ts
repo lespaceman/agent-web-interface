@@ -598,7 +598,7 @@ export type GetNodeDetailsOutput = z.infer<typeof GetNodeDetailsOutputSchema>;
 
 const ScrollElementIntoViewInputSchemaBase = z.object({
   /** Stable element ID from actionables list */
-  eid: z.string(),
+  eid: z.string().describe('The eid of the element to scroll into view.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
@@ -673,11 +673,11 @@ export type ClickOutput = z.infer<typeof ClickOutputSchema>;
 // type - Type text into an element (eid required, no agent_version)
 const TypeInputSchemaBase = z.object({
   /** Text to type */
-  text: z.string(),
+  text: z.string().describe('The text to type into the element.'),
   /** Stable element ID from actionables list */
-  eid: z.string(),
+  eid: z.string().describe('The eid of the input element.'),
   /** Clear existing text before typing (default: false) */
-  clear: z.boolean().default(false),
+  clear: z.boolean().default(false).describe('Clear existing text before typing.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
@@ -709,9 +709,9 @@ export type PressOutput = z.infer<typeof PressOutputSchema>;
 // select - Select a dropdown option (no agent_version)
 const SelectInputSchemaBase = z.object({
   /** Stable element ID from actionables list */
-  eid: z.string(),
+  eid: z.string().describe('The eid of the <select> element.'),
   /** Option value or visible text to select */
-  value: z.string(),
+  value: z.string().describe('Option value or visible text to select.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
@@ -727,7 +727,7 @@ export type SelectOutput = z.infer<typeof SelectOutputSchema>;
 // hover - Hover over an element (no agent_version)
 const HoverInputSchemaBase = z.object({
   /** Stable element ID from actionables list */
-  eid: z.string(),
+  eid: z.string().describe('The eid of the element to hover over.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });

@@ -194,7 +194,7 @@ function initializeServer(): BrowserAutomationServer {
     'get_node_details',
     {
       title: 'Get Node Details',
-      description: 'Return full details for a single node_id.',
+      description: 'Return full details for a single eid.',
       inputSchema: GetNodeDetailsInputSchema.shape,
     },
     (input) => Promise.resolve(getNodeDetails(input))
@@ -208,7 +208,7 @@ function initializeServer(): BrowserAutomationServer {
     'scroll_element_into_view',
     {
       title: 'Scroll Element Into View',
-      description: 'Scroll a specific element into view and return a delta.',
+      description: 'Scroll a specific element into view.',
       inputSchema: ScrollElementIntoViewInputSchemaBase.shape,
     },
     scrollElementIntoView
@@ -218,7 +218,7 @@ function initializeServer(): BrowserAutomationServer {
     'scroll_page',
     {
       title: 'Scroll Page',
-      description: 'Scroll the page up or down by a specified amount and return a delta.',
+      description: 'Scroll the page up or down by a specified amount.',
       inputSchema: ScrollPageInputSchema.shape,
     },
     scrollPage
@@ -228,7 +228,7 @@ function initializeServer(): BrowserAutomationServer {
     'click',
     {
       title: 'Click Element',
-      description: 'Click an element by eid (or node_id) with automatic delta reporting.',
+      description: 'Click an element by eid.',
       inputSchema: ClickInputSchemaBase.shape,
     },
     click
@@ -238,7 +238,7 @@ function initializeServer(): BrowserAutomationServer {
     'type',
     {
       title: 'Type Text',
-      description: 'Type text into a specific element (by eid or node_id) with optional clearing.',
+      description: 'Type text into a specific element (by eid) with optional clearing.',
       inputSchema: TypeInputSchemaBase.shape,
     },
     type
@@ -258,7 +258,7 @@ function initializeServer(): BrowserAutomationServer {
     'select',
     {
       title: 'Select Option',
-      description: 'Select an option from a <select> element (by eid or node_id) by value or text.',
+      description: 'Select an option from a <select> element (by eid) by value or text.',
       inputSchema: SelectInputSchemaBase.shape,
     },
     select
@@ -268,7 +268,7 @@ function initializeServer(): BrowserAutomationServer {
     'hover',
     {
       title: 'Hover Element',
-      description: 'Hover over an element by eid (or node_id) and return a delta.',
+      description: 'Hover over an element by eid.',
       inputSchema: HoverInputSchemaBase.shape,
     },
     hover
