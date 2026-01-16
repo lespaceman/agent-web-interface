@@ -1,3 +1,11 @@
+## [2.1.1] - 2026-01-16
+
+- Merge pull request #20 from lespaceman/fix/eid-scroll-stability
+- fix: stabilize element IDs across scrolling
+- Merge pull request #19 from lespaceman/feat/descriptive-state-attributes
+- refactor: use boolean text values instead of 0/1
+- feat: use descriptive attribute names in XML snapshots
+
 ## [2.1.0] - 2026-01-15
 
 - Merge pull request #16 from lespaceman/claude/rewrite-readme-VfUuq
