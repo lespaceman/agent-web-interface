@@ -117,13 +117,13 @@ function renderActionable(item: ActionableInfo, _diff?: StateResponseObject['dif
   const tag = mapKindToTag(item.kind);
   const attrs: string[] = [`id="${item.eid}"`];
 
-  // State flags (compact)
-  if (!item.ena) attrs.push(`e="0"`);
-  if (!item.vis) attrs.push(`v="0"`);
-  if (item.chk) attrs.push(`chk="1"`);
-  if (item.sel) attrs.push(`sel="1"`);
-  if (item.exp) attrs.push(`exp="1"`);
-  if (item.foc) attrs.push(`foc="1"`);
+  // State flags (descriptive names with boolean values)
+  if (!item.ena) attrs.push(`enabled="false"`);
+  if (!item.vis) attrs.push(`visible="false"`);
+  if (item.chk) attrs.push(`checked="true"`);
+  if (item.sel) attrs.push(`selected="true"`);
+  if (item.exp) attrs.push(`expanded="true"`);
+  if (item.foc) attrs.push(`focused="true"`);
 
   // Attributes
   if (item.val_hint) attrs.push(`val="${escapeXml(item.val_hint)}"`);
