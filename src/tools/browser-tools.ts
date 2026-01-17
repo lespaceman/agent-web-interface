@@ -70,6 +70,7 @@ import {
 } from './response-builder.js';
 import { ElementNotFoundError, StaleElementError, SnapshotRequiredError } from './errors.js';
 import type { ReadableNode } from '../snapshot/snapshot.types.js';
+import { getDependencyTracker } from '../form/index.js';
 
 // Module-level state
 let sessionManager: SessionManager | null = null;
@@ -340,6 +341,9 @@ async function executeNavigationAction(
   const page_id = handle.page_id;
   session.touchPage(page_id);
 
+  // Clear dependency tracker before navigation (old dependencies no longer valid)
+  getDependencyTracker().clearPage(page_id);
+
   // Execute navigation
   switch (action) {
     case 'back':
@@ -460,6 +464,7 @@ export async function closePage(
   await session.closePage(input.page_id);
   snapshotStore.removeByPageId(input.page_id);
   removeStateManager(input.page_id); // Clean up state manager
+  getDependencyTracker().clearPage(input.page_id); // Clean up dependencies
 
   return buildClosePageResponse(input.page_id);
 }
@@ -479,6 +484,7 @@ export async function closeSession(
   await session.shutdown();
   snapshotStore.clear();
   clearAllStateManagers(); // Clean up all state managers
+  getDependencyTracker().clearAll(); // Clean up all dependencies
 
   return buildCloseSessionResponse();
 }
@@ -498,6 +504,9 @@ export async function navigate(
   let handle = await session.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
   session.touchPage(page_id);
+
+  // Clear dependency tracker before navigation (old dependencies no longer valid)
+  getDependencyTracker().clearPage(page_id);
 
   await session.navigateTo(page_id, input.url);
 
