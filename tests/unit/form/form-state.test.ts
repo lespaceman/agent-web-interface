@@ -47,12 +47,28 @@ describe('computeFormState', () => {
         createField({
           eid: 'f-1',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-2',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -66,7 +82,15 @@ describe('computeFormState', () => {
       const fields = [
         createField({
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -93,11 +117,27 @@ describe('computeFormState', () => {
       const fields = [
         createField({
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -111,12 +151,28 @@ describe('computeFormState', () => {
         createField({
           eid: 'f-1',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-2',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -130,12 +186,28 @@ describe('computeFormState', () => {
         createField({
           eid: 'f-1',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-2',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -149,17 +221,41 @@ describe('computeFormState', () => {
         createField({
           eid: 'f-1',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-2',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-3',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -175,7 +271,15 @@ describe('computeFormState', () => {
       const fields = [
         createField({
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -188,7 +292,15 @@ describe('computeFormState', () => {
       const fields = [
         createField({
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -201,7 +313,15 @@ describe('computeFormState', () => {
       const fields = [
         createField({
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: false, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: false,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -214,7 +334,15 @@ describe('computeFormState', () => {
       const fields = [
         createField({
           constraints: { required: false, required_confidence: 0 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -229,15 +357,39 @@ describe('computeFormState', () => {
       const fields = [
         createField({
           eid: 'f-1',
-          state: { filled: true, has_value: true, valid: false, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: false,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-2',
-          state: { filled: true, has_value: true, valid: false, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: false,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-3',
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -249,7 +401,15 @@ describe('computeFormState', () => {
     it('should return 0 errors when all fields are valid', () => {
       const fields = [
         createField({
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -264,11 +424,27 @@ describe('computeFormState', () => {
       const fields = [
         createField({
           eid: 'f-1',
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: true, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: true,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-2',
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -280,10 +456,26 @@ describe('computeFormState', () => {
     it('should be false when no field is touched', () => {
       const fields = [
         createField({
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 
@@ -320,17 +512,41 @@ describe('computeFormState', () => {
         createField({
           eid: 'f-1',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-2',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: false, has_value: false, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
         createField({
           eid: 'f-3',
           constraints: { required: true, required_confidence: 1 },
-          state: { filled: true, has_value: true, valid: true, enabled: true, touched: false, focused: false, visible: true },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
         }),
       ];
 

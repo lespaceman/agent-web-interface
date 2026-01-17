@@ -305,11 +305,7 @@ export async function readRuntimeValues(
     await semaphore.acquire();
 
     try {
-      const value = await readSingleFieldValue(
-        cdp,
-        field.backend_node_id,
-        opts.timeoutMs
-      );
+      const value = await readSingleFieldValue(cdp, field.backend_node_id, opts.timeoutMs);
 
       if (value === undefined) {
         result.errors.push(`Failed to read value for backend_node_id=${field.backend_node_id}`);

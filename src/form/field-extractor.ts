@@ -558,9 +558,9 @@ function extractFieldState(
   /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
   const hasValue = Boolean(
     currentValue ||
-      node.state?.checked ||
-      (node.kind === 'checkbox' && node.state?.checked) ||
-      (node.kind === 'radio' && node.state?.checked)
+    node.state?.checked ||
+    (node.kind === 'checkbox' && node.state?.checked) ||
+    (node.kind === 'radio' && node.state?.checked)
   );
   /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 

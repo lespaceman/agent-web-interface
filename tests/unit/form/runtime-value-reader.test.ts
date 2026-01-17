@@ -211,7 +211,9 @@ describe('readRuntimeValues', () => {
         return Promise.resolve({});
       });
 
-      const fields = [createFieldRequest(100, { input_type: 'password', semantic_type: 'unknown' })];
+      const fields = [
+        createFieldRequest(100, { input_type: 'password', semantic_type: 'unknown' }),
+      ];
       const result = await readRuntimeValues(mockCdp, fields, { maskSensitive: true });
 
       expect(result.values.get(100)).toBe('********');
