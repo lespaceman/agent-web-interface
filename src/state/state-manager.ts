@@ -145,6 +145,14 @@ export class StateManager {
   }
 
   /**
+   * Get the previous snapshot for this page.
+   * Used for dependency tracking to compute effects.
+   */
+  getPreviousSnapshot(): BaseSnapshot | null {
+    return this.context.previousSnapshot;
+  }
+
+  /**
    * Get the active layer for the current snapshot.
    * Returns 'main' if no snapshot is available.
    */
