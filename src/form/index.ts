@@ -7,6 +7,7 @@
  * Key features:
  * - FormRegion detection (explicit and implicit forms)
  * - FormField extraction with purpose inference
+ * - Runtime value reading via CDP
  * - Observed dependency tracking
  * - Action result hints
  *
@@ -47,6 +48,17 @@ export { FormDetector, detectForms } from './form-detector.js';
 
 // Field extraction
 export { extractFields, extractFieldByEid } from './field-extractor.js';
+
+// Form state computation
+export { computeFormState } from './form-state.js';
+
+// Runtime value reading
+export {
+  readRuntimeValues,
+  type RuntimeValueResult,
+  type FieldValueRequest,
+  type RuntimeValueReaderOptions,
+} from './runtime-value-reader.js';
 
 // Dependency tracking
 export {

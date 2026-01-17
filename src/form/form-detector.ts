@@ -19,12 +19,12 @@ import type {
   FormSignal,
   FormIntent,
   FormPattern,
-  FormState,
   FormCandidate,
   FormDetectionConfig,
 } from './types.js';
 import { DEFAULT_FORM_DETECTION_CONFIG } from './types.js';
 import { extractFields } from './field-extractor.js';
+import { computeFormState } from './form-state.js';
 import { createHash } from 'crypto';
 
 /**
@@ -712,7 +712,7 @@ export class FormDetector {
     const actions = this.extractFormActions(snapshot, candidate);
 
     // Compute form state
-    const state = this.computeFormState(fields);
+    const state = computeFormState(fields);
 
     // Determine form pattern
     const pattern = this.inferPattern(fields, snapshot);
@@ -830,33 +830,6 @@ export class FormDetector {
     if (!clusterBbox) return false;
 
     return this.isButtonNearBbox(button, clusterBbox);
-  }
-
-  /**
-   * Compute form state from fields.
-   */
-  private computeFormState(fields: FormRegion['fields']): FormState {
-    const requiredFields = fields.filter((f) => f.constraints.required);
-    const filledRequiredFields = requiredFields.filter((f) => f.state.filled);
-    const errorFields = fields.filter((f) => !f.state.valid);
-    const dirtyFields = fields.filter((f) => f.state.touched);
-
-    const completionPct =
-      requiredFields.length > 0
-        ? Math.round((filledRequiredFields.length / requiredFields.length) * 100)
-        : 100;
-
-    const canSubmit =
-      errorFields.length === 0 && filledRequiredFields.length === requiredFields.length;
-
-    return {
-      completion_pct: completionPct,
-      error_count: errorFields.length,
-      can_submit: canSubmit,
-      dirty: dirtyFields.length > 0,
-      required_count: requiredFields.length,
-      filled_required_count: filledRequiredFields.length,
-    };
   }
 
   /**

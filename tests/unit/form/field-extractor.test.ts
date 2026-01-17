@@ -359,7 +359,7 @@ describe('Field Extractor', () => {
         mask_sensitive: true,
       });
 
-      expect(fields[0].state.value).toBe('••••••••');
+      expect(fields[0].state.current_value).toBe('••••••••');
     });
 
     it('should not mask non-sensitive values', () => {
@@ -377,7 +377,7 @@ describe('Field Extractor', () => {
         mask_sensitive: true,
       });
 
-      expect(fields[0].state.value).toBe('John Doe');
+      expect(fields[0].state.current_value).toBe('John Doe');
     });
   });
 

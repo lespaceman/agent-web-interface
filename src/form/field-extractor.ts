@@ -536,36 +536,44 @@ function extractSelectOptions(node: ReadableNode, snapshot: BaseSnapshot): Field
 
 /**
  * Extract state for a field.
+ *
+ * Note: This extracts initial state from the snapshot (HTML attributes).
+ * Runtime values may be overlaid later via readRuntimeValues().
  */
 function extractFieldState(
   node: ReadableNode,
   config: FormDetectionConfig,
   semanticType: FieldSemanticType
 ): FieldState {
-  // Get value, potentially masked
-  let value = node.attributes?.value;
+  // Get value from HTML attribute, potentially masked
+  let currentValue = node.attributes?.value;
   const isSensitive = SENSITIVE_TYPES.has(semanticType);
 
-  if (value && isSensitive && config.mask_sensitive) {
-    value = '••••••••';
+  if (currentValue && isSensitive && config.mask_sensitive) {
+    currentValue = '••••••••';
   }
 
-  // Determine if field is filled
+  // Determine if field has a value (from attribute)
   // Note: Using || here intentionally because we want falsy values (empty string) to fall through
   /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
-  const filled = Boolean(
-    value ||
-    node.state?.checked ||
-    (node.kind === 'checkbox' && node.state?.checked) ||
-    (node.kind === 'radio' && node.state?.checked)
+  const hasValue = Boolean(
+    currentValue ||
+      node.state?.checked ||
+      (node.kind === 'checkbox' && node.state?.checked) ||
+      (node.kind === 'radio' && node.state?.checked)
   );
   /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+
+  // Filled is initially same as hasValue (may be updated after runtime read)
+  const filled = hasValue;
 
   // Determine validity
   const valid = !(node.state?.invalid ?? false);
 
   return {
-    value,
+    current_value: currentValue,
+    value_source: currentValue !== undefined ? 'attribute' : undefined,
+    has_value: hasValue,
     filled,
     valid,
     enabled: node.state?.enabled ?? true,

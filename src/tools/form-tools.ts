@@ -10,12 +10,16 @@ import { getSnapshotStore } from './browser-tools.js';
 import {
   detectForms,
   getDependencyTracker,
+  computeFormState,
+  readRuntimeValues,
   type FormRegion,
   type FormField,
   type FormAction,
   type FieldDependency,
+  type FieldValueRequest,
 } from '../form/index.js';
 import type { SessionManager } from '../browser/session-manager.js';
+import type { PageHandle } from '../browser/page-registry.js';
 
 // Module-level reference to session manager (set via initializeFormTools)
 let sessionManager: SessionManager | null = null;
@@ -52,6 +56,27 @@ function resolveExistingPage(
   session: SessionManager,
   page_id: string | undefined
 ): { page_id: string } {
+  const handle = session.resolvePage(page_id);
+  if (!handle) {
+    if (page_id) {
+      throw new Error(`Page not found: ${page_id}`);
+    } else {
+      throw new Error('No page available. Use launch_browser first.');
+    }
+  }
+  session.touchPage(handle.page_id);
+  return handle;
+}
+
+/**
+ * Resolve page_id to full PageHandle with CDP client.
+ *
+ * @param session - SessionManager instance
+ * @param page_id - Optional page identifier
+ * @returns Full PageHandle with CDP client
+ * @throws Error if no page available
+ */
+function resolvePageWithCdp(session: SessionManager, page_id: string | undefined): PageHandle {
   const handle = session.resolvePage(page_id);
   if (!handle) {
     if (page_id) {
@@ -104,11 +129,17 @@ export type GetFieldContextInput = z.infer<typeof GetFieldContextInputSchema>;
 function buildFormUnderstandingXml(
   pageId: string,
   forms: FormRegion[],
-  includeValues: boolean
+  includeValues: boolean,
+  limitations?: string
 ): string {
   const lines: string[] = [];
 
   lines.push(`<form_understanding page_id="${escapeXml(pageId)}">`);
+
+  if (limitations) {
+    lines.push(`  <limitations runtime_values="partial" reason="${escapeXml(limitations)}" />`);
+  }
+
   lines.push(`  <forms count="${forms.length}">`);
 
   // Sort forms by form_id for deterministic output
@@ -183,8 +214,13 @@ function buildFieldXml(field: FormField, includeValues: boolean, indent: number)
     `kind="${field.kind}"`,
     `purpose="${field.purpose.semantic_type}"`,
     `filled="${field.state.filled}"`,
+    `has_value="${field.state.has_value}"`,
     `enabled="${field.state.enabled}"`,
   ];
+
+  if (field.state.value_source) {
+    attrs.push(`value_source="${field.state.value_source}"`);
+  }
 
   if (field.constraints.required) {
     attrs.push('required="true"');
@@ -197,8 +233,8 @@ function buildFieldXml(field: FormField, includeValues: boolean, indent: number)
     }
   }
 
-  if (includeValues && field.state.value) {
-    attrs.push(`value="${escapeXml(field.state.value)}"`);
+  if (includeValues && field.state.current_value) {
+    attrs.push(`current_value="${escapeXml(field.state.current_value)}"`);
   }
 
   if (field.depends_on && field.depends_on.length > 0) {
@@ -314,12 +350,17 @@ function buildFieldContextXml(
   lines.push('    </purpose_signals>');
 
   // State
-  lines.push(
-    `    <state filled="${field.state.filled}" ` +
-      `valid="${field.state.valid}" ` +
-      `enabled="${field.state.enabled}" ` +
-      `focused="${field.state.focused}" />`
-  );
+  const stateAttrs = [
+    `filled="${field.state.filled}"`,
+    `has_value="${field.state.has_value}"`,
+    `valid="${field.state.valid}"`,
+    `enabled="${field.state.enabled}"`,
+    `focused="${field.state.focused}"`,
+  ];
+  if (field.state.value_source) {
+    stateAttrs.push(`value_source="${field.state.value_source}"`);
+  }
+  lines.push(`    <state ${stateAttrs.join(' ')} />`);
 
   // Constraints
   const constraintAttrs: string[] = [`required="${field.constraints.required}"`];
@@ -412,15 +453,16 @@ function escapeXml(str: string): string {
  * Get form understanding for a page.
  *
  * Detects form regions and extracts rich metadata about fields,
- * dependencies, and state.
+ * dependencies, and state. Reads actual runtime values via CDP
+ * to provide accurate filled/has_value status.
  */
-export function getFormUnderstanding(rawInput: unknown): string {
+export async function getFormUnderstanding(rawInput: unknown): Promise<string> {
   const input = GetFormUnderstandingInputSchema.parse(rawInput);
   const session = getSessionManager();
   const snapshotStore = getSnapshotStore();
 
-  // Resolve page
-  const handle = resolveExistingPage(session, input.page_id);
+  // Resolve page with CDP client for runtime value reading
+  const handle = resolvePageWithCdp(session, input.page_id);
   const pageId = handle.page_id;
 
   // Get snapshot for the page
@@ -439,6 +481,57 @@ export function getFormUnderstanding(rawInput: unknown): string {
     return `<error>Form not found: ${escapeXml(input.form_id)}</error>`;
   }
 
+  // Read runtime values for form fields
+  const allFields = forms.flatMap((f) => f.fields);
+  let limitations: string | undefined;
+
+  if (allFields.length > 0) {
+    // Build field value requests
+    const fieldRequests: FieldValueRequest[] = allFields.map((f) => ({
+      backend_node_id: f.backend_node_id,
+      frame_id: f.frame_id,
+      semantic_type: f.purpose.semantic_type,
+      input_type: snapshot.nodes.find((n) => n.node_id === f.eid)?.attributes?.input_type,
+      label: f.label,
+    }));
+
+    const runtimeResult = await readRuntimeValues(handle.cdp, fieldRequests, {
+      maxFieldsToRead: 50,
+      concurrencyLimit: 8,
+      timeoutMs: 2000,
+      maskSensitive: true,
+    });
+
+    // Update field states with runtime values
+    for (const form of forms) {
+      for (const field of form.fields) {
+        const runtimeValue = runtimeResult.values.get(field.backend_node_id);
+
+        if (runtimeValue !== undefined) {
+          // Runtime read succeeded
+          field.state.has_value = runtimeValue.length > 0;
+          field.state.filled = runtimeValue.length > 0;
+          field.state.value_source = 'runtime';
+
+          if (input.include_values) {
+            field.state.current_value = runtimeValue; // Already masked if sensitive
+          }
+        } else {
+          // Runtime read failed - be conservative, don't trust attribute
+          // Keep existing filled state from snapshot but mark source as unknown
+          field.state.value_source = undefined; // Unknown
+        }
+      }
+
+      // Recompute form state after field updates
+      form.state = computeFormState(form.fields);
+    }
+
+    if (runtimeResult.partial) {
+      limitations = runtimeResult.partial_reason;
+    }
+  }
+
   // Enrich fields with observed dependencies
   const tracker = getDependencyTracker();
   for (const form of forms) {
@@ -454,7 +547,7 @@ export function getFormUnderstanding(rawInput: unknown): string {
     }
   }
 
-  return buildFormUnderstandingXml(pageId, forms, input.include_values);
+  return buildFormUnderstandingXml(pageId, forms, input.include_values, limitations);
 }
 
 /**

@@ -289,10 +289,27 @@ export interface FieldOption {
  * Current state of a form field.
  */
 export interface FieldState {
-  /** Current value (masked for sensitive fields) */
-  value?: string;
+  /**
+   * Current value (only included when include_values=true).
+   * ALWAYS masked for sensitive fields.
+   */
+  current_value?: string;
 
-  /** Whether the field has a value */
+  /**
+   * Source of value information:
+   * - 'runtime': Read via CDP Runtime (accurate for JS-set values)
+   * - 'attribute': From HTML attribute (may be stale)
+   * - undefined: Could not determine
+   */
+  value_source?: 'runtime' | 'attribute';
+
+  /**
+   * Whether the field has a non-empty value.
+   * Based on runtime read when available.
+   */
+  has_value: boolean;
+
+  /** Whether the field is considered "filled" for form completion */
   filled: boolean;
 
   /** Whether the field passes validation */
