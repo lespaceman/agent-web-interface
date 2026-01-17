@@ -10,6 +10,7 @@ import { BrowserAutomationServer } from './server/mcp-server.js';
 import { SessionManager } from './browser/session-manager.js';
 import {
   initializeTools,
+  initializeFormTools,
   // Tool handlers
   launchBrowser,
   connectBrowser,
@@ -29,6 +30,8 @@ import {
   press,
   select,
   hover,
+  getFormUnderstanding,
+  getFieldContext,
   // Input schemas only (all outputs are XML strings now)
   LaunchBrowserInputSchema,
   ConnectBrowserInputSchema,
@@ -48,6 +51,8 @@ import {
   PressInputSchema,
   SelectInputSchemaBase,
   HoverInputSchemaBase,
+  GetFormUnderstandingInputSchema,
+  GetFieldContextInputSchema,
 } from './tools/index.js';
 
 // Singleton session manager (initialized lazily on first tool use)
@@ -76,6 +81,7 @@ function initializeServer(): BrowserAutomationServer {
   // Initialize session manager and tools
   const session = getSessionManager();
   initializeTools(session);
+  initializeFormTools(session);
 
   // ============================================================================
   // SESSION TOOLS
@@ -272,6 +278,32 @@ function initializeServer(): BrowserAutomationServer {
       inputSchema: HoverInputSchemaBase.shape,
     },
     hover
+  );
+
+  // ============================================================================
+  // FORM UNDERSTANDING TOOLS
+  // ============================================================================
+
+  server.registerTool(
+    'get_form_understanding',
+    {
+      title: 'Get Form Understanding',
+      description:
+        'Analyze forms on the page and return semantic understanding of form regions, fields, dependencies, and state. Use this to understand complex form interactions.',
+      inputSchema: GetFormUnderstandingInputSchema.shape,
+    },
+    (input) => Promise.resolve(getFormUnderstanding(input))
+  );
+
+  server.registerTool(
+    'get_field_context',
+    {
+      title: 'Get Field Context',
+      description:
+        'Get detailed context for a specific form field including purpose inference, constraints, dependencies, and suggested next action.',
+      inputSchema: GetFieldContextInputSchema.shape,
+    },
+    (input) => Promise.resolve(getFieldContext(input))
   );
 
   return server;

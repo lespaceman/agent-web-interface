@@ -126,3 +126,14 @@ export {
   type HoverInput,
   type HoverOutput,
 } from './tool-schemas.js';
+
+// Form tools
+export {
+  initializeFormTools,
+  getFormUnderstanding,
+  getFieldContext,
+  GetFormUnderstandingInputSchema,
+  GetFieldContextInputSchema,
+  type GetFormUnderstandingInput,
+  type GetFieldContextInput,
+} from './form-tools.js';
