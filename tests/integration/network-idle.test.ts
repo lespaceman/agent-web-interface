@@ -41,10 +41,10 @@ const DELAYED_FETCH_HTML = `
 </html>
 `;
 
-// Skip in CI - Playwright browsers not installed in CI environment
-const isCI = process.env.CI === 'true';
+// Skip in CI unless RUN_INTEGRATION is set (for dedicated integration workflow)
+const skipIntegration = process.env.CI === 'true' && !process.env.RUN_INTEGRATION;
 
-describe.skipIf(isCI)('Network Idle Stabilization (Integration)', () => {
+describe.skipIf(skipIntegration)('Network Idle Stabilization (Integration)', () => {
   let server: Server;
   let port: number;
   let browser: Browser;
