@@ -175,6 +175,7 @@ describe('MultiTenantConfig', () => {
     });
 
     it('should warn when maxWorkers exceeds port capacity', () => {
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const config = {

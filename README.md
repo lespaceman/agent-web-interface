@@ -104,6 +104,16 @@ See the `examples/` directory for concrete agent workflows.
 
 ---
 
+## Using Your Existing Chrome Profile (Chrome 144+)
+
+To connect with your bookmarks, extensions, and logged-in sessions:
+
+1. Navigate to `chrome://inspect/#remote-debugging` in Chrome
+2. Enable remote debugging and allow the connection
+3. Use `connect_browser` with `endpoint_url: http://127.0.0.1:9222`
+
+---
+
 ## Installation
 
 ```bash
