@@ -62,6 +62,13 @@ const SCORE_TEXT_MATCH = 0.3;
 /** Score contribution for dialog context match */
 const SCORE_DIALOG_CONTEXT = 0.15;
 
+/**
+ * Estimated delay in ms for elements that appeared after initial page load.
+ * Used when appearedAfterDelay signal is true but exact timing is unavailable.
+ * Based on typical async content loading patterns (API responses, lazy loading).
+ */
+const ESTIMATED_DELAY_MS = 200;
+
 // ============================================================================
 // Tag to Kind Mapping
 // ============================================================================
@@ -165,6 +172,9 @@ export function linkObservationsToSnapshot(
   // Build index once for efficient lookup
   const nodeIndex = buildNodeIndex(snapshot);
 
+  // Pre-filter interactive nodes once (O(n)) instead of per-observation (O(m*n))
+  const interactiveNodes = buildInteractiveNodeList(snapshot);
+
   let linked = 0;
   let unlinked = 0;
 
@@ -183,15 +193,15 @@ export function linkObservationsToSnapshot(
       if (eid) {
         observation.eid = eid;
 
-        // Extract children from the matched container
-        const children = extractObservationChildren(match, snapshot, registry);
+        // Extract children from the matched container using pre-filtered list
+        const children = extractObservationChildren(match, interactiveNodes, registry);
         if (children.length > 0) {
           observation.children = children;
         }
 
-        // Extract delay from appearedAfterDelay signal (estimate ~200ms)
+        // Extract delay from appearedAfterDelay signal
         if (observation.signals.appearedAfterDelay) {
-          observation.delayMs = 200;
+          observation.delayMs = ESTIMATED_DELAY_MS;
         }
 
         linked++;
@@ -406,6 +416,27 @@ function isInteractiveKind(kind: NodeKind): boolean {
 }
 
 /**
+ * Check if a node qualifies as an extractable child (interactive or heading with label).
+ */
+function isExtractableChild(node: ReadableNode): boolean {
+  // Must have a visible label
+  if (!node.label || node.label.trim() === '') return false;
+  // Must be interactive or a heading
+  return isInteractiveKind(node.kind) || node.kind === 'heading';
+}
+
+/**
+ * Build a pre-filtered list of interactive nodes for child extraction.
+ * This is O(n) and done once per snapshot, avoiding O(m*n) when processing m observations.
+ *
+ * @param snapshot - Snapshot to filter
+ * @returns Array of nodes that qualify as observation children
+ */
+export function buildInteractiveNodeList(snapshot: BaseSnapshot): ReadableNode[] {
+  return snapshot.nodes.filter(isExtractableChild);
+}
+
+/**
  * Check if a bounding box is contained within another.
  */
 function isNodeInsideContainer(
@@ -458,30 +489,24 @@ function mapKindToChildTag(kind: NodeKind): string {
  * the observation container, up to MAX_OBSERVATION_CHILDREN limit.
  *
  * @param matchedNode - The snapshot node that matched the observation
- * @param snapshot - Current snapshot containing all nodes
+ * @param interactiveNodes - Pre-filtered list of interactive nodes (from buildInteractiveNodeList)
  * @param registry - Element registry for eid lookup
  * @returns Array of observation children (interactive elements and headings)
  */
 export function extractObservationChildren(
   matchedNode: ReadableNode,
-  snapshot: BaseSnapshot,
+  interactiveNodes: ReadableNode[],
   registry: ElementRegistry
 ): ObservationChild[] {
   const children: ObservationChild[] = [];
   const containerBbox = matchedNode.layout.bbox;
 
-  for (const node of snapshot.nodes) {
+  for (const node of interactiveNodes) {
     // Skip the container itself
     if (node.backend_node_id === matchedNode.backend_node_id) continue;
 
     // Skip nodes not inside the container
     if (!isNodeInsideContainer(node.layout.bbox, containerBbox)) continue;
-
-    // Only include interactive elements and headings
-    if (!isInteractiveKind(node.kind) && node.kind !== 'heading') continue;
-
-    // Skip nodes without visible labels
-    if (!node.label || node.label.trim() === '') continue;
 
     const eid = registry.getEidByBackendNodeId(node.backend_node_id);
     children.push({

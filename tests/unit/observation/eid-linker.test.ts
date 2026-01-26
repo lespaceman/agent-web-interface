@@ -626,7 +626,10 @@ describe('computeMatchScore empty text/label scenarios', () => {
 // extractObservationChildren Tests
 // ============================================================================
 
-import { extractObservationChildren } from '../../../src/observation/eid-linker.js';
+import {
+  extractObservationChildren,
+  buildInteractiveNodeList,
+} from '../../../src/observation/eid-linker.js';
 
 describe('extractObservationChildren', () => {
   it('should extract interactive children from matched container', () => {
@@ -654,8 +657,9 @@ describe('extractObservationChildren', () => {
 
     const snapshot = createSnapshot([containerNode, buttonNode, linkNode]);
     const registry = createMockRegistry({ 2: 'btn-submit', 3: 'link-forgot' });
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(2);
     expect(children[0]).toEqual({ tag: 'button', eid: 'btn-submit', text: 'Submit' });
@@ -678,8 +682,9 @@ describe('extractObservationChildren', () => {
 
     const snapshot = createSnapshot([containerNode, headingNode]);
     const registry = createMockRegistry({ 2: 'heading-cart' });
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(1);
     expect(children[0]).toEqual({ tag: 'heading', eid: 'heading-cart', text: 'My Cart' });
@@ -709,8 +714,9 @@ describe('extractObservationChildren', () => {
 
     const snapshot = createSnapshot([containerNode, outsideButton, insideButton]);
     const registry = createMockRegistry({ 2: 'btn-outside', 3: 'btn-inside' });
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(1);
     expect(children[0].text).toBe('Inside');
@@ -739,8 +745,9 @@ describe('extractObservationChildren', () => {
       childNodes.map((n, i) => [n.backend_node_id, `btn-${i + 1}`])
     );
     const registry = createMockRegistry(eidMap);
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(5);
   });
@@ -767,8 +774,9 @@ describe('extractObservationChildren', () => {
 
     const snapshot = createSnapshot([containerNode, emptyButton, labeledButton]);
     const registry = createMockRegistry({ 2: 'btn-empty', 3: 'btn-click' });
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(1);
     expect(children[0].text).toBe('Click Me');
@@ -805,8 +813,9 @@ describe('extractObservationChildren', () => {
 
     const snapshot = createSnapshot([containerNode, textNode, sectionNode, buttonNode]);
     const registry = createMockRegistry({ 2: 'text-1', 3: 'section-1', 4: 'btn-ok' });
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(1);
     expect(children[0]).toEqual({ tag: 'button', eid: 'btn-ok', text: 'OK' });
@@ -822,8 +831,9 @@ describe('extractObservationChildren', () => {
 
     const snapshot = createSnapshot([containerNode]);
     const registry = createMockRegistry({});
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(0);
   });
@@ -845,8 +855,9 @@ describe('extractObservationChildren', () => {
     const snapshot = createSnapshot([containerNode, buttonNode]);
     // Registry returns undefined for backend_node_id 2
     const registry = createMockRegistry({});
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(1);
     expect(children[0].eid).toBeUndefined();
@@ -903,8 +914,9 @@ describe('extractObservationChildren', () => {
       5: 'input-1',
       6: 'checkbox-1',
     });
+    const interactiveNodes = buildInteractiveNodeList(snapshot);
 
-    const children = extractObservationChildren(containerNode, snapshot, registry);
+    const children = extractObservationChildren(containerNode, interactiveNodes, registry);
 
     expect(children).toHaveLength(5);
     expect(children.map((c) => c.tag)).toEqual(['button', 'link', 'heading', 'input', 'checkbox']);

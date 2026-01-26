@@ -128,7 +128,10 @@ async function readDevToolsActivePort(userDataDir: string): Promise<string> {
 
   try {
     const content = await fs.promises.readFile(portFilePath, 'utf8');
-    const lines = content.split('\n').map(line => line.trim()).filter(Boolean);
+    const lines = content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
 
     if (lines.length < 2) {
       throw new Error(`Invalid DevToolsActivePort content: ${content}`);
@@ -137,7 +140,7 @@ async function readDevToolsActivePort(userDataDir: string): Promise<string> {
     const [rawPort, wsPath] = lines;
     const port = parseInt(rawPort, 10);
 
-    if (isNaN(port) || port <= 0 || port > 65535) {
+    if (isNaN(port) || port < 1 || port > 65535) {
       throw new Error(`Invalid port in DevToolsActivePort: ${rawPort}`);
     }
 
@@ -146,7 +149,7 @@ async function readDevToolsActivePort(userDataDir: string): Promise<string> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(
         `DevToolsActivePort file not found at ${portFilePath}. ` +
-        'Make sure Chrome is running and remote debugging is enabled at chrome://inspect/#remote-debugging'
+          'Make sure Chrome is running and remote debugging is enabled at chrome://inspect/#remote-debugging'
       );
     }
     throw error;
@@ -163,6 +166,21 @@ function isValidHttpUrl(urlString: string): boolean {
   try {
     const url = new URL(urlString);
     return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validates that a URL is a valid WebSocket endpoint URL.
+ *
+ * @param urlString - URL string to validate
+ * @returns true if valid ws(s) URL
+ */
+function isValidWsUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    return url.protocol === 'ws:' || url.protocol === 'wss:';
   } catch {
     return false;
   }
@@ -385,8 +403,7 @@ export class SessionManager {
     } else if (options.endpointUrl) {
       endpointUrl = options.endpointUrl;
       // Validate URL format (HTTP, HTTPS, WS, or WSS)
-      const isWebSocket = endpointUrl.startsWith('ws://') || endpointUrl.startsWith('wss://');
-      if (!isWebSocket && !isValidHttpUrl(endpointUrl)) {
+      if (!isValidHttpUrl(endpointUrl) && !isValidWsUrl(endpointUrl)) {
         throw BrowserSessionError.invalidUrl(endpointUrl);
       }
     } else {
