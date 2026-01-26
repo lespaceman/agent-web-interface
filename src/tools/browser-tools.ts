@@ -418,6 +418,9 @@ export async function connectBrowser(
 
   if (input.endpoint_url) {
     await session.connect({ endpointUrl: input.endpoint_url });
+  } else if (process.env.AUTO_CONNECT === 'true') {
+    // Chrome 144+ auto-connect via DevToolsActivePort
+    await session.connect({ autoConnect: true });
   } else {
     await session.connect();
   }

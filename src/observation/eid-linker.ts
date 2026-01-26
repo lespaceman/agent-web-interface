@@ -9,7 +9,7 @@
  * - Label/text fuzzy matching
  */
 
-import type { DOMObservation, ObservationGroups } from './observation.types.js';
+import type { DOMObservation, ObservationGroups, ObservationChild } from './observation.types.js';
 import type { BaseSnapshot, ReadableNode, NodeKind } from '../snapshot/snapshot.types.js';
 import type { ElementRegistry } from '../state/element-registry.js';
 import { fuzzyTokensMatch, tokenizeForMatching } from '../lib/text-utils.js';
@@ -61,6 +61,13 @@ const SCORE_TEXT_MATCH = 0.3;
 
 /** Score contribution for dialog context match */
 const SCORE_DIALOG_CONTEXT = 0.15;
+
+/**
+ * Estimated delay in ms for elements that appeared after initial page load.
+ * Used when appearedAfterDelay signal is true but exact timing is unavailable.
+ * Based on typical async content loading patterns (API responses, lazy loading).
+ */
+const ESTIMATED_DELAY_MS = 200;
 
 // ============================================================================
 // Tag to Kind Mapping
@@ -165,6 +172,9 @@ export function linkObservationsToSnapshot(
   // Build index once for efficient lookup
   const nodeIndex = buildNodeIndex(snapshot);
 
+  // Pre-filter interactive nodes once (O(n)) instead of per-observation (O(m*n))
+  const interactiveNodes = buildInteractiveNodeList(snapshot);
+
   let linked = 0;
   let unlinked = 0;
 
@@ -182,6 +192,18 @@ export function linkObservationsToSnapshot(
       const eid = registry.getEidByBackendNodeId(match.backend_node_id);
       if (eid) {
         observation.eid = eid;
+
+        // Extract children from the matched container using pre-filtered list
+        const children = extractObservationChildren(match, interactiveNodes, registry);
+        if (children.length > 0) {
+          observation.children = children;
+        }
+
+        // Extract delay from appearedAfterDelay signal
+        if (observation.signals.appearedAfterDelay) {
+          observation.delayMs = ESTIMATED_DELAY_MS;
+        }
+
         linked++;
       } else {
         unlinked++;
@@ -361,4 +383,141 @@ export function computeMatchScore(
 
   // Cap at 1.0
   return Math.min(score, 1.0);
+}
+
+// ============================================================================
+// Child Extraction
+// ============================================================================
+
+/** Maximum number of children to extract per observation */
+const MAX_OBSERVATION_CHILDREN = 5;
+
+/** Interactive node kinds that qualify as observation children */
+const INTERACTIVE_KINDS: NodeKind[] = [
+  'button',
+  'link',
+  'input',
+  'textarea',
+  'select',
+  'combobox',
+  'checkbox',
+  'radio',
+  'switch',
+  'slider',
+  'tab',
+  'menuitem',
+];
+
+/**
+ * Check if a node kind is interactive (actionable).
+ */
+function isInteractiveKind(kind: NodeKind): boolean {
+  return INTERACTIVE_KINDS.includes(kind);
+}
+
+/**
+ * Check if a node qualifies as an extractable child (interactive or heading with label).
+ */
+function isExtractableChild(node: ReadableNode): boolean {
+  // Must have a visible label
+  if (!node.label || node.label.trim() === '') return false;
+  // Must be interactive or a heading
+  return isInteractiveKind(node.kind) || node.kind === 'heading';
+}
+
+/**
+ * Build a pre-filtered list of interactive nodes for child extraction.
+ * This is O(n) and done once per snapshot, avoiding O(m*n) when processing m observations.
+ *
+ * @param snapshot - Snapshot to filter
+ * @returns Array of nodes that qualify as observation children
+ */
+export function buildInteractiveNodeList(snapshot: BaseSnapshot): ReadableNode[] {
+  return snapshot.nodes.filter(isExtractableChild);
+}
+
+/**
+ * Check if a bounding box is contained within another.
+ */
+function isNodeInsideContainer(
+  nodeBbox: { x: number; y: number; w: number; h: number },
+  containerBbox: { x: number; y: number; w: number; h: number }
+): boolean {
+  return (
+    nodeBbox.x >= containerBbox.x &&
+    nodeBbox.y >= containerBbox.y &&
+    nodeBbox.x + nodeBbox.w <= containerBbox.x + containerBbox.w &&
+    nodeBbox.y + nodeBbox.h <= containerBbox.y + containerBbox.h
+  );
+}
+
+/**
+ * Map NodeKind to child tag name for XML output.
+ */
+function mapKindToChildTag(kind: NodeKind): string {
+  switch (kind) {
+    case 'button':
+      return 'button';
+    case 'link':
+      return 'link';
+    case 'heading':
+      return 'heading';
+    case 'input':
+    case 'textarea':
+      return 'input';
+    case 'select':
+    case 'combobox':
+      return 'select';
+    case 'checkbox':
+    case 'radio':
+    case 'switch':
+      return 'checkbox';
+    case 'slider':
+      return 'slider';
+    case 'tab':
+    case 'menuitem':
+      return 'tab';
+    default:
+      return 'text';
+  }
+}
+
+/**
+ * Extract notable children from an observation's matched node.
+ *
+ * Finds interactive elements and headings that are visually contained within
+ * the observation container, up to MAX_OBSERVATION_CHILDREN limit.
+ *
+ * @param matchedNode - The snapshot node that matched the observation
+ * @param interactiveNodes - Pre-filtered list of interactive nodes (from buildInteractiveNodeList)
+ * @param registry - Element registry for eid lookup
+ * @returns Array of observation children (interactive elements and headings)
+ */
+export function extractObservationChildren(
+  matchedNode: ReadableNode,
+  interactiveNodes: ReadableNode[],
+  registry: ElementRegistry
+): ObservationChild[] {
+  const children: ObservationChild[] = [];
+  const containerBbox = matchedNode.layout.bbox;
+
+  for (const node of interactiveNodes) {
+    // Skip the container itself
+    if (node.backend_node_id === matchedNode.backend_node_id) continue;
+
+    // Skip nodes not inside the container
+    if (!isNodeInsideContainer(node.layout.bbox, containerBbox)) continue;
+
+    const eid = registry.getEidByBackendNodeId(node.backend_node_id);
+    children.push({
+      tag: mapKindToChildTag(node.kind),
+      eid: eid,
+      text: node.label,
+    });
+
+    // Limit children to prevent bloat
+    if (children.length >= MAX_OBSERVATION_CHILDREN) break;
+  }
+
+  return children;
 }

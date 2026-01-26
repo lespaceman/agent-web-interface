@@ -105,6 +105,19 @@ export interface ObservedContent {
 }
 
 /**
+ * Child element within an observation.
+ * Represents actionable or notable elements inside an observed container.
+ */
+export interface ObservationChild {
+  /** Element type: 'button', 'link', 'heading', 'text', etc. */
+  tag: string;
+  /** Element identifier for targeting (if available) */
+  eid?: string;
+  /** Visible text content */
+  text: string;
+}
+
+/**
  * A single DOM observation - an element that appeared or disappeared.
  */
 export interface DOMObservation {
@@ -136,6 +149,12 @@ export interface DOMObservation {
 
   /** Shadow DOM path - identifiers of shadow host ancestors (for shadow DOM observations) */
   shadowPath?: string[];
+
+  /** Interactive/notable children within this observation (for appeared elements) */
+  children?: ObservationChild[];
+
+  /** Delay in ms from action start to when this element appeared */
+  delayMs?: number;
 }
 
 /**
