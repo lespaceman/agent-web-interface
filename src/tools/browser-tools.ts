@@ -6,6 +6,11 @@
 
 import type { SessionManager } from '../browser/session-manager.js';
 import {
+  getWorkerManager,
+  getMultiTenantConfiguration,
+  isMultiTenantMode,
+} from '../index.js';
+import {
   SnapshotStore,
   clickByBackendNodeId,
   typeByBackendNodeId,
@@ -381,6 +386,9 @@ async function executeNavigationAction(
 /**
  * Launch a new browser instance.
  *
+ * In multi-tenant mode, this acquires a lease for the configured tenant
+ * and connects to the tenant's dedicated Chrome worker.
+ *
  * @param rawInput - Launch options (will be validated)
  * @returns Page info with snapshot data
  */
@@ -390,7 +398,31 @@ export async function launchBrowser(
   const input = LaunchBrowserInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  await session.launch({ headless: input.headless });
+  // Multi-tenant mode: acquire lease and connect to worker's CDP endpoint
+  if (isMultiTenantMode()) {
+    const workerManager = getWorkerManager();
+    const config = getMultiTenantConfiguration();
+
+    if (!workerManager || !config) {
+      throw new Error('Multi-tenant mode is enabled but WorkerManager is not initialized');
+    }
+
+    // Acquire lease for this tenant
+    const result = await workerManager.acquireForTenant(config.tenantId, config.controllerId);
+
+    if (!result.success) {
+      throw new Error(
+        `Failed to acquire worker lease: ${result.error} (${result.errorCode})`
+      );
+    }
+
+    // Connect to the worker's CDP endpoint
+    await session.connect({ endpointUrl: result.cdpEndpoint });
+  } else {
+    // Standard mode: launch browser directly
+    await session.launch({ headless: input.headless });
+  }
+
   let handle = await session.createPage();
 
   // Auto-capture snapshot
@@ -407,6 +439,10 @@ export async function launchBrowser(
 /**
  * Connect to an existing browser instance.
  *
+ * In multi-tenant mode, this acquires a lease for the configured tenant
+ * and connects to the tenant's dedicated Chrome worker. The endpoint_url
+ * parameter is ignored in multi-tenant mode.
+ *
  * @param rawInput - Connection options (will be validated)
  * @returns Page info with snapshot data
  */
@@ -416,10 +452,33 @@ export async function connectBrowser(
   const input = ConnectBrowserInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  if (input.endpoint_url) {
-    await session.connect({ endpointUrl: input.endpoint_url });
+  // Multi-tenant mode: acquire lease and connect to worker's CDP endpoint
+  if (isMultiTenantMode()) {
+    const workerManager = getWorkerManager();
+    const config = getMultiTenantConfiguration();
+
+    if (!workerManager || !config) {
+      throw new Error('Multi-tenant mode is enabled but WorkerManager is not initialized');
+    }
+
+    // Acquire lease for this tenant
+    const result = await workerManager.acquireForTenant(config.tenantId, config.controllerId);
+
+    if (!result.success) {
+      throw new Error(
+        `Failed to acquire worker lease: ${result.error} (${result.errorCode})`
+      );
+    }
+
+    // Connect to the worker's CDP endpoint (ignoring user-provided endpoint_url)
+    await session.connect({ endpointUrl: result.cdpEndpoint });
   } else {
-    await session.connect();
+    // Standard mode: connect to user-specified or default endpoint
+    if (input.endpoint_url) {
+      await session.connect({ endpointUrl: input.endpoint_url });
+    } else {
+      await session.connect();
+    }
   }
 
   // Try to adopt existing page, or create one if none exist
@@ -472,6 +531,8 @@ export async function closePage(
 /**
  * Close the entire browser session.
  *
+ * In multi-tenant mode, this releases the lease for the tenant's worker.
+ *
  * @param rawInput - Close options (will be validated)
  * @returns Close result
  */
@@ -485,6 +546,16 @@ export async function closeSession(
   snapshotStore.clear();
   clearAllStateManagers(); // Clean up all state managers
   getDependencyTracker().clearAll(); // Clean up all dependencies
+
+  // Release lease in multi-tenant mode
+  if (isMultiTenantMode()) {
+    const workerManager = getWorkerManager();
+    const config = getMultiTenantConfiguration();
+
+    if (workerManager && config) {
+      workerManager.releaseLease(config.tenantId);
+    }
+  }
 
   return buildCloseSessionResponse();
 }

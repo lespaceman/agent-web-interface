@@ -9,6 +9,12 @@
 import { BrowserAutomationServer } from './server/mcp-server.js';
 import { SessionManager } from './browser/session-manager.js';
 import {
+  WorkerManager,
+  getMultiTenantConfig,
+  validateMultiTenantConfig,
+  type MultiTenantConfig,
+} from './worker/index.js';
+import {
   initializeTools,
   initializeFormTools,
   // Tool handlers
@@ -58,6 +64,10 @@ import {
 // Singleton session manager (initialized lazily on first tool use)
 let sessionManager: SessionManager | null = null;
 
+// Multi-tenant state
+let workerManager: WorkerManager | null = null;
+let multiTenantConfig: MultiTenantConfig | null = null;
+
 /**
  * Get or create the session manager
  */
@@ -67,9 +77,43 @@ export function getSessionManager(): SessionManager {
 }
 
 /**
+ * Get the worker manager (only available in multi-tenant mode)
+ */
+export function getWorkerManager(): WorkerManager | null {
+  return workerManager;
+}
+
+/**
+ * Get the multi-tenant configuration
+ */
+export function getMultiTenantConfiguration(): MultiTenantConfig | null {
+  return multiTenantConfig;
+}
+
+/**
+ * Check if multi-tenant mode is enabled
+ */
+export function isMultiTenantMode(): boolean {
+  return multiTenantConfig?.enabled ?? false;
+}
+
+/**
  * Initialize all services and start the server
  */
 function initializeServer(): BrowserAutomationServer {
+  // Load multi-tenant configuration
+  multiTenantConfig = getMultiTenantConfig();
+
+  if (multiTenantConfig.enabled) {
+    validateMultiTenantConfig(multiTenantConfig);
+    console.error(
+      `[INFO] Multi-tenant mode enabled for tenant: ${multiTenantConfig.tenantId} (controller: ${multiTenantConfig.controllerId})`
+    );
+
+    // Initialize WorkerManager
+    workerManager = new WorkerManager(multiTenantConfig.workerConfig);
+  }
+
   // Create MCP server shell
   // Note: Don't pass tools/logging capabilities - McpServer registers them automatically
   // when tools are registered via .tool() or .registerTool()
@@ -325,6 +369,10 @@ async function main(): Promise<void> {
           // Shutdown browser session first (if initialized)
           if (sessionManager) {
             await sessionManager.shutdown();
+          }
+          // Shutdown worker manager (if multi-tenant mode)
+          if (workerManager) {
+            await workerManager.shutdown();
           }
           await server.stop();
           process.exit(0);

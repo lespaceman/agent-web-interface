@@ -34,3 +34,10 @@ export { PortAllocator, type PortAllocatorConfig } from './port-allocator.js';
 export { ChromeWorkerProcess, type ChromeWorkerProcessConfig, findChromePath } from './chrome-worker-process.js';
 export { HealthMonitor, type HealthCheckConfig } from './health-monitor.js';
 export { LeaseManager, type LeaseManagerConfig } from './lease-manager.js';
+
+// Multi-tenant configuration
+export {
+  getMultiTenantConfig,
+  validateMultiTenantConfig,
+  type MultiTenantConfig,
+} from './multi-tenant-config.js';
