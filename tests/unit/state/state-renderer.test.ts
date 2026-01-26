@@ -8,7 +8,6 @@ import { describe, it, expect } from 'vitest';
 import {
   renderObservations,
   renderSingleObservation,
-  summarizeSignals,
   renderStateXml,
 } from '../../../src/state/state-renderer.js';
 import type {
@@ -21,6 +20,7 @@ import type {
   DOMObservation,
   ObservationGroups,
   SignificanceSignals,
+  ObservationChild,
 } from '../../../src/observation/observation.types.js';
 
 /**
@@ -75,202 +75,172 @@ function createObservationGroups(overrides: Partial<ObservationGroups> = {}): Ob
 }
 
 // ============================================================================
-// summarizeSignals Tests
-// ============================================================================
-
-describe('summarizeSignals', () => {
-  it('should return empty string when all signals are false', () => {
-    const signals = createSignals();
-    const result = summarizeSignals(signals);
-    expect(result).toBe('');
-  });
-
-  it('should render single semantic signal', () => {
-    const signals = createSignals({ hasAlertRole: true });
-    const result = summarizeSignals(signals);
-    expect(result).toBe('semantic="alert-role"');
-  });
-
-  it('should render multiple semantic signals comma-separated', () => {
-    const signals = createSignals({
-      hasAlertRole: true,
-      hasAriaLive: true,
-      isDialog: true,
-    });
-    const result = summarizeSignals(signals);
-    expect(result).toBe('semantic="alert-role,aria-live,dialog"');
-  });
-
-  it('should render single visual signal', () => {
-    const signals = createSignals({ isFixedOrSticky: true });
-    const result = summarizeSignals(signals);
-    expect(result).toBe('visual="fixed"');
-  });
-
-  it('should render multiple visual signals comma-separated', () => {
-    const signals = createSignals({
-      isFixedOrSticky: true,
-      hasHighZIndex: true,
-      coversSignificantViewport: true,
-    });
-    const result = summarizeSignals(signals);
-    expect(result).toBe('visual="fixed,high-z,viewport"');
-  });
-
-  it('should render structural signals as boolean attributes', () => {
-    const signals = createSignals({
-      isBodyDirectChild: true,
-      containsInteractiveElements: true,
-    });
-    const result = summarizeSignals(signals);
-    expect(result).toBe('body-child="true" has-interactives="true"');
-  });
-
-  it('should render temporal signals as boolean attributes', () => {
-    const signals = createSignals({
-      appearedAfterDelay: true,
-      wasShortLived: true,
-    });
-    const result = summarizeSignals(signals);
-    expect(result).toBe('delayed="true" ephemeral="true"');
-  });
-
-  it('should render all signal types in correct order', () => {
-    const signals = createSignals({
-      hasAlertRole: true,
-      isFixedOrSticky: true,
-      isBodyDirectChild: true,
-      appearedAfterDelay: true,
-    });
-    const result = summarizeSignals(signals);
-    expect(result).toBe('semantic="alert-role" visual="fixed" body-child="true" delayed="true"');
-  });
-
-  it('should render all signals when everything is true', () => {
-    const signals: SignificanceSignals = {
-      hasAlertRole: true,
-      hasAriaLive: true,
-      isDialog: true,
-      isFixedOrSticky: true,
-      hasHighZIndex: true,
-      coversSignificantViewport: true,
-      isBodyDirectChild: true,
-      containsInteractiveElements: true,
-      isVisibleInViewport: true,
-      hasNonTrivialText: true,
-      appearedAfterDelay: true,
-      wasShortLived: true,
-    };
-    const result = summarizeSignals(signals);
-    expect(result).toContain('semantic="alert-role,aria-live,dialog"');
-    expect(result).toContain('visual="fixed,high-z,viewport"');
-    expect(result).toContain('body-child="true"');
-    expect(result).toContain('has-interactives="true"');
-    expect(result).toContain('delayed="true"');
-    expect(result).toContain('ephemeral="true"');
-  });
-});
-
-// ============================================================================
 // renderSingleObservation Tests
 // ============================================================================
 
 describe('renderSingleObservation', () => {
-  it('should render minimal observation with required fields only', () => {
+  it('should render observation with when="action" for duringAction', () => {
     const obs = createObservation({
       type: 'appeared',
-      significance: 5,
-      signals: createSignals({ hasAlertRole: true }),
       content: { tag: 'div', text: 'Alert!', hasInteractives: false },
     });
 
-    const result = renderSingleObservation(obs, 6);
+    const result = renderSingleObservation(obs, 'action', 4);
 
-    expect(result).toContain('<appeared significance="5">');
-    expect(result).toContain('<signals semantic="alert-role" />');
-    expect(result).toContain('<content tag="div">Alert!</content>');
-    expect(result).toContain('</appeared>');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain('when="action"');
+    expect(result[0]).toContain('Alert!');
+  });
+
+  it('should render observation with when="prior" for sincePrevious', () => {
+    const obs = createObservation({
+      type: 'appeared',
+      content: { tag: 'div', text: 'Previous toast', hasInteractives: false },
+    });
+
+    const result = renderSingleObservation(obs, 'prior', 4);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain('when="prior"');
   });
 
   it('should include eid when present', () => {
     const obs = createObservation({ eid: 'btn-submit' });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).toContain('eid="btn-submit"');
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).toContain('eid="btn-submit"');
   });
 
   it('should not include eid when undefined', () => {
     const obs = createObservation({ eid: undefined });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).not.toContain('eid=');
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).not.toContain('eid=');
   });
 
-  it('should include ageMs when present', () => {
-    const obs = createObservation({ ageMs: 1500 });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).toContain('age_ms="1500"');
-  });
-
-  it('should include durationMs when present', () => {
-    const obs = createObservation({ durationMs: 2500 });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).toContain('duration_ms="2500"');
-  });
-
-  it('should render role when present in content', () => {
+  it('should include role when present in content', () => {
     const obs = createObservation({
       content: { tag: 'div', role: 'alert', text: 'Error', hasInteractives: false },
     });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).toContain('role="alert"');
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).toContain('role="alert"');
   });
 
-  it('should render interactive="true" when hasInteractives is true', () => {
-    const obs = createObservation({
-      content: { tag: 'div', text: 'Dialog', hasInteractives: true },
-    });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).toContain('interactive="true"');
+  it('should include delay_ms when present', () => {
+    const obs = createObservation({ delayMs: 200 });
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).toContain('delay_ms="200"');
   });
 
-  it('should not include interactive when hasInteractives is false', () => {
+  it('should include age_ms when present', () => {
+    const obs = createObservation({ ageMs: 1500 });
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).toContain('age_ms="1500"');
+  });
+
+  it('should include transient="true" when wasShortLived is true', () => {
     const obs = createObservation({
-      content: { tag: 'div', text: 'Toast', hasInteractives: false },
+      signals: createSignals({ wasShortLived: true }),
     });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).not.toContain('interactive=');
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).toContain('transient="true"');
+  });
+
+  it('should not include transient when wasShortLived is false', () => {
+    const obs = createObservation({
+      signals: createSignals({ wasShortLived: false }),
+    });
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).not.toContain('transient');
   });
 
   it('should escape XML special characters in text', () => {
     const obs = createObservation({
       content: { tag: 'div', text: '<script>alert("xss")</script>', hasInteractives: false },
     });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
-    expect(result).not.toContain('<script>');
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+    expect(result[0]).not.toContain('<script>');
   });
 
   it('should escape ampersand in text', () => {
     const obs = createObservation({
       content: { tag: 'div', text: 'Save & Continue', hasInteractives: false },
     });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).toContain('Save &amp; Continue');
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).toContain('Save &amp; Continue');
   });
 
   it('should render disappeared type correctly', () => {
     const obs = createObservation({ type: 'disappeared' });
-    const result = renderSingleObservation(obs, 0);
-    expect(result).toContain('<disappeared');
-    expect(result).toContain('</disappeared>');
-    expect(result).not.toContain('<appeared');
+    const result = renderSingleObservation(obs, 'action', 0);
+    expect(result[0]).toContain('<disappeared');
+    expect(result[0]).toContain('</disappeared>');
+    expect(result[0]).not.toContain('<appeared');
   });
 
   it('should apply correct indentation', () => {
     const obs = createObservation();
-    const result = renderSingleObservation(obs, 4);
-    const lines = result.split('\n');
-    expect(lines[0]).toMatch(/^ {4}</); // 4 spaces
-    expect(lines[1]).toMatch(/^ {6}</); // 6 spaces (4 + 2)
+    const result = renderSingleObservation(obs, 'action', 4);
+    expect(result[0]).toMatch(/^ {4}</); // 4 spaces
+  });
+
+  it('should render children when present', () => {
+    const children: ObservationChild[] = [
+      { tag: 'heading', eid: 'dlg-title', text: 'My Cart' },
+      { tag: 'text', text: 'Your cart is empty.' },
+      { tag: 'button', eid: 'btn-shop', text: 'Continue Shopping' },
+    ];
+    const obs = createObservation({
+      eid: 'dialog-001',
+      content: {
+        tag: 'div',
+        role: 'dialog',
+        text: 'My Cart Your cart is empty.',
+        hasInteractives: true,
+      },
+      children,
+    });
+
+    const result = renderSingleObservation(obs, 'action', 4);
+
+    expect(result.length).toBe(5); // Opening tag + 3 children + closing tag
+    expect(result[0]).toContain('<appeared');
+    expect(result[0]).toContain('eid="dialog-001"');
+    expect(result[0]).toContain('role="dialog"');
+    expect(result[1]).toContain('<heading eid="dlg-title">My Cart</heading>');
+    expect(result[2]).toContain('<text>Your cart is empty.</text>');
+    expect(result[3]).toContain('<button eid="btn-shop">Continue Shopping</button>');
+    expect(result[4]).toContain('</appeared>');
+  });
+
+  it('should render children without eid when not present', () => {
+    const children: ObservationChild[] = [{ tag: 'text', text: 'Static message' }];
+    const obs = createObservation({ children });
+
+    const result = renderSingleObservation(obs, 'action', 0);
+
+    // Children get +2 spaces relative to parent (parent is 0, child is 2)
+    expect(result[1]).toBe('  <text>Static message</text>');
+    expect(result[1]).not.toContain('eid=');
+  });
+
+  it('should escape XML in child text', () => {
+    const children: ObservationChild[] = [{ tag: 'button', eid: 'btn-1', text: 'Save & Continue' }];
+    const obs = createObservation({ children });
+
+    const result = renderSingleObservation(obs, 'action', 0);
+
+    expect(result[1]).toContain('Save &amp; Continue');
+  });
+
+  it('should apply indentation to children', () => {
+    const children: ObservationChild[] = [{ tag: 'button', eid: 'btn-1', text: 'Click' }];
+    const obs = createObservation({ children });
+
+    const result = renderSingleObservation(obs, 'action', 4);
+
+    expect(result[0]).toMatch(/^ {4}</); // Parent: 4 spaces
+    expect(result[1]).toMatch(/^ {6}</); // Child: 6 spaces (4 + 2)
+    expect(result[2]).toMatch(/^ {4}</); // Closing: 4 spaces
   });
 });
 
@@ -285,10 +255,9 @@ describe('renderObservations', () => {
     expect(result).toEqual([]);
   });
 
-  it('should render only duringAction when sincePrevious is empty', () => {
+  it('should render duringAction observations with when="action"', () => {
     const obs = createObservation({
-      significance: 4,
-      signals: createSignals({ hasAlertRole: true }),
+      content: { tag: 'div', text: 'Alert!', hasInteractives: false },
     });
     const groups = createObservationGroups({ duringAction: [obs] });
 
@@ -296,16 +265,17 @@ describe('renderObservations', () => {
     const xml = result.join('\n');
 
     expect(xml).toContain('<observations>');
-    expect(xml).toContain('<during_action>');
-    expect(xml).toContain('</during_action>');
+    expect(xml).toContain('when="action"');
     expect(xml).toContain('</observations>');
+    // Should NOT have wrapper elements
+    expect(xml).not.toContain('<during_action>');
     expect(xml).not.toContain('<since_previous>');
   });
 
-  it('should render only sincePrevious when duringAction is empty', () => {
+  it('should render sincePrevious observations with when="prior"', () => {
     const obs = createObservation({
       ageMs: 1000,
-      signals: createSignals({ isDialog: true }),
+      content: { tag: 'dialog', text: 'Modal', hasInteractives: true },
     });
     const groups = createObservationGroups({ sincePrevious: [obs] });
 
@@ -313,10 +283,11 @@ describe('renderObservations', () => {
     const xml = result.join('\n');
 
     expect(xml).toContain('<observations>');
-    expect(xml).toContain('<since_previous>');
-    expect(xml).toContain('</since_previous>');
+    expect(xml).toContain('when="prior"');
     expect(xml).toContain('</observations>');
+    // Should NOT have wrapper elements
     expect(xml).not.toContain('<during_action>');
+    expect(xml).not.toContain('<since_previous>');
   });
 
   it('should render both groups when both have observations', () => {
@@ -335,12 +306,10 @@ describe('renderObservations', () => {
     const result = renderObservations(groups);
     const xml = result.join('\n');
 
-    expect(xml).toContain('<during_action>');
+    expect(xml).toContain('when="action"');
     expect(xml).toContain('During action');
-    expect(xml).toContain('</during_action>');
-    expect(xml).toContain('<since_previous>');
+    expect(xml).toContain('when="prior"');
     expect(xml).toContain('Since previous');
-    expect(xml).toContain('</since_previous>');
   });
 
   it('should render multiple observations in each group', () => {
@@ -365,13 +334,9 @@ describe('renderObservations', () => {
 
     const result = renderObservations(groups);
 
-    // Check structure - note: observation is a single multi-line string element
     expect(result[0]).toBe('  <observations>');
-    expect(result[1]).toBe('    <during_action>');
-    // Observation is at index 2 as a multi-line string
-    expect(result[2]).toContain('<appeared');
-    expect(result[3]).toBe('    </during_action>');
-    expect(result[4]).toBe('  </observations>');
+    expect(result[1]).toContain('<appeared');
+    expect(result[result.length - 1]).toBe('  </observations>');
   });
 
   it('should render duringAction before sincePrevious', () => {
@@ -497,7 +462,7 @@ describe('renderStateXml mutations', () => {
     };
   }
 
-  it('should render empty mutations section when no mutations', () => {
+  it('should render self-closing diff when no mutations', () => {
     const response = createStateResponse({
       mutations: { textChanged: [], statusAppeared: [] },
       isEmpty: true,
@@ -505,12 +470,13 @@ describe('renderStateXml mutations', () => {
 
     const xml = renderStateXml(response);
 
-    // Should have empty="true" but no <mutations> section
-    expect(xml).toContain('empty="true"');
+    // Should have self-closing diff tag with flattened attributes
+    expect(xml).toMatch(/<diff type="mutation"[^>]*\/>/);
+    // Should NOT have <mutations> wrapper
     expect(xml).not.toContain('<mutations>');
   });
 
-  it('should render text-changed elements in mutations', () => {
+  it('should render text-changed elements inline in diff', () => {
     const response = createStateResponse({
       mutations: {
         textChanged: [{ eid: 'rd-abc123', from: 'Loading...', to: 'Loaded!' }],
@@ -521,13 +487,15 @@ describe('renderStateXml mutations', () => {
 
     const xml = renderStateXml(response);
 
-    expect(xml).toContain('empty="false"');
-    expect(xml).toContain('<mutations>');
+    // Flattened format - no <mutations> wrapper
+    expect(xml).toContain('<diff type="mutation"');
     expect(xml).toContain('<text-changed id="rd-abc123">Loading... → Loaded!</text-changed>');
-    expect(xml).toContain('</mutations>');
+    expect(xml).toContain('</diff>');
+    // Should NOT have <mutations> wrapper
+    expect(xml).not.toContain('<mutations>');
   });
 
-  it('should render status elements in mutations', () => {
+  it('should render status elements inline in diff', () => {
     const response = createStateResponse({
       mutations: {
         textChanged: [],
@@ -538,12 +506,13 @@ describe('renderStateXml mutations', () => {
 
     const xml = renderStateXml(response);
 
-    expect(xml).toContain('<mutations>');
+    expect(xml).toContain('<diff type="mutation"');
     expect(xml).toContain('<status id="rd-def456" role="status">Success!</status>');
-    expect(xml).toContain('</mutations>');
+    expect(xml).toContain('</diff>');
+    expect(xml).not.toContain('<mutations>');
   });
 
-  it('should render alert elements in mutations', () => {
+  it('should render alert elements inline in diff', () => {
     const response = createStateResponse({
       mutations: {
         textChanged: [],
@@ -557,7 +526,7 @@ describe('renderStateXml mutations', () => {
     expect(xml).toContain('<status id="rd-alert1" role="alert">Error occurred!</status>');
   });
 
-  it('should render both text changes and status appearances', () => {
+  it('should render both text changes and status appearances inline', () => {
     const response = createStateResponse({
       mutations: {
         textChanged: [{ eid: 'rd-progress', from: '50%', to: '100%' }],
@@ -568,10 +537,11 @@ describe('renderStateXml mutations', () => {
 
     const xml = renderStateXml(response);
 
-    expect(xml).toContain('<mutations>');
+    expect(xml).toContain('<diff type="mutation"');
     expect(xml).toContain('<text-changed id="rd-progress">50% → 100%</text-changed>');
     expect(xml).toContain('<status id="rd-done" role="status">Complete!</status>');
-    expect(xml).toContain('</mutations>');
+    expect(xml).toContain('</diff>');
+    expect(xml).not.toContain('<mutations>');
   });
 
   it('should escape XML special characters in mutations', () => {
@@ -639,6 +609,47 @@ describe('renderStateXml mutations', () => {
     const xml = renderStateXml(response);
 
     expect(xml).toContain('<baseline reason="first"');
+    expect(xml).not.toContain('<diff');
     expect(xml).not.toContain('<mutations>');
+  });
+
+  it('should include nav attribute in flattened diff', () => {
+    const response = createStateResponse({
+      doc: {
+        from: { url: 'https://example.com', title: 'Old Page' },
+        to: { url: 'https://example.com/new', title: 'New Page' },
+        nav_type: 'soft',
+      },
+    });
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('nav="soft"');
+  });
+
+  it('should include added/removed counts in flattened diff', () => {
+    const response = createStateResponse({
+      actionables: {
+        added: ['btn-1', 'btn-2'],
+        removed: ['btn-old'],
+        changed: [],
+      },
+    });
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('added="2"');
+    expect(xml).toContain('removed="1"');
+  });
+
+  it('should not include empty="true" in new format', () => {
+    const response = createStateResponse({
+      isEmpty: true,
+    });
+
+    const xml = renderStateXml(response);
+
+    // Old format had empty="true", new format doesn't need it
+    expect(xml).not.toContain('empty=');
   });
 });

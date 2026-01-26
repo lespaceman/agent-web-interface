@@ -8,12 +8,8 @@
  * In baseline mode, renders all actionables.
  */
 
-import type { StateResponseObject, ActionableInfo, TextChange, StatusNode } from './types.js';
-import type {
-  DOMObservation,
-  ObservationGroups,
-  SignificanceSignals,
-} from '../observation/observation.types.js';
+import type { StateResponseObject, ActionableInfo } from './types.js';
+import type { DOMObservation, ObservationGroups } from '../observation/observation.types.js';
 
 /**
  * Render a StateResponseObject as a dense XML string.
@@ -42,21 +38,39 @@ export function renderStateXml(response: StateResponseObject): string {
     );
   } else {
     const d = diff;
-    lines.push(`  <diff type="mutation" empty="${d.diff.isEmpty}">`);
+
+    // Build flattened diff attributes
+    const diffAttrs: string[] = ['type="mutation"'];
     if (d.diff.doc) {
-      lines.push(`    <nav type="${d.diff.doc.nav_type}" />`);
+      diffAttrs.push(`nav="${d.diff.doc.nav_type}"`);
     }
-    if (d.diff.actionables.added.length > 0 || d.diff.actionables.removed.length > 0) {
-      lines.push(
-        `    <nodes added="${d.diff.actionables.added.length}" removed="${d.diff.actionables.removed.length}" />`
-      );
+    if (d.diff.actionables.added.length > 0) {
+      diffAttrs.push(`added="${d.diff.actionables.added.length}"`);
     }
-    // Render mutations (status-bearing readable element changes)
-    const mutationLines = renderMutations(d.diff.mutations);
-    if (mutationLines.length > 0) {
-      lines.push(...mutationLines);
+    if (d.diff.actionables.removed.length > 0) {
+      diffAttrs.push(`removed="${d.diff.actionables.removed.length}"`);
     }
-    lines.push(`  </diff>`);
+
+    // Check if there are mutations to render inline
+    const { textChanged, statusAppeared } = d.diff.mutations;
+    const hasMutations = textChanged.length > 0 || statusAppeared.length > 0;
+
+    if (hasMutations) {
+      lines.push(`  <diff ${diffAttrs.join(' ')}>`);
+      // Render mutations directly without wrapper
+      for (const change of textChanged) {
+        const from = escapeXml(change.from);
+        const to = escapeXml(change.to);
+        lines.push(`    <text-changed id="${change.eid}">${from} → ${to}</text-changed>`);
+      }
+      for (const status of statusAppeared) {
+        const text = escapeXml(status.text);
+        lines.push(`    <status id="${status.eid}" role="${status.role}">${text}</status>`);
+      }
+      lines.push(`  </diff>`);
+    } else {
+      lines.push(`  <diff ${diffAttrs.join(' ')} />`);
+    }
   }
 
   // 3. Observations (if present)
@@ -200,49 +214,6 @@ function escapeXml(unsafe: string): string {
 }
 
 // ============================================================================
-// Mutations Rendering
-// ============================================================================
-
-/**
- * Render mutations section (status-bearing readable element changes).
- *
- * Format:
- * <mutations>
- *   <text-changed id="rd-abc123">Loading... → Loaded!</text-changed>
- *   <status id="rd-def456" role="alert">Error occurred</status>
- * </mutations>
- */
-function renderMutations(mutations: {
-  textChanged: TextChange[];
-  statusAppeared: StatusNode[];
-}): string[] {
-  const { textChanged, statusAppeared } = mutations;
-
-  if (textChanged.length === 0 && statusAppeared.length === 0) {
-    return [];
-  }
-
-  const lines: string[] = [];
-  lines.push('    <mutations>');
-
-  // Render text changes
-  for (const change of textChanged) {
-    const from = escapeXml(change.from);
-    const to = escapeXml(change.to);
-    lines.push(`      <text-changed id="${change.eid}">${from} → ${to}</text-changed>`);
-  }
-
-  // Render status elements that appeared
-  for (const status of statusAppeared) {
-    const text = escapeXml(status.text);
-    lines.push(`      <status id="${status.eid}" role="${status.role}">${text}</status>`);
-  }
-
-  lines.push('    </mutations>');
-  return lines;
-}
-
-// ============================================================================
 // Observation Rendering
 // ============================================================================
 
@@ -279,6 +250,12 @@ function deduplicateObservations(observations: DOMObservation[]): DOMObservation
 
 /**
  * Render observations section if there are any significant observations.
+ *
+ * Output format (flattened, no wrapper elements):
+ * <observations>
+ *   <appeared when="action" eid="dialog-001" role="dialog">...</appeared>
+ *   <appeared when="prior" eid="toast-002" role="alert" age_ms="1500">...</appeared>
+ * </observations>
  */
 export function renderObservations(observations: ObservationGroups): string[] {
   const { duringAction, sincePrevious } = observations;
@@ -294,22 +271,12 @@ export function renderObservations(observations: ObservationGroups): string[] {
   const lines: string[] = [];
   lines.push('  <observations>');
 
-  // Observations from this action
-  if (dedupedDuringAction.length > 0) {
-    lines.push('    <during_action>');
-    for (const obs of dedupedDuringAction) {
-      lines.push(renderSingleObservation(obs, 6));
-    }
-    lines.push('    </during_action>');
+  // Render all observations with when="action" or when="prior" attribute
+  for (const obs of dedupedDuringAction) {
+    lines.push(...renderSingleObservation(obs, 'action', 4));
   }
-
-  // Observations accumulated since previous tool call
-  if (dedupedSincePrevious.length > 0) {
-    lines.push('    <since_previous>');
-    for (const obs of dedupedSincePrevious) {
-      lines.push(renderSingleObservation(obs, 6));
-    }
-    lines.push('    </since_previous>');
+  for (const obs of dedupedSincePrevious) {
+    lines.push(...renderSingleObservation(obs, 'prior', 4));
   }
 
   lines.push('  </observations>');
@@ -317,60 +284,52 @@ export function renderObservations(observations: ObservationGroups): string[] {
 }
 
 /**
- * Render a single observation as XML.
+ * Render a single observation as XML lines.
+ *
+ * Output format:
+ * <appeared when="action" eid="dialog-001" role="dialog" delay_ms="200">
+ *   <heading eid="dlg-title">My Cart</heading>
+ *   <text>Your cart is empty.</text>
+ *   <button eid="btn-shop">Continue Shopping</button>
+ * </appeared>
+ *
+ * Or without children:
+ * <appeared when="action" eid="toast-001" role="alert">Error message</appeared>
+ *
+ * @param obs - The observation to render
+ * @param when - 'action' for duringAction, 'prior' for sincePrevious
+ * @param indent - Number of spaces for indentation
+ * @returns Array of XML lines
  */
-export function renderSingleObservation(obs: DOMObservation, indent: number): string {
+export function renderSingleObservation(
+  obs: DOMObservation,
+  when: 'action' | 'prior',
+  indent: number
+): string[] {
   const pad = ' '.repeat(indent);
+  const lines: string[] = [];
 
-  // Build attributes
-  const attrs: string[] = [`significance="${obs.significance}"`];
+  // Build attributes (flattened, no nested elements)
+  const attrs: string[] = [`when="${when}"`];
   if (obs.eid) attrs.push(`eid="${obs.eid}"`);
+  if (obs.content.role) attrs.push(`role="${obs.content.role}"`);
+  if (obs.delayMs) attrs.push(`delay_ms="${obs.delayMs}"`);
   if (obs.ageMs) attrs.push(`age_ms="${obs.ageMs}"`);
-  if (obs.durationMs) attrs.push(`duration_ms="${obs.durationMs}"`);
+  if (obs.signals.wasShortLived) attrs.push('transient="true"');
 
-  // Build signals summary
-  const signals = summarizeSignals(obs.signals);
+  const hasChildren = obs.children && obs.children.length > 0;
 
-  // Build content attributes
-  const contentAttrs: string[] = [`tag="${obs.content.tag}"`];
-  if (obs.content.role) contentAttrs.push(`role="${obs.content.role}"`);
-  if (obs.content.hasInteractives) contentAttrs.push('interactive="true"');
+  if (hasChildren) {
+    lines.push(`${pad}<${obs.type} ${attrs.join(' ')}>`);
+    for (const child of obs.children!) {
+      const childAttrs = child.eid ? ` eid="${child.eid}"` : '';
+      lines.push(`${pad}  <${child.tag}${childAttrs}>${escapeXml(child.text)}</${child.tag}>`);
+    }
+    lines.push(`${pad}</${obs.type}>`);
+  } else {
+    const text = escapeXml(obs.content.text);
+    lines.push(`${pad}<${obs.type} ${attrs.join(' ')}>${text}</${obs.type}>`);
+  }
 
-  const text = escapeXml(obs.content.text);
-
-  return `${pad}<${obs.type} ${attrs.join(' ')}>
-${pad}  <signals ${signals} />
-${pad}  <content ${contentAttrs.join(' ')}>${text}</content>
-${pad}</${obs.type}>`;
-}
-
-/**
- * Summarize significance signals as XML attributes.
- */
-export function summarizeSignals(signals: SignificanceSignals): string {
-  const parts: string[] = [];
-
-  // Semantic
-  const semantic: string[] = [];
-  if (signals.hasAlertRole) semantic.push('alert-role');
-  if (signals.hasAriaLive) semantic.push('aria-live');
-  if (signals.isDialog) semantic.push('dialog');
-  if (semantic.length) parts.push(`semantic="${semantic.join(',')}"`);
-
-  // Visual
-  const visual: string[] = [];
-  if (signals.isFixedOrSticky) visual.push('fixed');
-  if (signals.hasHighZIndex) visual.push('high-z');
-  if (signals.coversSignificantViewport) visual.push('viewport');
-  if (visual.length) parts.push(`visual="${visual.join(',')}"`);
-
-  // Structural
-  if (signals.isBodyDirectChild) parts.push('body-child="true"');
-  if (signals.containsInteractiveElements) parts.push('has-interactives="true"');
-
-  // Temporal
-  if (signals.appearedAfterDelay) parts.push('delayed="true"');
-  if (signals.wasShortLived) parts.push('ephemeral="true"');
-
-  return parts.join(' ');
+  return lines;
 }

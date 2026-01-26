@@ -67,7 +67,7 @@ function createReadableNode(overrides: Partial<ReadableNode> = {}): ReadableNode
     kind: 'generic' as NodeKind,
     label: 'Test node',
     where: { region: 'main' },
-    layout: { bounds: { x: 0, y: 0, width: 100, height: 50 }, visible: true },
+    layout: { bbox: { x: 0, y: 0, w: 100, h: 50 } },
     ...overrides,
   } as ReadableNode;
 }
@@ -619,5 +619,402 @@ describe('computeMatchScore empty text/label scenarios', () => {
     const score = computeMatchScore(obs, node);
     // Both trim to empty, so exact match on empty string = 0.3 + 0.3
     expect(score).toBeCloseTo(0.6, 1);
+  });
+});
+
+// ============================================================================
+// extractObservationChildren Tests
+// ============================================================================
+
+import { extractObservationChildren } from '../../../src/observation/eid-linker.js';
+
+describe('extractObservationChildren', () => {
+  it('should extract interactive children from matched container', () => {
+    // Container: dialog at 0,0 with 500x400 size
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Login Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 500, h: 400 } },
+    });
+
+    // Children inside container
+    const buttonNode = createReadableNode({
+      kind: 'button',
+      label: 'Submit',
+      backend_node_id: 2,
+      layout: { bbox: { x: 50, y: 300, w: 100, h: 40 } },
+    });
+    const linkNode = createReadableNode({
+      kind: 'link',
+      label: 'Forgot Password',
+      backend_node_id: 3,
+      layout: { bbox: { x: 200, y: 320, w: 120, h: 20 } },
+    });
+
+    const snapshot = createSnapshot([containerNode, buttonNode, linkNode]);
+    const registry = createMockRegistry({ 2: 'btn-submit', 3: 'link-forgot' });
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(2);
+    expect(children[0]).toEqual({ tag: 'button', eid: 'btn-submit', text: 'Submit' });
+    expect(children[1]).toEqual({ tag: 'link', eid: 'link-forgot', text: 'Forgot Password' });
+  });
+
+  it('should extract headings as children', () => {
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Cart Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 400, h: 300 } },
+    });
+    const headingNode = createReadableNode({
+      kind: 'heading',
+      label: 'My Cart',
+      backend_node_id: 2,
+      layout: { bbox: { x: 20, y: 20, w: 200, h: 30 } },
+    });
+
+    const snapshot = createSnapshot([containerNode, headingNode]);
+    const registry = createMockRegistry({ 2: 'heading-cart' });
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(1);
+    expect(children[0]).toEqual({ tag: 'heading', eid: 'heading-cart', text: 'My Cart' });
+  });
+
+  it('should not include nodes outside container bounds', () => {
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 100, y: 100, w: 200, h: 200 } },
+    });
+    // Node outside container
+    const outsideButton = createReadableNode({
+      kind: 'button',
+      label: 'Outside',
+      backend_node_id: 2,
+      layout: { bbox: { x: 0, y: 0, w: 50, h: 30 } },
+    });
+    // Node inside container
+    const insideButton = createReadableNode({
+      kind: 'button',
+      label: 'Inside',
+      backend_node_id: 3,
+      layout: { bbox: { x: 150, y: 150, w: 50, h: 30 } },
+    });
+
+    const snapshot = createSnapshot([containerNode, outsideButton, insideButton]);
+    const registry = createMockRegistry({ 2: 'btn-outside', 3: 'btn-inside' });
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(1);
+    expect(children[0].text).toBe('Inside');
+  });
+
+  it('should limit children to maximum of 5', () => {
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 500, h: 500 } },
+    });
+
+    // Create 10 buttons inside container
+    const childNodes = Array.from({ length: 10 }, (_, i) =>
+      createReadableNode({
+        kind: 'button',
+        label: `Button ${i + 1}`,
+        backend_node_id: 100 + i,
+        layout: { bbox: { x: 10, y: 10 + i * 40, w: 100, h: 30 } },
+      })
+    );
+
+    const snapshot = createSnapshot([containerNode, ...childNodes]);
+    const eidMap = Object.fromEntries(
+      childNodes.map((n, i) => [n.backend_node_id, `btn-${i + 1}`])
+    );
+    const registry = createMockRegistry(eidMap);
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(5);
+  });
+
+  it('should skip nodes with empty labels', () => {
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 300, h: 200 } },
+    });
+    const emptyButton = createReadableNode({
+      kind: 'button',
+      label: '',
+      backend_node_id: 2,
+      layout: { bbox: { x: 50, y: 50, w: 100, h: 30 } },
+    });
+    const labeledButton = createReadableNode({
+      kind: 'button',
+      label: 'Click Me',
+      backend_node_id: 3,
+      layout: { bbox: { x: 50, y: 100, w: 100, h: 30 } },
+    });
+
+    const snapshot = createSnapshot([containerNode, emptyButton, labeledButton]);
+    const registry = createMockRegistry({ 2: 'btn-empty', 3: 'btn-click' });
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(1);
+    expect(children[0].text).toBe('Click Me');
+  });
+
+  it('should not include non-interactive nodes (except headings)', () => {
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 300, h: 200 } },
+    });
+    // Text (non-interactive, should be excluded)
+    const textNode = createReadableNode({
+      kind: 'text',
+      label: 'Some text',
+      backend_node_id: 2,
+      layout: { bbox: { x: 10, y: 10, w: 100, h: 20 } },
+    });
+    // Section (structural, should be excluded)
+    const sectionNode = createReadableNode({
+      kind: 'section',
+      label: 'Section',
+      backend_node_id: 3,
+      layout: { bbox: { x: 10, y: 40, w: 200, h: 100 } },
+    });
+    // Button (interactive, should be included)
+    const buttonNode = createReadableNode({
+      kind: 'button',
+      label: 'OK',
+      backend_node_id: 4,
+      layout: { bbox: { x: 10, y: 150, w: 80, h: 30 } },
+    });
+
+    const snapshot = createSnapshot([containerNode, textNode, sectionNode, buttonNode]);
+    const registry = createMockRegistry({ 2: 'text-1', 3: 'section-1', 4: 'btn-ok' });
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(1);
+    expect(children[0]).toEqual({ tag: 'button', eid: 'btn-ok', text: 'OK' });
+  });
+
+  it('should handle container with no children', () => {
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Empty Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 200, h: 100 } },
+    });
+
+    const snapshot = createSnapshot([containerNode]);
+    const registry = createMockRegistry({});
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(0);
+  });
+
+  it('should set eid to undefined when registry returns undefined', () => {
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 300, h: 200 } },
+    });
+    const buttonNode = createReadableNode({
+      kind: 'button',
+      label: 'Click',
+      backend_node_id: 2,
+      layout: { bbox: { x: 50, y: 50, w: 100, h: 30 } },
+    });
+
+    const snapshot = createSnapshot([containerNode, buttonNode]);
+    // Registry returns undefined for backend_node_id 2
+    const registry = createMockRegistry({});
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(1);
+    expect(children[0].eid).toBeUndefined();
+    expect(children[0].tag).toBe('button');
+    expect(children[0].text).toBe('Click');
+  });
+
+  it('should map node kinds to correct child tags', () => {
+    const containerNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Dialog',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 500, h: 400 } },
+    });
+
+    const nodes = [
+      createReadableNode({
+        kind: 'button',
+        label: 'Button',
+        backend_node_id: 2,
+        layout: { bbox: { x: 10, y: 10, w: 80, h: 30 } },
+      }),
+      createReadableNode({
+        kind: 'link',
+        label: 'Link',
+        backend_node_id: 3,
+        layout: { bbox: { x: 10, y: 50, w: 80, h: 30 } },
+      }),
+      createReadableNode({
+        kind: 'heading',
+        label: 'Heading',
+        backend_node_id: 4,
+        layout: { bbox: { x: 10, y: 90, w: 80, h: 30 } },
+      }),
+      createReadableNode({
+        kind: 'input',
+        label: 'Input',
+        backend_node_id: 5,
+        layout: { bbox: { x: 10, y: 130, w: 80, h: 30 } },
+      }),
+      createReadableNode({
+        kind: 'checkbox',
+        label: 'Checkbox',
+        backend_node_id: 6,
+        layout: { bbox: { x: 10, y: 170, w: 80, h: 30 } },
+      }),
+    ];
+
+    const snapshot = createSnapshot([containerNode, ...nodes]);
+    const registry = createMockRegistry({
+      2: 'btn-1',
+      3: 'link-1',
+      4: 'heading-1',
+      5: 'input-1',
+      6: 'checkbox-1',
+    });
+
+    const children = extractObservationChildren(containerNode, snapshot, registry);
+
+    expect(children).toHaveLength(5);
+    expect(children.map((c) => c.tag)).toEqual(['button', 'link', 'heading', 'input', 'checkbox']);
+  });
+});
+
+describe('linkObservationsToSnapshot children population', () => {
+  it('should populate children on linked observations', () => {
+    // Create observation
+    const obs = createObservation({
+      type: 'appeared',
+      content: { tag: 'div', role: 'dialog', text: 'Login', hasInteractives: true },
+    });
+    const groups = createObservationGroups({ duringAction: [obs] });
+
+    // Create matching dialog node with button child
+    const dialogNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Login',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 400, h: 300 } },
+    });
+    const buttonNode = createReadableNode({
+      kind: 'button',
+      label: 'Submit',
+      backend_node_id: 2,
+      layout: { bbox: { x: 50, y: 200, w: 100, h: 40 } },
+    });
+
+    const snapshot = createSnapshot([dialogNode, buttonNode]);
+    const registry = createMockRegistry({
+      1: 'dialog-login',
+      2: 'btn-submit',
+    });
+
+    linkObservationsToSnapshot(groups, snapshot, registry);
+
+    expect(obs.eid).toBe('dialog-login');
+    expect(obs.children).toBeDefined();
+    expect(obs.children).toHaveLength(1);
+    expect(obs.children![0]).toEqual({ tag: 'button', eid: 'btn-submit', text: 'Submit' });
+  });
+
+  it('should set delayMs when appearedAfterDelay signal is true', () => {
+    const obs = createObservation({
+      type: 'appeared',
+      content: { tag: 'div', role: 'dialog', text: 'Modal', hasInteractives: true },
+      signals: createSignals({ appearedAfterDelay: true }),
+    });
+    const groups = createObservationGroups({ duringAction: [obs] });
+
+    const dialogNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Modal',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 400, h: 300 } },
+    });
+
+    const snapshot = createSnapshot([dialogNode]);
+    const registry = createMockRegistry({ 1: 'dialog-1' });
+
+    linkObservationsToSnapshot(groups, snapshot, registry);
+
+    expect(obs.delayMs).toBe(200);
+  });
+
+  it('should not set delayMs when appearedAfterDelay signal is false', () => {
+    const obs = createObservation({
+      type: 'appeared',
+      content: { tag: 'div', role: 'dialog', text: 'Modal', hasInteractives: true },
+      signals: createSignals({ appearedAfterDelay: false }),
+    });
+    const groups = createObservationGroups({ duringAction: [obs] });
+
+    const dialogNode = createReadableNode({
+      kind: 'dialog',
+      label: 'Modal',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 400, h: 300 } },
+    });
+
+    const snapshot = createSnapshot([dialogNode]);
+    const registry = createMockRegistry({ 1: 'dialog-1' });
+
+    linkObservationsToSnapshot(groups, snapshot, registry);
+
+    expect(obs.delayMs).toBeUndefined();
+  });
+
+  it('should not set children when no children extracted', () => {
+    const obs = createObservation({
+      type: 'appeared',
+      content: { tag: 'div', role: 'alert', text: 'Error!', hasInteractives: false },
+    });
+    const groups = createObservationGroups({ duringAction: [obs] });
+
+    // Alert with no children
+    const alertNode = createReadableNode({
+      kind: 'generic',
+      label: 'Error!',
+      backend_node_id: 1,
+      layout: { bbox: { x: 0, y: 0, w: 200, h: 50 } },
+    });
+
+    const snapshot = createSnapshot([alertNode]);
+    const registry = createMockRegistry({ 1: 'alert-1' });
+
+    linkObservationsToSnapshot(groups, snapshot, registry);
+
+    expect(obs.eid).toBe('alert-1');
+    expect(obs.children).toBeUndefined();
   });
 });
