@@ -10,6 +10,7 @@ import type { BaseSnapshot, NodeState } from '../snapshot/snapshot.types.js';
 import { getStateManager } from './execute-action.js';
 import type { StateResponse } from '../state/types.js';
 import type { NodeDetails } from './tool-schemas.js';
+import { xmlAttr } from '../lib/text-utils.js';
 
 // ============================================================================
 // XML Utilities
@@ -246,9 +247,9 @@ export function buildGetNodeDetailsResponse(
 
   // Find (locator strategies)
   if (node.find) {
-    const findAttrs = [`primary="${escapeXml(node.find.primary)}"`];
+    const findAttrs = [xmlAttr('primary', node.find.primary)];
     if (node.find.alternates && node.find.alternates.length > 0) {
-      findAttrs.push(`alternates="${escapeXml(node.find.alternates.join(';'))}"`);
+      findAttrs.push(xmlAttr('alternates', node.find.alternates.join(';')));
     }
     lines.push(`    <find ${findAttrs.join(' ')} />`);
   }

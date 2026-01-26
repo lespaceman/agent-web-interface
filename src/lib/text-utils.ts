@@ -440,3 +440,33 @@ export function getTextContent(
   const result = normalizeText(parts.join(' '));
   return result || undefined;
 }
+
+/**
+ * Build an XML attribute string, choosing quote style to minimize escaping.
+ * Uses single quotes when value contains double quotes (common in selectors).
+ *
+ * @param name - Attribute name
+ * @param value - Attribute value
+ * @returns Formatted attribute string like `name="value"` or `name='value'`
+ */
+export function xmlAttr(name: string, value: string): string {
+  if (!value) return `${name}=""`;
+
+  const hasDoubleQuote = value.includes('"');
+  const hasSingleQuote = value.includes("'");
+
+  // Prefer single quotes when value contains double quotes (common in selectors)
+  if (hasDoubleQuote && !hasSingleQuote) {
+    const escaped = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `${name}='${escaped}'`;
+  }
+
+  // Default: double-quote wrapping with full escaping
+  const escaped = value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+  return `${name}="${escaped}"`;
+}
