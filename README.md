@@ -124,6 +124,7 @@ The server accepts the following arguments to configure browser initialization:
 The browser is automatically launched or connected on the first tool call. No explicit initialization is needed.
 
 Examples:
+
 ```bash
 # Auto-launch headless browser (default)
 npx athena-browser-mcp
