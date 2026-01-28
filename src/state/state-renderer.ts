@@ -8,7 +8,7 @@
  * In baseline mode, renders all actionables.
  */
 
-import type { StateResponseObject, ActionableInfo } from './types.js';
+import type { StateResponseObject, ActionableInfo, SnapshotDiagnostics } from './types.js';
 import type { DOMObservation, ObservationGroups } from '../observation/observation.types.js';
 
 /**
@@ -36,6 +36,14 @@ export function renderStateXml(response: StateResponseObject): string {
     lines.push(
       `  <baseline reason="${diff.reason}"${diff.error ? ` error="${escapeXml(diff.error)}"` : ''} />`
     );
+
+    // 2a. Include diagnostics if present (only for baseline/error responses)
+    if (response.diagnostics) {
+      const diagLines = renderDiagnostics(response.diagnostics);
+      if (diagLines.length > 0) {
+        lines.push(...diagLines);
+      }
+    }
   } else {
     const d = diff;
 
@@ -330,6 +338,55 @@ export function renderSingleObservation(
     const text = escapeXml(obs.content.text);
     lines.push(`${pad}<${obs.type} ${attrs.join(' ')}>${text}</${obs.type}>`);
   }
+
+  return lines;
+}
+
+// ============================================================================
+// Diagnostics Rendering
+// ============================================================================
+
+/**
+ * Render diagnostics section for debugging snapshot failures.
+ *
+ * Output format:
+ * <diagnostics>
+ *   <page_health healthy="false">
+ *     <url>https://example.com</url>
+ *     <title>(empty)</title>
+ *     <content_length>0</content_length>
+ *     <warnings>empty_title</warnings>
+ *     <errors>empty_content</errors>
+ *   </page_health>
+ * </diagnostics>
+ *
+ * @param diagnostics - Diagnostics data to render
+ * @returns Array of XML lines
+ */
+export function renderDiagnostics(diagnostics: SnapshotDiagnostics): string[] {
+  const { pageHealth } = diagnostics;
+  const lines: string[] = [];
+
+  lines.push('  <diagnostics>');
+  lines.push(`    <page_health healthy="${pageHealth.isHealthy}">`);
+  lines.push(`      <url>${escapeXml(pageHealth.url)}</url>`);
+  lines.push(`      <title>${escapeXml(pageHealth.title || '(empty)')}</title>`);
+  lines.push(`      <content_length>${pageHealth.contentLength}</content_length>`);
+
+  if (pageHealth.warnings.length > 0) {
+    lines.push(`      <warnings>${escapeXml(pageHealth.warnings.join(', '))}</warnings>`);
+  }
+
+  if (pageHealth.errors.length > 0) {
+    lines.push(`      <errors>${escapeXml(pageHealth.errors.join(', '))}</errors>`);
+  }
+
+  if (pageHealth.contentError) {
+    lines.push(`      <content_error>${escapeXml(pageHealth.contentError)}</content_error>`);
+  }
+
+  lines.push('    </page_health>');
+  lines.push('  </diagnostics>');
 
   return lines;
 }

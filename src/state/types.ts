@@ -7,6 +7,7 @@
 
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
 import type { ObservationGroups } from '../observation/observation.types.js';
+import type { PageHealthReport } from '../diagnostics/page-health.js';
 
 // ============================================================================
 // State Handle Types
@@ -54,6 +55,21 @@ export interface StateResponseObject {
    * Optional, only present if observations were captured.
    */
   observations?: ObservationGroups;
+
+  /**
+   * Diagnostics for debugging snapshot failures.
+   * Only present when snapshot is unhealthy and diagnostics were collected.
+   */
+  diagnostics?: SnapshotDiagnostics;
+}
+
+/**
+ * Diagnostics collected when snapshot capture fails.
+ * Helps debug why a page couldn't be captured.
+ */
+export interface SnapshotDiagnostics {
+  /** Page health report with URL, title, content status */
+  pageHealth: PageHealthReport;
 }
 
 /**

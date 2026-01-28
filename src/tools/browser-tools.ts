@@ -182,13 +182,25 @@ function buildRuntimeHealth(
 }
 
 /**
+ * Result of snapshot capture with recovery attempt.
+ */
+interface CaptureRecoveryResult {
+  snapshot: BaseSnapshot;
+  handle: PageHandle;
+  runtime_health: RuntimeHealth;
+  /** Diagnostics collected when snapshot is unhealthy (for error responses) */
+  diagnostics?: { pageHealth: import('../diagnostics/page-health.js').PageHealthReport };
+}
+
+/**
  * Capture a snapshot with stabilization and CDP recovery when empty.
+ * Collects diagnostics when snapshot capture fails to help debug issues.
  */
 async function captureSnapshotWithRecovery(
   session: SessionManager,
   handle: PageHandle,
   pageId: string
-): Promise<{ snapshot: BaseSnapshot; handle: PageHandle; runtime_health: RuntimeHealth }> {
+): Promise<CaptureRecoveryResult> {
   const ensureResult = await ensureCdpSession(session, handle);
   handle = ensureResult.handle;
 
@@ -200,14 +212,23 @@ async function captureSnapshotWithRecovery(
     console.warn(`[RECOVERY] Empty snapshot for ${pageId} (${healthCode}); rebinding CDP session`);
 
     handle = await session.rebindCdpSession(pageId);
-    result = await captureWithStabilization(handle.cdp, handle.page, pageId, { maxRetries: 1 });
+    // On second attempt, include diagnostics if still unhealthy
+    result = await captureWithStabilization(handle.cdp, handle.page, pageId, {
+      maxRetries: 1,
+      includeDiagnostics: true,
+    });
     runtime_health = buildRuntimeHealth(
       { ok: true, recovered: true, recovery_method: 'rebind' },
       result
     );
   }
 
-  return { snapshot: result.snapshot, handle, runtime_health };
+  return {
+    snapshot: result.snapshot,
+    handle,
+    runtime_health,
+    diagnostics: result.diagnostics,
+  };
 }
 
 /**
@@ -368,9 +389,9 @@ async function executeNavigationAction(
   const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  // Return XML state response
+  // Return XML state response (include diagnostics if snapshot capture failed)
   const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return stateManager.generateResponse(snapshot, captureResult.diagnostics);
 }
 
 // ============================================================================
@@ -460,9 +481,9 @@ export async function navigate(
   const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  // Return XML state response directly
+  // Return XML state response directly (include diagnostics if snapshot capture failed)
   const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return stateManager.generateResponse(snapshot, captureResult.diagnostics);
 }
 
 /**
@@ -535,9 +556,9 @@ export async function captureSnapshot(
 
   snapshotStore.store(page_id, snapshot);
 
-  // Return XML state response directly
+  // Return XML state response directly (include diagnostics if snapshot capture failed)
   const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return stateManager.generateResponse(snapshot, captureResult.diagnostics);
 }
 
 /**

@@ -9,13 +9,16 @@ import {
   renderObservations,
   renderSingleObservation,
   renderStateXml,
+  renderDiagnostics,
 } from '../../../src/state/state-renderer.js';
 import type {
   StateResponseObject,
   DiffResponse,
   BaselineResponse,
   Atoms,
+  SnapshotDiagnostics,
 } from '../../../src/state/types.js';
+import type { PageHealthReport } from '../../../src/diagnostics/page-health.js';
 import type {
   DOMObservation,
   ObservationGroups,
@@ -651,5 +654,378 @@ describe('renderStateXml mutations', () => {
 
     // Old format had empty="true", new format doesn't need it
     expect(xml).not.toContain('empty=');
+  });
+});
+
+// ============================================================================
+// Diagnostics Rendering Tests
+// ============================================================================
+
+describe('renderDiagnostics', () => {
+  /**
+   * Create a mock PageHealthReport.
+   */
+  function createPageHealthReport(overrides: Partial<PageHealthReport> = {}): PageHealthReport {
+    return {
+      isHealthy: false,
+      url: 'https://example.com',
+      title: '',
+      contentLength: 0,
+      isClosed: false,
+      warnings: [],
+      errors: [],
+      timestamp: Date.now(),
+      ...overrides,
+    };
+  }
+
+  it('should render diagnostics section with page health', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        isHealthy: false,
+        url: 'https://example.com/test',
+        title: 'Test Page',
+        contentLength: 1234,
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).toContain('<diagnostics>');
+    expect(xml).toContain('<page_health healthy="false">');
+    expect(xml).toContain('<url>https://example.com/test</url>');
+    expect(xml).toContain('<title>Test Page</title>');
+    expect(xml).toContain('<content_length>1234</content_length>');
+    expect(xml).toContain('</page_health>');
+    expect(xml).toContain('</diagnostics>');
+  });
+
+  it('should render (empty) for missing title', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        title: '',
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).toContain('<title>(empty)</title>');
+  });
+
+  it('should render healthy="true" when page is healthy', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        isHealthy: true,
+        title: 'Healthy Page',
+        contentLength: 5000,
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).toContain('<page_health healthy="true">');
+  });
+
+  it('should include warnings when present', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        warnings: ['empty_title', 'slow_load'],
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).toContain('<warnings>empty_title, slow_load</warnings>');
+  });
+
+  it('should not include warnings element when empty', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        warnings: [],
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).not.toContain('<warnings>');
+  });
+
+  it('should include errors when present', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        errors: ['empty_content', 'page_closed'],
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).toContain('<errors>empty_content, page_closed</errors>');
+  });
+
+  it('should not include errors element when empty', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        errors: [],
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).not.toContain('<errors>');
+  });
+
+  it('should include content_error when present', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        contentError: 'Protocol error: Page navigated',
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).toContain('<content_error>Protocol error: Page navigated</content_error>');
+  });
+
+  it('should not include content_error when undefined', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        contentError: undefined,
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).not.toContain('<content_error>');
+  });
+
+  it('should escape XML special characters', () => {
+    const diagnostics: SnapshotDiagnostics = {
+      pageHealth: createPageHealthReport({
+        url: 'https://example.com/test?foo=bar&baz=qux',
+        title: '<script>alert("xss")</script>',
+      }),
+    };
+
+    const lines = renderDiagnostics(diagnostics);
+    const xml = lines.join('\n');
+
+    expect(xml).toContain('&amp;baz=qux');
+    expect(xml).toContain('&lt;script&gt;');
+    expect(xml).not.toContain('<script>');
+  });
+});
+
+// ============================================================================
+// Diagnostics in StateXml Tests
+// ============================================================================
+
+describe('renderStateXml with diagnostics', () => {
+  /**
+   * Create a mock PageHealthReport.
+   */
+  function createPageHealthReport(overrides: Partial<PageHealthReport> = {}): PageHealthReport {
+    return {
+      isHealthy: false,
+      url: 'https://example.com',
+      title: '',
+      contentLength: 0,
+      isClosed: false,
+      warnings: [],
+      errors: [],
+      timestamp: Date.now(),
+      ...overrides,
+    };
+  }
+
+  it('should include diagnostics in baseline error response', () => {
+    const atoms: Atoms = {
+      viewport: { w: 1280, h: 720, dpr: 1 },
+      scroll: { x: 0, y: 0 },
+    };
+
+    const response: StateResponseObject = {
+      state: {
+        sid: 'test-session',
+        step: 1,
+        doc: {
+          url: '',
+          origin: '',
+          title: '',
+          doc_id: '',
+          nav_type: 'soft',
+          history_idx: 0,
+        },
+        layer: {
+          active: 'main',
+          stack: ['main'],
+          pointer_lock: false,
+        },
+        timing: {
+          ts: '2024-01-01T00:00:00Z',
+          dom_ready: false,
+          network_busy: false,
+        },
+        hash: {
+          ui: '',
+          layer: '',
+        },
+      },
+      diff: { mode: 'baseline', reason: 'error', error: 'Empty snapshot' },
+      actionables: [],
+      counts: { shown: 0, total_in_layer: 0 },
+      limits: { max_actionables: 1000, actionables_capped: false },
+      atoms,
+      tokens: 0,
+      diagnostics: {
+        pageHealth: createPageHealthReport({
+          isHealthy: false,
+          url: 'https://example.com/error-page',
+          title: '',
+          contentLength: 0,
+          warnings: ['empty_title'],
+          errors: ['empty_content'],
+        }),
+      },
+    };
+
+    const xml = renderStateXml(response);
+
+    // Should have baseline error
+    expect(xml).toContain('<baseline reason="error"');
+    expect(xml).toContain('error="Empty snapshot"');
+
+    // Should include diagnostics section
+    expect(xml).toContain('<diagnostics>');
+    expect(xml).toContain('<page_health healthy="false">');
+    expect(xml).toContain('<url>https://example.com/error-page</url>');
+    expect(xml).toContain('<title>(empty)</title>');
+    expect(xml).toContain('<content_length>0</content_length>');
+    expect(xml).toContain('<warnings>empty_title</warnings>');
+    expect(xml).toContain('<errors>empty_content</errors>');
+    expect(xml).toContain('</diagnostics>');
+  });
+
+  it('should not include diagnostics for diff responses', () => {
+    const atoms: Atoms = {
+      viewport: { w: 1280, h: 720, dpr: 1 },
+      scroll: { x: 0, y: 0 },
+    };
+
+    const diff: DiffResponse = {
+      mode: 'diff',
+      diff: {
+        actionables: { added: [], removed: [], changed: [] },
+        mutations: { textChanged: [], statusAppeared: [] },
+        isEmpty: true,
+        atoms: [],
+      },
+    };
+
+    const response: StateResponseObject = {
+      state: {
+        sid: 'test-session',
+        step: 1,
+        doc: {
+          url: 'https://example.com/',
+          origin: 'https://example.com',
+          title: 'Test Page',
+          doc_id: 'test-doc',
+          nav_type: 'soft',
+          history_idx: 0,
+        },
+        layer: {
+          active: 'main',
+          stack: ['main'],
+          pointer_lock: false,
+        },
+        timing: {
+          ts: '2024-01-01T00:00:00Z',
+          dom_ready: true,
+          network_busy: false,
+        },
+        hash: {
+          ui: 'abc123',
+          layer: 'def456',
+        },
+      },
+      diff,
+      actionables: [],
+      counts: { shown: 0, total_in_layer: 0 },
+      limits: { max_actionables: 1000, actionables_capped: false },
+      atoms,
+      tokens: 0,
+      // Diagnostics should not appear in diff mode
+      diagnostics: {
+        pageHealth: createPageHealthReport({
+          isHealthy: true,
+        }),
+      },
+    };
+
+    const xml = renderStateXml(response);
+
+    // Should have diff, not baseline
+    expect(xml).toContain('<diff type="mutation"');
+    expect(xml).not.toContain('<baseline');
+
+    // Should not include diagnostics for diff mode
+    expect(xml).not.toContain('<diagnostics>');
+  });
+
+  it('should not include diagnostics section when not present', () => {
+    const atoms: Atoms = {
+      viewport: { w: 1280, h: 720, dpr: 1 },
+      scroll: { x: 0, y: 0 },
+    };
+
+    const response: StateResponseObject = {
+      state: {
+        sid: 'test-session',
+        step: 1,
+        doc: {
+          url: '',
+          origin: '',
+          title: '',
+          doc_id: '',
+          nav_type: 'soft',
+          history_idx: 0,
+        },
+        layer: {
+          active: 'main',
+          stack: ['main'],
+          pointer_lock: false,
+        },
+        timing: {
+          ts: '2024-01-01T00:00:00Z',
+          dom_ready: false,
+          network_busy: false,
+        },
+        hash: {
+          ui: '',
+          layer: '',
+        },
+      },
+      diff: { mode: 'baseline', reason: 'error', error: 'Empty snapshot' },
+      actionables: [],
+      counts: { shown: 0, total_in_layer: 0 },
+      limits: { max_actionables: 1000, actionables_capped: false },
+      atoms,
+      tokens: 0,
+      // No diagnostics provided
+    };
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<baseline reason="error"');
+    expect(xml).not.toContain('<diagnostics>');
   });
 });

@@ -22,6 +22,7 @@ import type {
   ScoringContext,
   ElementTargetRef,
   Atoms,
+  SnapshotDiagnostics,
 } from './types.js';
 import { computeEid, resolveEidCollision } from './element-identity.js';
 import { detectLayers } from './layer-detector.js';
@@ -168,10 +169,11 @@ export class StateManager {
    * Generate an error response.
    *
    * @param errorMessage - The error message to include
+   * @param diagnostics - Optional diagnostics for debugging
    * @returns XML state response with error baseline
    */
-  generateErrorResponse(errorMessage: string): StateResponse {
-    return this.createErrorBaseline('error', errorMessage);
+  generateErrorResponse(errorMessage: string, diagnostics?: SnapshotDiagnostics): StateResponse {
+    return this.createErrorBaseline('error', errorMessage, diagnostics);
   }
 
   /**
@@ -179,9 +181,10 @@ export class StateManager {
    * Includes concurrency protection and error recovery.
    *
    * @param snapshot - Current snapshot
+   * @param diagnostics - Optional diagnostics for debugging failed snapshots
    * @returns State response with StateHandle + Diff/Baseline + Actionables + Atoms
    */
-  generateResponse(snapshot: BaseSnapshot): StateResponse {
+  generateResponse(snapshot: BaseSnapshot, diagnostics?: SnapshotDiagnostics): StateResponse {
     // Concurrency protection: if already processing, use latest snapshot
     if (this.isProcessing) {
       this.pendingSnapshot = snapshot;
@@ -192,7 +195,7 @@ export class StateManager {
     this.isProcessing = true;
 
     try {
-      const response = this.doGenerateResponse(snapshot);
+      const response = this.doGenerateResponse(snapshot, diagnostics);
 
       // Check if there's a pending snapshot that came in during processing
       if (this.pendingSnapshot) {
@@ -207,7 +210,7 @@ export class StateManager {
     } catch (err) {
       // Error recovery: return baseline with error reason
       const errorMessage = err instanceof Error ? err.message : String(err);
-      return this.createErrorBaseline('error', errorMessage);
+      return this.createErrorBaseline('error', errorMessage, diagnostics);
     } finally {
       this.isProcessing = false;
     }
@@ -216,7 +219,10 @@ export class StateManager {
   /**
    * Internal response generation (called with concurrency protection).
    */
-  private doGenerateResponse(snapshot: BaseSnapshot): StateResponse {
+  private doGenerateResponse(
+    snapshot: BaseSnapshot,
+    diagnostics?: SnapshotDiagnostics
+  ): StateResponse {
     // Increment step counter
     this.context.stepCounter++;
 
@@ -227,8 +233,8 @@ export class StateManager {
     // Validate snapshot health (Bug #2: handle empty snapshots)
     const health = validateSnapshotHealth(snapshot);
     if (isErrorHealth(health)) {
-      // Return error baseline for empty/failed snapshots
-      return this.createErrorBaseline('error', health.message ?? 'Empty snapshot');
+      // Return error baseline for empty/failed snapshots (include diagnostics if available)
+      return this.createErrorBaseline('error', health.message ?? 'Empty snapshot', diagnostics);
     }
 
     // Compute document ID
@@ -353,10 +359,15 @@ export class StateManager {
   /**
    * Create error baseline response for recovery.
    * Always uses 'error' reason - the specific error type is in the message.
+   *
+   * @param _reason - Internal reason code (unused, always renders as 'error')
+   * @param errorMessage - Human-readable error message
+   * @param diagnostics - Optional diagnostics for debugging empty/failed snapshots
    */
   private createErrorBaseline(
     _reason: 'error' | 'concurrent_call',
-    errorMessage: string
+    errorMessage: string,
+    diagnostics?: SnapshotDiagnostics
   ): StateResponse {
     // Minimal state for error baseline
     const state: StateHandle = {
@@ -397,6 +408,11 @@ export class StateManager {
       atoms,
       tokens: 0,
     };
+
+    // Include diagnostics if provided (helps debug empty snapshot issues)
+    if (diagnostics) {
+      response.diagnostics = diagnostics;
+    }
 
     return renderStateXml(response);
   }
