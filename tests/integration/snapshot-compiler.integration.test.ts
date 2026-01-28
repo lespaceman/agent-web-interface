@@ -5,10 +5,10 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { Page } from 'playwright';
+import type { Page } from 'puppeteer-core';
 import { SnapshotCompiler, compileSnapshot } from '../../src/snapshot/snapshot-compiler.js';
 import { createMockCdpClient, MockCdpClient } from '../mocks/cdp-client.mock.js';
-import { createMockPage } from '../mocks/playwright.mock.js';
+import { createMockPage } from '../mocks/puppeteer.mock.js';
 
 // Import test fixtures
 import loginPageDom from '../fixtures/cdp-responses/login-page-dom.json' with { type: 'json' };

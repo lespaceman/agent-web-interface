@@ -11,12 +11,12 @@ import {
   removeTracker,
   hasTracker,
 } from '../../../src/browser/page-network-tracker.js';
-import type { Page } from 'playwright';
+import type { Page } from 'puppeteer-core';
 import {
   createMockPageWithEvents,
-  createMockRequest,
+  createMockHTTPRequest,
   type MockPageWithEvents,
-} from '../../mocks/playwright.mock.js';
+} from '../../mocks/puppeteer.mock.js';
 
 describe('PageNetworkTracker', () => {
   let page: MockPageWithEvents;
@@ -126,7 +126,7 @@ describe('PageNetworkTracker', () => {
       tracker.attach(page as unknown as Page);
 
       // Finish without starting
-      page.emitRequestFinished(createMockRequest());
+      page.emitRequestFinished(createMockHTTPRequest());
       expect(tracker.getInflightCount()).toBe(0);
     });
 

@@ -35,14 +35,8 @@ jobs:
       - name: Type check
         run: npm run type-check
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: Install Chrome for Puppeteer
+        run: npx puppeteer browsers install chrome
 
       - name: Run integration tests
         run: npm run test:integration

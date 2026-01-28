@@ -2,10 +2,8 @@
  * SessionManager Tests
  *
  * TDD tests for SessionManager implementation.
- * Uses mocked Playwright - no real browser required.
+ * Uses mocked Puppeteer - no real browser required.
  */
-
-/* eslint-disable @typescript-eslint/unbound-method */
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { SessionManager } from '../../../src/browser/session-manager.js';
@@ -13,24 +11,23 @@ import {
   createLinkedMocks,
   createMockPage,
   createMockCDPSession,
-  createMockBrowserContext,
   type MockBrowser,
   type MockBrowserContext,
   type MockPage,
   type MockCDPSession,
-} from '../../mocks/playwright.mock.js';
+} from '../../mocks/puppeteer.mock.js';
 import { expectPageId } from '../../helpers/test-utils.js';
 
-// Mock Playwright module
-vi.mock('playwright', () => ({
-  chromium: {
+// Mock Puppeteer module
+vi.mock('puppeteer-core', () => ({
+  default: {
     launch: vi.fn(),
-    connectOverCDP: vi.fn(),
-    launchPersistentContext: vi.fn(),
+    connect: vi.fn(),
   },
 }));
 
-import { chromium } from 'playwright';
+// Import AFTER mocking
+import puppeteer from 'puppeteer-core';
 
 describe('SessionManager', () => {
   let sessionManager: SessionManager;
@@ -49,8 +46,8 @@ describe('SessionManager', () => {
     mockPage = mocks.page;
     mockCdpSession = mocks.cdpSession;
 
-    // Configure chromium.launch to return our mock browser
-    (chromium.launch as Mock).mockResolvedValue(mockBrowser);
+    // Configure puppeteer.launch to return our mock browser
+    (puppeteer.launch as Mock).mockResolvedValue(mockBrowser);
 
     sessionManager = new SessionManager();
   });
@@ -59,19 +56,23 @@ describe('SessionManager', () => {
     it('should start browser with default options', async () => {
       await sessionManager.launch();
 
-      expect(vi.mocked(chromium.launch)).toHaveBeenCalledWith({
-        headless: true,
-      });
-      expect(vi.mocked(mockBrowser.newContext)).toHaveBeenCalled();
+      expect(vi.mocked(puppeteer.launch)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headless: true,
+          channel: 'chrome',
+        })
+      );
       expect(sessionManager.isRunning()).toBe(true);
     });
 
     it('should apply custom headless option', async () => {
       await sessionManager.launch({ headless: false });
 
-      expect(vi.mocked(chromium.launch)).toHaveBeenCalledWith({
-        headless: false,
-      });
+      expect(vi.mocked(puppeteer.launch)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headless: false,
+        })
+      );
     });
 
     it('should apply custom viewport', async () => {
@@ -79,35 +80,32 @@ describe('SessionManager', () => {
 
       await sessionManager.launch({ viewport });
 
-      expect(vi.mocked(mockBrowser.newContext)).toHaveBeenCalledWith(
+      expect(vi.mocked(puppeteer.launch)).toHaveBeenCalledWith(
         expect.objectContaining({
-          viewport,
+          defaultViewport: viewport,
         })
       );
     });
 
-    it('should apply custom userAgent', async () => {
-      const userAgent = 'Custom Agent/1.0';
+    it('should apply custom channel', async () => {
+      await sessionManager.launch({ channel: 'chrome-canary' });
 
-      await sessionManager.launch({ userAgent });
-
-      expect(vi.mocked(mockBrowser.newContext)).toHaveBeenCalledWith(
+      expect(vi.mocked(puppeteer.launch)).toHaveBeenCalledWith(
         expect.objectContaining({
-          userAgent,
+          channel: 'chrome-canary',
         })
       );
     });
 
-    it('should apply custom locale and timezone', async () => {
-      const locale = 'en-GB';
-      const timezone = 'Europe/London';
+    it('should use executablePath when provided', async () => {
+      const executablePath = '/opt/chrome/chrome';
 
-      await sessionManager.launch({ locale, timezone });
+      await sessionManager.launch({ executablePath });
 
-      expect(vi.mocked(mockBrowser.newContext)).toHaveBeenCalledWith(
+      expect(vi.mocked(puppeteer.launch)).toHaveBeenCalledWith(
         expect.objectContaining({
-          locale,
-          timezoneId: timezone,
+          executablePath,
+          channel: undefined, // Channel should be undefined when executablePath is set
         })
       );
     });
@@ -128,7 +126,7 @@ describe('SessionManager', () => {
       const handle = await sessionManager.createPage();
 
       expect(mockContext.newPage).toHaveBeenCalled();
-      expect(mockContext.newCDPSession).toHaveBeenCalledWith(mockPage);
+      expect(mockPage.createCDPSession).toHaveBeenCalled();
       expectPageId(handle.page_id);
       expect(handle.page).toBe(mockPage);
     });
@@ -255,15 +253,6 @@ describe('SessionManager', () => {
         sessionManager.navigateTo(handle.page_id, 'https://example.com')
       ).resolves.not.toThrow();
     });
-
-    it('should complete navigation even with pending requests', async () => {
-      const handle = await sessionManager.createPage();
-
-      // Network tracker returns false on timeout but navigation still completes
-      await expect(
-        sessionManager.navigateTo(handle.page_id, 'https://example.com')
-      ).resolves.not.toThrow();
-    });
   });
 
   describe('shutdown', () => {
@@ -336,29 +325,53 @@ describe('SessionManager', () => {
 
   describe('connect', () => {
     beforeEach(() => {
-      // Configure connectOverCDP to return our mock browser
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      // Mock contexts() to return array with our mock context
-      mockBrowser.contexts.mockReturnValue([mockContext]);
+      // Configure puppeteer.connect to return our mock browser
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+      // Mock browserContexts() to return array with our mock context
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
     });
 
     it('should connect to external browser via CDP', async () => {
       await sessionManager.connect();
 
-      expect(vi.mocked(chromium.connectOverCDP)).toHaveBeenCalledWith('http://127.0.0.1:9223');
+      expect(vi.mocked(puppeteer.connect)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          browserURL: 'http://127.0.0.1:9223',
+        })
+      );
       expect(sessionManager.isRunning()).toBe(true);
     });
 
-    it('should use custom endpoint URL', async () => {
-      await sessionManager.connect({ endpointUrl: 'http://localhost:9222' });
+    it('should use custom browserURL', async () => {
+      await sessionManager.connect({ browserURL: 'http://localhost:9222' });
 
-      expect(vi.mocked(chromium.connectOverCDP)).toHaveBeenCalledWith('http://localhost:9222');
+      expect(vi.mocked(puppeteer.connect)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          browserURL: 'http://localhost:9222',
+        })
+      );
+    });
+
+    it('should use browserWSEndpoint when provided', async () => {
+      await sessionManager.connect({
+        browserWSEndpoint: 'ws://localhost:9222/devtools/browser/abc123',
+      });
+
+      expect(vi.mocked(puppeteer.connect)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          browserWSEndpoint: 'ws://localhost:9222/devtools/browser/abc123',
+        })
+      );
     });
 
     it('should use custom host and port', async () => {
       await sessionManager.connect({ host: '192.168.1.1', port: 9999 });
 
-      expect(vi.mocked(chromium.connectOverCDP)).toHaveBeenCalledWith('http://192.168.1.1:9999');
+      expect(vi.mocked(puppeteer.connect)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          browserURL: 'http://192.168.1.1:9999',
+        })
+      );
     });
 
     it('should throw if already connected', async () => {
@@ -370,17 +383,15 @@ describe('SessionManager', () => {
     it('should use existing context from browser', async () => {
       await sessionManager.connect();
 
-      expect(mockBrowser.contexts).toHaveBeenCalled();
-      // Should not create new context
-      expect(mockBrowser.newContext).not.toHaveBeenCalled();
+      expect(mockBrowser.browserContexts).toHaveBeenCalled();
     });
   });
 
   describe('adoptPage', () => {
     beforeEach(async () => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([mockContext]);
-      mockContext.pages.mockReturnValue([mockPage]);
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
+      mockContext.pages.mockResolvedValue([mockPage]);
       mockPage.url.mockReturnValue('https://example.com');
       await sessionManager.connect();
     });
@@ -390,7 +401,7 @@ describe('SessionManager', () => {
 
       expectPageId(handle.page_id);
       expect(handle.page).toBe(mockPage);
-      expect(mockContext.newCDPSession).toHaveBeenCalledWith(mockPage);
+      expect(mockPage.createCDPSession).toHaveBeenCalled();
     });
 
     it('should register page with correct URL', async () => {
@@ -412,9 +423,9 @@ describe('SessionManager', () => {
 
   describe('shutdown with external browser', () => {
     beforeEach(async () => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([mockContext]);
-      mockContext.pages.mockReturnValue([mockPage]);
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
+      mockContext.pages.mockResolvedValue([mockPage]);
       await sessionManager.connect();
     });
 
@@ -423,7 +434,8 @@ describe('SessionManager', () => {
 
       await sessionManager.shutdown();
 
-      // Should NOT close browser or pages for external browser
+      // Should disconnect but NOT close browser or pages for external browser
+      expect(mockBrowser.disconnect).toHaveBeenCalled();
       expect(mockBrowser.close).not.toHaveBeenCalled();
       expect(mockPage.close).not.toHaveBeenCalled();
       expect(sessionManager.isRunning()).toBe(false);
@@ -440,8 +452,8 @@ describe('SessionManager', () => {
 
   describe('concurrent connect protection', () => {
     beforeEach(() => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([mockContext]);
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
     });
 
     it('should reject concurrent connect() calls', async () => {
@@ -455,17 +467,20 @@ describe('SessionManager', () => {
     });
 
     it('should reject connect() during launch()', async () => {
-      (chromium.launch as Mock).mockResolvedValue(mockBrowser);
+      (puppeteer.launch as Mock).mockResolvedValue(mockBrowser);
 
       const launch = sessionManager.launch();
       const connect = sessionManager.connect();
 
-      await expect(launch).resolves.not.toThrow();
-      await expect(connect).rejects.toThrow(/Invalid operation "connect"/);
+      // Await both in parallel to avoid unhandled rejection
+      await Promise.all([
+        expect(launch).resolves.not.toThrow(),
+        expect(connect).rejects.toThrow(/Invalid operation "connect"/),
+      ]);
     });
 
     it('should allow connect() after failed connect()', async () => {
-      (chromium.connectOverCDP as Mock)
+      (puppeteer.connect as Mock)
         .mockRejectedValueOnce(new Error('Connection refused'))
         .mockResolvedValueOnce(mockBrowser);
 
@@ -477,12 +492,12 @@ describe('SessionManager', () => {
 
   describe('connection timeout', () => {
     beforeEach(() => {
-      mockBrowser.contexts.mockReturnValue([mockContext]);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
     });
 
     it('should timeout if connection takes too long', async () => {
       // Mock a slow connection that never resolves
-      (chromium.connectOverCDP as Mock).mockImplementation(
+      (puppeteer.connect as Mock).mockImplementation(
         () => new Promise((resolve) => setTimeout(resolve, 60000))
       );
 
@@ -491,7 +506,7 @@ describe('SessionManager', () => {
 
     it('should use default timeout of 10000ms', async () => {
       // Configure mock to succeed immediately
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
 
       // Verify timeout option exists in interface by using it
       await expect(sessionManager.connect({ timeout: 10000 })).resolves.not.toThrow();
@@ -499,28 +514,24 @@ describe('SessionManager', () => {
   });
 
   describe('partial connect failure cleanup', () => {
-    it('should cleanup browser if context creation fails', async () => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([]); // No existing contexts
-      mockBrowser.newContext.mockRejectedValue(new Error('Context creation failed'));
+    it('should cleanup browser if connection fails', async () => {
+      (puppeteer.connect as Mock).mockRejectedValue(new Error('Connection refused'));
 
-      await expect(sessionManager.connect()).rejects.toThrow('Context creation failed');
+      await expect(sessionManager.connect()).rejects.toThrow('Connection refused');
 
-      // Browser should be cleaned up
+      // Browser should be cleaned up (state is failed)
       expect(sessionManager.isRunning()).toBe(false);
     });
 
-    it('should allow reconnect after partial failure', async () => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([]);
-      mockBrowser.newContext.mockRejectedValueOnce(new Error('Context creation failed'));
-      mockBrowser.newContext.mockResolvedValueOnce(mockContext);
+    it('should allow reconnect after connection failure', async () => {
+      (puppeteer.connect as Mock)
+        .mockRejectedValueOnce(new Error('Connection refused'))
+        .mockResolvedValueOnce(mockBrowser);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
 
-      await expect(sessionManager.connect()).rejects.toThrow();
+      await expect(sessionManager.connect()).rejects.toThrow('Connection refused');
 
-      // Reset contexts mock for second attempt
-      mockBrowser.contexts.mockReturnValue([mockContext]);
-
+      // Second attempt should succeed
       await expect(sessionManager.connect()).resolves.not.toThrow();
       expect(sessionManager.isRunning()).toBe(true);
     });
@@ -530,9 +541,9 @@ describe('SessionManager', () => {
     let disconnectHandler: (() => void) | undefined;
 
     beforeEach(() => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([mockContext]);
-      mockContext.pages.mockReturnValue([mockPage]);
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
+      mockContext.pages.mockResolvedValue([mockPage]);
 
       // Capture the disconnect handler when it's registered
       mockBrowser.on = vi.fn((event: string, handler: () => void) => {
@@ -553,7 +564,7 @@ describe('SessionManager', () => {
       await sessionManager.adoptPage(0);
 
       // Simulate browser disconnect
-      mockBrowser.isConnected.mockReturnValue(false);
+      Object.defineProperty(mockBrowser, 'connected', { value: false });
       disconnectHandler?.();
 
       expect(sessionManager.isRunning()).toBe(false);
@@ -562,42 +573,42 @@ describe('SessionManager', () => {
   });
 
   describe('URL validation', () => {
-    it('should reject invalid endpoint URL', async () => {
-      await expect(sessionManager.connect({ endpointUrl: 'not-a-url' })).rejects.toThrow(
+    it('should reject invalid browserURL', async () => {
+      await expect(sessionManager.connect({ browserURL: 'not-a-url' })).rejects.toThrow(
         /invalid.*url/i
       );
     });
 
-    it('should reject non-http endpoint URL', async () => {
-      await expect(sessionManager.connect({ endpointUrl: 'ftp://localhost:9223' })).rejects.toThrow(
-        /invalid.*url/i
-      );
+    it('should reject invalid browserWSEndpoint', async () => {
+      await expect(
+        sessionManager.connect({ browserWSEndpoint: 'http://localhost' })
+      ).rejects.toThrow(/invalid.*url/i);
     });
 
     it('should accept valid http URL', async () => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([mockContext]);
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
 
       await expect(
-        sessionManager.connect({ endpointUrl: 'http://localhost:9223' })
+        sessionManager.connect({ browserURL: 'http://localhost:9223' })
       ).resolves.not.toThrow();
     });
 
-    it('should accept valid https URL', async () => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([mockContext]);
+    it('should accept valid ws URL', async () => {
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
 
       await expect(
-        sessionManager.connect({ endpointUrl: 'https://localhost:9223' })
+        sessionManager.connect({ browserWSEndpoint: 'ws://localhost:9222/devtools/browser/abc' })
       ).resolves.not.toThrow();
     });
   });
 
   describe('adoptPage idempotency', () => {
     beforeEach(async () => {
-      (chromium.connectOverCDP as Mock).mockResolvedValue(mockBrowser);
-      mockBrowser.contexts.mockReturnValue([mockContext]);
-      mockContext.pages.mockReturnValue([mockPage]);
+      (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+      mockBrowser.browserContexts.mockReturnValue([mockContext]);
+      mockContext.pages.mockResolvedValue([mockPage]);
       mockPage.url.mockReturnValue('https://example.com');
       await sessionManager.connect();
     });
@@ -615,22 +626,19 @@ describe('SessionManager', () => {
       await sessionManager.adoptPage(0);
 
       // Should only create one CDP session
-      expect(mockContext.newCDPSession).toHaveBeenCalledTimes(1);
+      expect(mockPage.createCDPSession).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('multi-page shutdown', () => {
     it('should close all pages individually', async () => {
       // Create multiple mock pages
-      const page1 = createMockPage({ url: 'https://page1.com' });
-      const page2 = createMockPage({ url: 'https://page2.com' });
       const cdpSession1 = createMockCDPSession();
       const cdpSession2 = createMockCDPSession();
+      const page1 = createMockPage({ url: 'https://page1.com', cdpSession: cdpSession1 });
+      const page2 = createMockPage({ url: 'https://page2.com', cdpSession: cdpSession2 });
 
       mockContext.newPage.mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
-      mockContext.newCDPSession
-        .mockResolvedValueOnce(cdpSession1)
-        .mockResolvedValueOnce(cdpSession2);
 
       await sessionManager.launch();
       await sessionManager.createPage();
@@ -640,163 +648,6 @@ describe('SessionManager', () => {
 
       expect(page1.close).toHaveBeenCalled();
       expect(page2.close).toHaveBeenCalled();
-    });
-  });
-
-  describe('storage state', () => {
-    it('should launch with storage state file path', async () => {
-      const storageStatePath = '/path/to/state.json';
-
-      await sessionManager.launch({ storageState: storageStatePath });
-
-      expect(vi.mocked(mockBrowser.newContext)).toHaveBeenCalledWith(
-        expect.objectContaining({
-          storageState: storageStatePath,
-        })
-      );
-    });
-
-    it('should launch with inline storage state object', async () => {
-      const storageState = {
-        cookies: [
-          {
-            name: 'session',
-            value: 'abc123',
-            domain: 'example.com',
-            path: '/',
-            expires: -1,
-            httpOnly: false,
-            secure: false,
-            sameSite: 'Lax' as const,
-          },
-        ],
-        origins: [
-          {
-            origin: 'https://example.com',
-            localStorage: [{ name: 'token', value: 'xyz' }],
-          },
-        ],
-      };
-
-      await sessionManager.launch({ storageState });
-
-      expect(vi.mocked(mockBrowser.newContext)).toHaveBeenCalledWith(
-        expect.objectContaining({
-          storageState,
-        })
-      );
-    });
-
-    it('should save storage state to file', async () => {
-      const mockStorageState = {
-        cookies: [{ name: 'test', value: 'value', domain: 'test.com', path: '/' }],
-        origins: [],
-      };
-      mockContext.storageState = vi.fn().mockResolvedValue(mockStorageState);
-
-      await sessionManager.launch();
-      const result = await sessionManager.saveStorageState();
-
-      expect(mockContext.storageState).toHaveBeenCalled();
-      expect(result).toEqual(mockStorageState);
-    });
-
-    it('should save storage state to file path when provided', async () => {
-      const savePath = '/path/to/save.json';
-      mockContext.storageState = vi.fn().mockResolvedValue({});
-
-      await sessionManager.launch();
-      await sessionManager.saveStorageState(savePath);
-
-      expect(mockContext.storageState).toHaveBeenCalledWith({ path: savePath });
-    });
-
-    it('should throw when saving storage state without running browser', async () => {
-      await expect(sessionManager.saveStorageState()).rejects.toThrow('Browser not running');
-    });
-  });
-
-  describe('persistent profile (userDataDir)', () => {
-    it('should use launchPersistentContext when userDataDir provided', async () => {
-      const userDataDir = '/path/to/profile';
-      const persistentContext = createMockBrowserContext({
-        pages: [mockPage],
-        cdpSession: mockCdpSession,
-      });
-      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
-
-      await sessionManager.launch({ userDataDir });
-
-      expect(vi.mocked(chromium.launchPersistentContext)).toHaveBeenCalledWith(
-        userDataDir,
-        expect.objectContaining({
-          headless: true,
-        })
-      );
-      expect(vi.mocked(chromium.launch)).not.toHaveBeenCalled();
-    });
-
-    it('should apply viewport to persistent context', async () => {
-      const userDataDir = '/path/to/profile';
-      const viewport = { width: 1920, height: 1080 };
-      const persistentContext = createMockBrowserContext({
-        pages: [mockPage],
-        cdpSession: mockCdpSession,
-      });
-      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
-
-      await sessionManager.launch({ userDataDir, viewport });
-
-      expect(vi.mocked(chromium.launchPersistentContext)).toHaveBeenCalledWith(
-        userDataDir,
-        expect.objectContaining({
-          viewport,
-        })
-      );
-    });
-
-    it('should close context on shutdown for persistent profile', async () => {
-      const userDataDir = '/path/to/profile';
-      const persistentContext = createMockBrowserContext({
-        pages: [mockPage],
-        cdpSession: mockCdpSession,
-      });
-      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
-
-      await sessionManager.launch({ userDataDir });
-      await sessionManager.shutdown();
-
-      // For persistent context, we close context directly (no browser.close)
-      expect(persistentContext.close).toHaveBeenCalled();
-    });
-
-    it('should track isPersistentContext flag', async () => {
-      const userDataDir = '/path/to/profile';
-      const persistentContext = createMockBrowserContext({
-        pages: [mockPage],
-        cdpSession: mockCdpSession,
-      });
-      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
-
-      await sessionManager.launch({ userDataDir });
-
-      // Session manager should recognize this is a persistent context
-      expect(sessionManager.isRunning()).toBe(true);
-    });
-
-    it('should create pages in persistent context', async () => {
-      const userDataDir = '/path/to/profile';
-      const persistentContext = createMockBrowserContext({
-        pages: [mockPage],
-        cdpSession: mockCdpSession,
-      });
-      (chromium.launchPersistentContext as Mock).mockResolvedValue(persistentContext);
-
-      await sessionManager.launch({ userDataDir });
-      const handle = await sessionManager.createPage('https://example.com');
-
-      expectPageId(handle.page_id);
-      expect(persistentContext.newPage).toHaveBeenCalled();
     });
   });
 
@@ -918,7 +769,6 @@ describe('SessionManager', () => {
       const handle = await sessionManager.createPage();
 
       // Simulate CDP session becoming inactive
-      // We need to mock cdp.isActive() to return false
       vi.spyOn(handle.cdp, 'isActive').mockReturnValue(false);
 
       const health = await sessionManager.getConnectionHealth();
@@ -960,11 +810,11 @@ describe('SessionManager', () => {
       const handle = await sessionManager.createPage();
 
       // Clear mock to track rebind calls
-      mockContext.newCDPSession.mockClear();
+      mockPage.createCDPSession.mockClear();
 
       const newHandle = await sessionManager.rebindCdpSession(handle.page_id);
 
-      expect(mockContext.newCDPSession).toHaveBeenCalledWith(handle.page);
+      expect(mockPage.createCDPSession).toHaveBeenCalled();
       expect(newHandle.page_id).toBe(handle.page_id);
       expect(newHandle.page).toBe(handle.page);
       // cdp should be different object (new session)
@@ -992,15 +842,6 @@ describe('SessionManager', () => {
     it('should throw if page not found', async () => {
       await expect(sessionManager.rebindCdpSession('page-unknown')).rejects.toThrow(
         'Page not found: page-unknown'
-      );
-    });
-
-    it('should throw if page is closed', async () => {
-      const handle = await sessionManager.createPage();
-      mockPage.isClosed.mockReturnValue(true);
-
-      await expect(sessionManager.rebindCdpSession(handle.page_id)).rejects.toThrow(
-        `Page is closed: ${handle.page_id}`
       );
     });
 

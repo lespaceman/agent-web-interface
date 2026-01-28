@@ -9,10 +9,10 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { Page } from 'playwright';
+import type { Page } from 'puppeteer-core';
 import { SnapshotCompiler } from '../../src/snapshot/snapshot-compiler.js';
 import { createMockCdpClient, MockCdpClient } from '../mocks/cdp-client.mock.js';
-import { createMockPage } from '../mocks/playwright.mock.js';
+import { createMockPage } from '../mocks/puppeteer.mock.js';
 
 /**
  * Generate a mock DOM tree with N interactive elements

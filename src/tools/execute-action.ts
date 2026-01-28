@@ -8,7 +8,7 @@
  * NEW: Navigation-aware click outcome model for better error classification.
  */
 
-import type { Page } from 'playwright';
+import type { Page } from 'puppeteer-core';
 import type { PageHandle } from '../browser/page-registry.js';
 import { compileSnapshot } from '../snapshot/index.js';
 import { stabilizeDom, type StabilizationResult } from '../delta/dom-stabilizer.js';
@@ -233,12 +233,12 @@ async function captureSnapshotFallback(
  *
  * 1. Wait for DOM to stabilize (MutationObserver) - catches SPA rendering
  * 2. Wait for network to quiet down (networkidle) - catches pending API calls
- * 3. If DOM stabilization fails (navigation), fall back to Playwright load state
+ * 3. If DOM stabilization fails (navigation), fall back to network idle wait
  *
  * Timeouts are generous but never throw - we proceed even if network stays busy
  * (common with analytics, long-polling, websockets).
  *
- * @param page - Playwright Page instance
+ * @param page - Puppeteer Page instance
  * @param networkTimeoutMs - Optional custom timeout for network idle (default: 3000ms)
  * @returns Stabilization result with status
  */
@@ -267,27 +267,24 @@ async function stabilizeAfterAction(
   }
 
   // status === 'error' means page.evaluate() failed, likely due to navigation
-  // Fall back to Playwright's load state waiting
+  // Fall back to waiting for network idle on the new page
   try {
-    // Wait for the new document to be ready first
-    await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
-
-    // Then wait for network to settle on the new page
+    // Wait for network to settle on the new page
     await waitForNetworkQuiet(page, networkTimeoutMs);
 
     return {
       status: 'stable',
       waitTimeMs: result.waitTimeMs,
-      warning: 'Navigation detected; waited for domcontentloaded + networkidle',
+      warning: 'Navigation detected; waited for networkidle',
     };
   } catch (waitError) {
-    // If waitForLoadState also fails, the page might be in an unusual state
+    // If network wait also fails, the page might be in an unusual state
     // Return the original error but with additional context
     const message = waitError instanceof Error ? waitError.message : String(waitError);
     return {
       status: 'error',
       waitTimeMs: result.waitTimeMs,
-      warning: `${result.warning}. Fallback waitForLoadState also failed: ${message}`,
+      warning: `${result.warning}. Fallback network wait also failed: ${message}`,
     };
   }
 }
@@ -298,7 +295,7 @@ async function stabilizeAfterAction(
  * Uses a longer network timeout since navigations typically trigger more
  * requests than in-page actions.
  *
- * @param page - Playwright Page instance
+ * @param page - Puppeteer Page instance
  * @returns Stabilization result with status
  */
 export async function stabilizeAfterNavigation(page: Page): Promise<StabilizationResult> {

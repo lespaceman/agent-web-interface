@@ -11,8 +11,8 @@ import {
   NAVIGATION_NETWORK_IDLE_TIMEOUT_MS,
   DEFAULT_QUIET_WINDOW_MS,
 } from '../../../src/browser/page-stabilization.js';
-import type { Page } from 'playwright';
-import { createMockPageWithEvents } from '../../mocks/playwright.mock.js';
+import type { Page } from 'puppeteer-core';
+import { createMockPageWithEvents } from '../../mocks/puppeteer.mock.js';
 
 describe('waitForNetworkQuiet', () => {
   beforeEach(() => {

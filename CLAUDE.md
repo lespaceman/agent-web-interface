@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Athena Browser MCP is an MCP (Model Context Protocol) server for AI-powered browser automation via Playwright and CDP (Chrome DevTools Protocol). It provides **semantic page snapshots** - compact, structured representations designed for LLM consumption with stable element IDs that survive DOM mutations.
+Athena Browser MCP is an MCP (Model Context Protocol) server for AI-powered browser automation via Puppeteer and CDP (Chrome DevTools Protocol). It provides **semantic page snapshots** - compact, structured representations designed for LLM consumption with stable element IDs that survive DOM mutations.
 
-**20 Tools** across 6 categories:
+**18 Tools** across 6 categories:
 
-- **Session**: launch_browser, connect_browser, close_page, close_session
+- **Session**: close_page, close_session
 - **Navigation**: navigate, go_back, go_forward, reload
 - **Observation**: capture_snapshot, find_elements, get_node_details
 - **Interaction**: click, type, press, select, hover, scroll_element_into_view, scroll_page
@@ -59,7 +59,7 @@ Tool Handlers (browser-tools.ts)
 │ ├─ SnapshotCompiler (extraction)    │
 │ └─ ElementRegistry (eid lookup)     │
 └─────────────────────────────────────┘
-    ↓ Playwright + CDP
+    ↓ Puppeteer + CDP
 Chromium Browser
 ```
 
@@ -67,7 +67,7 @@ Chromium Browser
 
 1. Tool handler receives `{ eid, page_id }`
 2. ElementRegistry resolves eid → backend_node_id
-3. CDP executes click via PlaywrightCdpClient
+3. CDP executes click via PuppeteerCdpClient
 4. Page stabilization (network idle wait)
 5. SnapshotCompiler extracts fresh snapshot
 6. StateManager computes diff against previous snapshot
@@ -115,7 +115,7 @@ src/
 │   └── page-stabilization.ts    # Network idle detection
 ├── cdp/
 │   ├── cdp-client.interface.ts  # Generic CDP abstraction
-│   └── playwright-cdp-client.ts # Playwright implementation
+│   └── puppeteer-cdp-client.ts  # Puppeteer implementation
 ├── server/
 │   └── mcp-server.ts            # MCP server with tool registration
 ├── tools/
@@ -144,7 +144,7 @@ src/
 tests/
 ├── setup.ts                     # Global test setup
 ├── mocks/
-│   ├── playwright.mock.ts       # Browser/Page/CDP mocks
+│   ├── puppeteer.mock.ts        # Browser/Page/CDP mocks
 │   └── cdp-client.mock.ts       # MockCdpClient class
 ├── helpers/
 │   └── test-utils.ts            # Test utilities
@@ -156,12 +156,12 @@ tests/
 
 ## Testing Patterns
 
-**Mocks**: Use `createLinkedMocks()` from `tests/mocks/playwright.mock.ts` for full Browser→Context→Page→CDP chain. Use `MockCdpClient` from `tests/mocks/cdp-client.mock.ts` for CDP response stubbing.
+**Mocks**: Use `createLinkedMocks()` from `tests/mocks/puppeteer.mock.ts` for full Browser→Context→Page→CDP chain. Use `MockCdpClient` from `tests/mocks/cdp-client.mock.ts` for CDP response stubbing.
 
 **Pattern**:
 
 ```typescript
-import { createLinkedMocks } from '../../mocks/playwright.mock.js';
+import { createLinkedMocks } from '../../mocks/puppeteer.mock.js';
 import { MockCdpClient } from '../../mocks/cdp-client.mock.js';
 
 beforeEach(() => {
@@ -176,3 +176,15 @@ beforeEach(() => {
 - CDP domains (Page, DOM, Network) enabled on-demand
 - Vitest with globals, v8 coverage provider
 - Node >= 20.0.0 required
+
+## Puppeteer API Notes
+
+- `browser.connected` (property) not `browser.isConnected()` (method)
+- `browser.browserContexts()` not `browser.contexts()`
+- `page.createCDPSession()` not `context.newCDPSession(page)`
+- `page.viewport()` not `page.viewportSize()`
+- `context.pages()` returns Promise (must await)
+- Use `HTTPRequest` type not `Request` for network events
+- No `page.waitForLoadState()` - use PageNetworkTracker instead
+- No `page.waitForTimeout()` - use `setTimeout()` wrapper
+- No `page.textContent()` - use `page.$eval(selector, el => el.textContent)`

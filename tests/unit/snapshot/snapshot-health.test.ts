@@ -13,8 +13,8 @@ import {
 } from '../../../src/snapshot/snapshot-health.js';
 import type { BaseSnapshot } from '../../../src/snapshot/snapshot.types.js';
 import type { CdpClient } from '../../../src/cdp/cdp-client.interface.js';
-import type { Page } from 'playwright';
-import { createMockPage } from '../../mocks/playwright.mock.js';
+import type { Page } from 'puppeteer-core';
+import { createMockPage } from '../../mocks/puppeteer.mock.js';
 
 // Mock the snapshot compiler
 vi.mock('../../../src/snapshot/index.js', () => ({

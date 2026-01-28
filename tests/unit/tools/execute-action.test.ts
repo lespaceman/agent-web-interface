@@ -19,7 +19,7 @@ import type { PageHandle } from '../../../src/browser/page-registry.js';
 import type { BaseSnapshot, ReadableNode } from '../../../src/snapshot/snapshot.types.js';
 import type { RuntimeHealth } from '../../../src/state/health.types.js';
 import { createHealthyRuntime } from '../../../src/state/health.types.js';
-import { createMockPage } from '../../mocks/playwright.mock.js';
+import { createMockPage } from '../../mocks/puppeteer.mock.js';
 
 // Mock the stabilizeDom function
 vi.mock('../../../src/delta/dom-stabilizer.js', () => ({

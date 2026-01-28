@@ -19,8 +19,6 @@ import { observationAccumulator } from '../observation/index.js';
 import { ATTACHMENT_SIGNIFICANCE_THRESHOLD } from '../observation/observation.types.js';
 import type { NodeDetails } from './tool-schemas.js';
 import {
-  LaunchBrowserInputSchema,
-  ConnectBrowserInputSchema,
   ClosePageInputSchema,
   CloseSessionInputSchema,
   NavigateInputSchema,
@@ -118,7 +116,7 @@ function resolveExistingPage(session: SessionManager, page_id: string | undefine
     if (page_id) {
       throw new Error(`Page not found: ${page_id}`);
     } else {
-      throw new Error('No page available. Use launch_browser first.');
+      throw new Error('No page available. Navigate to a URL first.');
     }
   }
   session.touchPage(handle.page_id);
@@ -377,80 +375,6 @@ async function executeNavigationAction(
 // ============================================================================
 // SIMPLIFIED API - Tool handlers with clearer contracts
 // ============================================================================
-
-/**
- * Launch a new browser instance.
- *
- * @param rawInput - Launch options (will be validated)
- * @returns Page info with snapshot data
- */
-export async function launchBrowser(
-  rawInput: unknown
-): Promise<import('./tool-schemas.js').LaunchBrowserOutput> {
-  const input = LaunchBrowserInputSchema.parse(rawInput);
-  const session = getSessionManager();
-
-  await session.launch({ headless: input.headless });
-  let handle = await session.createPage();
-
-  // Auto-capture snapshot
-  const captureResult = await captureSnapshotWithRecovery(session, handle, handle.page_id);
-  handle = captureResult.handle;
-  const snapshot = captureResult.snapshot;
-  snapshotStore.store(handle.page_id, snapshot);
-
-  // Return XML state response directly
-  const stateManager = getStateManager(handle.page_id);
-  return stateManager.generateResponse(snapshot);
-}
-
-/**
- * Connect to an existing browser instance.
- *
- * @param rawInput - Connection options (will be validated)
- * @returns Page info with snapshot data
- */
-export async function connectBrowser(
-  rawInput: unknown
-): Promise<import('./tool-schemas.js').ConnectBrowserOutput> {
-  const input = ConnectBrowserInputSchema.parse(rawInput);
-  const session = getSessionManager();
-
-  if (input.endpoint_url) {
-    await session.connect({ endpointUrl: input.endpoint_url });
-  } else if (process.env.AUTO_CONNECT === 'true') {
-    // Chrome 144+ auto-connect via DevToolsActivePort
-    await session.connect({ autoConnect: true });
-  } else {
-    await session.connect();
-  }
-
-  // Try to adopt existing page, or create one if none exist
-  let handle;
-  try {
-    if (session.getPageCount() > 0) {
-      handle = await session.adoptPage(0);
-    } else {
-      handle = await session.createPage();
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('Invalid page index')) {
-      handle = await session.createPage();
-    } else {
-      throw error;
-    }
-  }
-
-  // Auto-capture snapshot
-  const captureResult = await captureSnapshotWithRecovery(session, handle, handle.page_id);
-  handle = captureResult.handle;
-  const snapshot = captureResult.snapshot;
-  snapshotStore.store(handle.page_id, snapshot);
-
-  // Return XML state response directly
-  const stateManager = getStateManager(handle.page_id);
-  return stateManager.generateResponse(snapshot);
-}
 
 /**
  * Close a specific page.

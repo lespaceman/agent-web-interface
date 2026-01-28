@@ -2,14 +2,14 @@
  * Page Network Tracker
  *
  * Tracks in-flight network requests for a page and provides a reliable
- * "network quiet" wait mechanism. Unlike Playwright's waitForLoadState('networkidle'),
+ * "network quiet" wait mechanism. Unlike Puppeteer's waitForNetworkIdle(),
  * this tracks requests triggered after page load (e.g., by user actions).
  *
  * Uses a generation counter to safely handle navigation - late events from
  * previous documents are ignored.
  */
 
-import type { Page, Request } from 'playwright';
+import type { Page, HTTPRequest } from 'puppeteer-core';
 
 /** Default quiet window - time with 0 inflight requests to consider "idle" */
 const DEFAULT_QUIET_WINDOW_MS = 500;
@@ -33,9 +33,9 @@ export class PageNetworkTracker {
   private quietResolvers: { resolve: (idle: boolean) => void; timeoutId: NodeJS.Timeout }[] = [];
 
   // Event handlers (stored for cleanup via page.off())
-  private onRequest: ((req: Request) => void) | null = null;
-  private onRequestFinished: ((req: Request) => void) | null = null;
-  private onRequestFailed: ((req: Request) => void) | null = null;
+  private onRequest: ((req: HTTPRequest) => void) | null = null;
+  private onRequestFinished: ((req: HTTPRequest) => void) | null = null;
+  private onRequestFailed: ((req: HTTPRequest) => void) | null = null;
 
   /**
    * Attach network event listeners to a page.
@@ -44,7 +44,6 @@ export class PageNetworkTracker {
    * Safe to call multiple times - will detach previous listeners first.
    */
   attach(page: Page): void {
-    // Detach from previous page if any
     if (this.page) {
       this.detach();
     }
@@ -54,38 +53,7 @@ export class PageNetworkTracker {
     this.currentGeneration = this.generation;
     this.inflightCount = 0;
 
-    const gen = this.currentGeneration;
-
-    this.onRequest = (req: Request) => {
-      // Ignore stale events from previous document
-      if (this.currentGeneration !== gen) return;
-      // Ignore websockets (persistent connections)
-      if (req.resourceType() === 'websocket') return;
-
-      this.inflightCount++;
-      this.cancelQuietTimer();
-    };
-
-    this.onRequestFinished = (req: Request) => {
-      if (this.currentGeneration !== gen) return;
-      if (req.resourceType() === 'websocket') return;
-
-      // Never go below 0 (handles edge cases)
-      this.inflightCount = Math.max(0, this.inflightCount - 1);
-      this.checkQuiet();
-    };
-
-    this.onRequestFailed = (req: Request) => {
-      if (this.currentGeneration !== gen) return;
-      if (req.resourceType() === 'websocket') return;
-
-      this.inflightCount = Math.max(0, this.inflightCount - 1);
-      this.checkQuiet();
-    };
-
-    page.on('request', this.onRequest);
-    page.on('requestfinished', this.onRequestFinished);
-    page.on('requestfailed', this.onRequestFailed);
+    this.createAndAttachHandlers(page);
   }
 
   /**
@@ -95,15 +63,7 @@ export class PageNetworkTracker {
    */
   detach(): void {
     if (this.page) {
-      if (this.onRequest) {
-        this.page.off('request', this.onRequest);
-      }
-      if (this.onRequestFinished) {
-        this.page.off('requestfinished', this.onRequestFinished);
-      }
-      if (this.onRequestFailed) {
-        this.page.off('requestfailed', this.onRequestFailed);
-      }
+      this.removeHandlers(this.page);
     }
 
     this.onRequest = null;
@@ -111,10 +71,8 @@ export class PageNetworkTracker {
     this.onRequestFailed = null;
     this.page = null;
 
-    // Cancel any pending quiet timers
     this.cancelQuietTimer();
 
-    // Reject all pending waiters with false (not idle)
     for (const { resolve, timeoutId } of this.quietResolvers) {
       clearTimeout(timeoutId);
       resolve(false);
@@ -135,47 +93,9 @@ export class PageNetworkTracker {
     this.inflightCount = 0;
     this.cancelQuietTimer();
 
-    // Re-attach handlers with new generation if we have a page
     if (this.page) {
-      const page = this.page;
-      // Detach old handlers
-      if (this.onRequest) {
-        page.off('request', this.onRequest);
-      }
-      if (this.onRequestFinished) {
-        page.off('requestfinished', this.onRequestFinished);
-      }
-      if (this.onRequestFailed) {
-        page.off('requestfailed', this.onRequestFailed);
-      }
-
-      // Create new handlers with updated generation
-      const gen = this.currentGeneration;
-
-      this.onRequest = (req: Request) => {
-        if (this.currentGeneration !== gen) return;
-        if (req.resourceType() === 'websocket') return;
-        this.inflightCount++;
-        this.cancelQuietTimer();
-      };
-
-      this.onRequestFinished = (req: Request) => {
-        if (this.currentGeneration !== gen) return;
-        if (req.resourceType() === 'websocket') return;
-        this.inflightCount = Math.max(0, this.inflightCount - 1);
-        this.checkQuiet();
-      };
-
-      this.onRequestFailed = (req: Request) => {
-        if (this.currentGeneration !== gen) return;
-        if (req.resourceType() === 'websocket') return;
-        this.inflightCount = Math.max(0, this.inflightCount - 1);
-        this.checkQuiet();
-      };
-
-      page.on('request', this.onRequest);
-      page.on('requestfinished', this.onRequestFinished);
-      page.on('requestfailed', this.onRequestFailed);
+      this.removeHandlers(this.page);
+      this.createAndAttachHandlers(this.page);
     }
   }
 
@@ -242,19 +162,63 @@ export class PageNetworkTracker {
   }
 
   private startQuietTimer(): void {
-    // Cancel any existing timer first
     this.cancelQuietTimer();
 
-    // Start quiet window timer
     this.quietTimer = setTimeout(() => {
       this.quietTimer = null;
-      // Resolve all pending waiters
       for (const { resolve, timeoutId } of this.quietResolvers) {
         clearTimeout(timeoutId);
         resolve(true);
       }
       this.quietResolvers = [];
     }, this.quietWindowMs);
+  }
+
+  /**
+   * Create and attach event handlers for the current generation.
+   */
+  private createAndAttachHandlers(page: Page): void {
+    const gen = this.currentGeneration;
+
+    this.onRequest = (req: HTTPRequest) => {
+      if (this.currentGeneration !== gen) return;
+      if (req.resourceType() === 'websocket') return;
+      this.inflightCount++;
+      this.cancelQuietTimer();
+    };
+
+    this.onRequestFinished = (req: HTTPRequest) => {
+      if (this.currentGeneration !== gen) return;
+      if (req.resourceType() === 'websocket') return;
+      this.inflightCount = Math.max(0, this.inflightCount - 1);
+      this.checkQuiet();
+    };
+
+    this.onRequestFailed = (req: HTTPRequest) => {
+      if (this.currentGeneration !== gen) return;
+      if (req.resourceType() === 'websocket') return;
+      this.inflightCount = Math.max(0, this.inflightCount - 1);
+      this.checkQuiet();
+    };
+
+    page.on('request', this.onRequest);
+    page.on('requestfinished', this.onRequestFinished);
+    page.on('requestfailed', this.onRequestFailed);
+  }
+
+  /**
+   * Remove event handlers from a page.
+   */
+  private removeHandlers(page: Page): void {
+    if (this.onRequest) {
+      page.off('request', this.onRequest);
+    }
+    if (this.onRequestFinished) {
+      page.off('requestfinished', this.onRequestFinished);
+    }
+    if (this.onRequestFailed) {
+      page.off('requestfailed', this.onRequestFailed);
+    }
   }
 }
 

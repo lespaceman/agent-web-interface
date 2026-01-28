@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PageRegistry, PageHandle } from '../../../src/browser/page-registry.js';
 import { createMockCdpClient } from '../../mocks/cdp-client.mock.js';
-import { createMockPage } from '../../mocks/playwright.mock.js';
+import { createMockPage } from '../../mocks/puppeteer.mock.js';
 import { expectPageId, expectRecentDate } from '../../helpers/test-utils.js';
 
 describe('PageRegistry', () => {

@@ -10,7 +10,7 @@
  * - Clear health metrics for debugging
  */
 
-import type { Page } from 'playwright';
+import type { Page } from 'puppeteer-core';
 import type { CdpClient } from '../cdp/cdp-client.interface.js';
 import type { BaseSnapshot } from './snapshot.types.js';
 import type { SnapshotHealth, SnapshotHealthMetrics } from '../state/element-ref.types.js';
@@ -125,7 +125,7 @@ export interface CaptureWithStabilizationResult {
  * 5. Return best result (or last attempt if all failed)
  *
  * @param cdp - CDP client
- * @param page - Playwright Page
+ * @param page - Puppeteer Page
  * @param pageId - Page identifier
  * @param options - Capture options
  * @returns Snapshot with health status and attempt count

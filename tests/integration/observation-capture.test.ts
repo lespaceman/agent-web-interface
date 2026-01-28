@@ -14,7 +14,7 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { chromium, Browser, Page } from 'playwright';
+import puppeteer, { Browser, Page } from 'puppeteer-core';
 import { observationAccumulator } from '../../src/observation/index.js';
 
 // Skip in CI unless RUN_INTEGRATION is set (for dedicated integration workflow)
@@ -25,13 +25,12 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
-    page = await context.newPage();
+    browser = await puppeteer.launch({ headless: true, channel: 'chrome' });
+    page = await browser.newPage();
   });
 
   afterAll(async () => {
-    await browser.close();
+    await browser?.close();
   });
 
   it('should inject observer successfully', async () => {
@@ -83,7 +82,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
     });
 
     // Small delay to ensure mutation is processed
-    await page.waitForTimeout(100);
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Get observations
     const observations = await observationAccumulator.getObservations(page, actionStartTime);
@@ -107,7 +106,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
       document.body.appendChild(liveRegion);
     });
 
-    await page.waitForTimeout(100);
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const observations = await observationAccumulator.getObservations(page, actionStartTime);
 
@@ -132,7 +131,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
       container?.appendChild(div);
     });
 
-    await page.waitForTimeout(100);
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const observations = await observationAccumulator.getObservations(page, actionStartTime);
 
@@ -154,7 +153,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
     });
 
     // Wait for mutation to be processed
-    await page.waitForTimeout(100);
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Now check the log in a separate evaluate
     const signals = await page.evaluate(() => {
@@ -198,7 +197,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
     });
 
     // Wait
-    await page.waitForTimeout(100);
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Check log
     const afterAdd = await page.evaluate(() => {
@@ -214,10 +213,9 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
     expect(afterAdd.logLength).toBeGreaterThan(0);
   });
 
-  it('should test with fresh context per test', async () => {
+  it('should test with fresh page per test', async () => {
     // Create a fresh page to avoid state leaking from previous tests
-    const freshContext = await browser.newContext();
-    const freshPage = await freshContext.newPage();
+    const freshPage = await browser.newPage();
 
     try {
       await freshPage.setContent('<html><body><div id="root"></div></body></html>');
@@ -232,13 +230,13 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
         document.body.appendChild(alert);
       });
 
-      await freshPage.waitForTimeout(100);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const observations = await observationAccumulator.getObservations(freshPage, actionStartTime);
 
       expect(observations.duringAction.length).toBeGreaterThan(0);
     } finally {
-      await freshContext.close();
+      await freshPage.close();
     }
   });
 
@@ -257,7 +255,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
       document.body.appendChild(alert);
     });
 
-    await page.waitForTimeout(100);
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Check timestamps directly
     const debug = await page.evaluate((since: number) => {
@@ -320,7 +318,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
         document.body.appendChild(shadowHost);
       });
 
-      await page.waitForTimeout(100);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Get all raw log entries from the browser
       const logInfo = await page.evaluate(() => {
@@ -367,7 +365,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
         document.body.appendChild(shadowHost);
       });
 
-      await page.waitForTimeout(100);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Clear the log and record new start time
       await page.evaluate(() => {
@@ -391,7 +389,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
         }
       });
 
-      await page.waitForTimeout(100);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const observations = await observationAccumulator.getObservations(page, afterClearTime);
 
@@ -433,7 +431,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
         document.body.appendChild(outer);
       });
 
-      await page.waitForTimeout(100);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const logInfo = await page.evaluate(() => {
         const acc = (window as any).__observationAccumulator;
@@ -474,7 +472,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
         document.body.appendChild(shadowHost);
       });
 
-      await page.waitForTimeout(100);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Verify shadow observer was created
       const beforeRemoval = await page.evaluate(() => {
@@ -492,7 +490,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
         host?.remove();
       });
 
-      await page.waitForTimeout(100);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Verify shadow observer was cleaned up
       const afterRemoval = await page.evaluate(() => {

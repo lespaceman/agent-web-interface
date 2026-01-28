@@ -405,36 +405,6 @@ export type ClickOutcome = z.infer<typeof ClickOutcomeSchema>;
 // ============================================================================
 
 // ============================================================================
-// launch_browser - Launch a new browser instance
-// ============================================================================
-
-export const LaunchBrowserInputSchema = z.object({
-  /** Run browser in headless mode (default: true) */
-  headless: z.boolean().default(true),
-});
-
-/** Returns XML state response string directly */
-export const LaunchBrowserOutputSchema = z.string();
-
-export type LaunchBrowserInput = z.infer<typeof LaunchBrowserInputSchema>;
-export type LaunchBrowserOutput = z.infer<typeof LaunchBrowserOutputSchema>;
-
-// ============================================================================
-// connect_browser - Connect to an existing browser instance
-// ============================================================================
-
-export const ConnectBrowserInputSchema = z.object({
-  /** CDP endpoint URL (e.g., http://localhost:9223). Defaults to Athena CEF bridge host/port. */
-  endpoint_url: z.string().optional(),
-});
-
-/** Returns XML state response string directly */
-export const ConnectBrowserOutputSchema = z.string();
-
-export type ConnectBrowserInput = z.infer<typeof ConnectBrowserInputSchema>;
-export type ConnectBrowserOutput = z.infer<typeof ConnectBrowserOutputSchema>;
-
-// ============================================================================
 // close_page - Close a specific page
 // ============================================================================
 

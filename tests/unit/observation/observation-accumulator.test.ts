@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ObservationAccumulator } from '../../../src/observation/observation-accumulator.js';
 import type { RawMutationEntry } from '../../../src/observation/observation.types.js';
-import { createMockPage } from '../../mocks/playwright.mock.js';
+import { createMockPage } from '../../mocks/puppeteer.mock.js';
 
 /**
  * Create a mock Page object with custom evaluate implementation.

@@ -8,8 +8,6 @@ export { initializeTools, getSnapshotStore } from './browser-tools.js';
 
 // Tool handlers - Simplified API
 export {
-  launchBrowser,
-  connectBrowser,
   closePage,
   closeSession,
   navigate,
@@ -28,18 +26,11 @@ export {
   hover,
 } from './browser-tools.js';
 
+// Server config - lazy browser initialization
+export { ensureBrowserForTools, getSessionManager } from '../server/server-config.js';
+
 // Schemas - Simplified API
 export {
-  // launch_browser
-  LaunchBrowserInputSchema,
-  LaunchBrowserOutputSchema,
-  type LaunchBrowserInput,
-  type LaunchBrowserOutput,
-  // connect_browser
-  ConnectBrowserInputSchema,
-  ConnectBrowserOutputSchema,
-  type ConnectBrowserInput,
-  type ConnectBrowserOutput,
   // close_page
   ClosePageInputSchema,
   ClosePageOutputSchema,

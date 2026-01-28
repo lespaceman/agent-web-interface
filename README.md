@@ -40,7 +40,7 @@ The goal is not to mirror the browser, but to present the page in a form that al
 
 At a high level:
 
-1. The browser is controlled via Playwright and CDP
+1. The browser is controlled via Puppeteer and CDP
 2. The page is reduced into semantic regions and actionable elements
 3. A structured snapshot is generated and sent to the LLM
 4. Actions are resolved against stable semantic identifiers rather than fragile selectors
@@ -78,9 +78,9 @@ Results are task-dependent and should be treated as directional rather than abso
 
 - A general-purpose browser
 - A visual testing or screenshot framework
-- A replacement for Playwright
+- A replacement for Puppeteer
 
-Playwright remains the execution layer; Athena focuses on representation and reasoning.
+Puppeteer remains the execution layer; Athena focuses on representation and reasoning.
 
 ---
 
@@ -104,23 +104,72 @@ See the `examples/` directory for concrete agent workflows.
 
 ---
 
+## Claude Code
+
+```bash
+# Basic (auto-launches browser)
+claude mcp add athena-browser-mcp -- npx athena-browser-mcp@latest
+
+# With auto-connect to your Chrome profile
+claude mcp add athena-browser-mcp -- npx athena-browser-mcp@latest --autoConnect
+
+# Headless mode
+claude mcp add athena-browser-mcp -- npx athena-browser-mcp@latest --headless
+```
+
+---
+
+## CLI Arguments
+
+The server accepts the following arguments to configure browser initialization:
+
+| Argument                 | Description                                                     | Default          |
+| ------------------------ | --------------------------------------------------------------- | ---------------- |
+| `--headless=true\|false` | Run browser in headless mode                                    | `false`          |
+| `--browserUrl`           | HTTP endpoint to connect to existing browser                    | -                |
+| `--wsEndpoint`           | WebSocket endpoint to connect to existing browser               | -                |
+| `--autoConnect`          | Auto-connect to Chrome 144+ via DevToolsActivePort              | `false`          |
+| `--isolated`             | Use isolated temp profile instead of persistent                 | `false`          |
+| `--userDataDir`          | Chrome user data directory                                      | Platform default |
+| `--channel`              | Chrome channel (chrome, chrome-canary, chrome-beta, chrome-dev) | `chrome`         |
+| `--executablePath`       | Path to Chrome executable                                       | -                |
+
+### Automatic Browser Initialization
+
+The browser is automatically launched or connected on the first tool call. No explicit initialization is needed.
+
+Examples:
+
+```bash
+# Auto-launch visible browser (default)
+npx athena-browser-mcp
+
+# Launch headless browser
+npx athena-browser-mcp --headless
+
+# Auto-connect to Chrome with remote debugging enabled
+npx athena-browser-mcp --autoConnect
+
+# Connect to specific endpoint
+npx athena-browser-mcp --browserUrl http://localhost:9222
+```
+
+---
+
 ## Using Your Existing Chrome Profile (Chrome 144+)
 
 To connect with your bookmarks, extensions, and logged-in sessions:
 
 1. Navigate to `chrome://inspect/#remote-debugging` in Chrome
 2. Enable remote debugging and allow the connection
-3. Set `AUTO_CONNECT=true` in your MCP config and use `connect_browser`
+3. Use `--autoConnect` CLI argument
 
 ```json
 {
   "mcpServers": {
     "athena-browser-mcp": {
-      "command": "node",
-      "args": ["/path/to/athena-browser-mcp/dist/src/index.js"],
-      "env": {
-        "AUTO_CONNECT": "true"
-      }
+      "command": "npx",
+      "args": ["athena-browser-mcp@latest", "--autoConnect"]
     }
   }
 }

@@ -6,8 +6,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { stabilizeDom } from '../../../src/delta/dom-stabilizer.js';
-import type { Page } from 'playwright';
-import { createMockPage, type MockPage } from '../../mocks/playwright.mock.js';
+import type { Page } from 'puppeteer-core';
+import { createMockPage, type MockPage } from '../../mocks/puppeteer.mock.js';
 
 /**
  * Helper to create a mock page with a specific evaluate result.

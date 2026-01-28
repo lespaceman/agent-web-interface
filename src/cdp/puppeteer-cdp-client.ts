@@ -1,36 +1,35 @@
 /**
- * Playwright CDP Client
+ * Puppeteer CDP Client
  *
- * CdpClient implementation wrapping Playwright's CDPSession.
+ * CdpClient implementation wrapping Puppeteer's CDPSession.
  * Provides a consistent interface for CDP communication regardless
  * of the underlying browser automation framework.
  */
 
-import type { CDPSession } from 'playwright';
+import type { CDPSession } from 'puppeteer-core';
 import type { CdpClient, CdpEventHandler, CdpClientOptions } from './cdp-client.interface.js';
 import type { CdpHealthDiagnostics } from '../state/health.types.js';
 import { getLogger } from '../shared/services/logging.service.js';
 
 /**
- * CdpClient implementation wrapping Playwright's CDPSession.
+ * CdpClient implementation wrapping Puppeteer's CDPSession.
  *
  * @example
  * ```typescript
- * import { chromium } from 'playwright';
+ * import puppeteer from 'puppeteer-core';
  *
- * const browser = await chromium.launch();
- * const context = await browser.newContext();
- * const page = await context.newPage();
+ * const browser = await puppeteer.launch({ channel: 'chrome' });
+ * const [page] = await browser.pages();
  *
- * // Create CDP session from Playwright page
- * const cdpSession = await context.newCDPSession(page);
- * const cdp = new PlaywrightCdpClient(cdpSession);
+ * // Create CDP session from Puppeteer page
+ * const cdpSession = await page.createCDPSession();
+ * const cdp = new PuppeteerCdpClient(cdpSession);
  *
  * // Use CDP commands
  * const doc = await cdp.send('DOM.getDocument', { depth: -1 });
  * ```
  */
-export class PlaywrightCdpClient implements CdpClient {
+export class PuppeteerCdpClient implements CdpClient {
   /** Default CDP domains that don't have .enable() methods */
   private static readonly DEFAULT_DOMAINS_WITHOUT_ENABLE = new Set([
     'Browser',
@@ -62,7 +61,7 @@ export class PlaywrightCdpClient implements CdpClient {
     this.timeout = options.timeout ?? 30000;
     this.domainsWithoutEnable = options.domainsWithoutEnable
       ? new Set(options.domainsWithoutEnable)
-      : PlaywrightCdpClient.DEFAULT_DOMAINS_WITHOUT_ENABLE;
+      : PuppeteerCdpClient.DEFAULT_DOMAINS_WITHOUT_ENABLE;
     // Note: CDPSession doesn't expose lifecycle events.
     // State is tracked via close() and error handling in send().
   }
@@ -96,8 +95,7 @@ export class PlaywrightCdpClient implements CdpClient {
     let timeoutId: NodeJS.Timeout | undefined;
 
     try {
-      // Playwright's CDPSession.send() accepts method as string and params as object
-      // The type assertion is needed because Playwright types are more restrictive
+      // Puppeteer's CDPSession.send() accepts method as string and params as object
       const result = await Promise.race([
         this.session.send(method as Parameters<CDPSession['send']>[0], params),
         new Promise<never>((_, reject) => {
@@ -119,7 +117,8 @@ export class PlaywrightCdpClient implements CdpClient {
       if (
         errorMessage.includes('Target closed') ||
         errorMessage.includes('Session closed') ||
-        errorMessage.includes('detached')
+        errorMessage.includes('detached') ||
+        errorMessage.includes('Protocol error')
       ) {
         this.active = false;
         this.enabledDomains.clear();
@@ -154,7 +153,7 @@ export class PlaywrightCdpClient implements CdpClient {
     }
     this.eventHandlers.get(event)!.add(handler);
 
-    // Playwright CDPSession uses typed events, but we need to handle any event name
+    // Puppeteer CDPSession uses typed events, but we need to handle any event name
     this.session.on(event as Parameters<CDPSession['on']>[0], handler as () => void);
   }
 
@@ -229,8 +228,12 @@ export class PlaywrightCdpClient implements CdpClient {
       for (const handler of handlers) {
         try {
           this.session.off(event as Parameters<CDPSession['off']>[0], handler as () => void);
-        } catch {
+        } catch (err) {
           // Handler may already be removed
+          this.logger.debug('Failed to remove event handler during cleanup', {
+            event,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     }

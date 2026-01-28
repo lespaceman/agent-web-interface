@@ -7,8 +7,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SnapshotCompiler } from '../../../src/snapshot/snapshot-compiler.js';
 import { createMockCdpClient, MockCdpClient } from '../../mocks/cdp-client.mock.js';
-import type { Page } from 'playwright';
-import { createMockPage } from '../../mocks/playwright.mock.js';
+import type { Page } from 'puppeteer-core';
+import { createMockPage } from '../../mocks/puppeteer.mock.js';
 
 // Create realistic CDP mock responses
 function setupCdpMocks(mockCdp: MockCdpClient): void {

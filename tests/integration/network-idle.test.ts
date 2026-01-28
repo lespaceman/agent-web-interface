@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type Server } from 'http';
-import { chromium, type Browser, type Page } from 'playwright';
+import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { PageNetworkTracker, getOrCreateTracker } from '../../src/browser/page-network-tracker.js';
 
 // Test HTML page with delayed fetch
@@ -79,7 +79,7 @@ describe.skipIf(skipIntegration)('Network Idle Stabilization (Integration)', () 
     });
 
     // Launch browser
-    browser = await chromium.launch({ headless: true });
+    browser = await puppeteer.launch({ headless: true, channel: 'chrome' });
   });
 
   afterAll(async () => {
@@ -112,7 +112,7 @@ describe.skipIf(skipIntegration)('Network Idle Stabilization (Integration)', () 
     tracker.markNavigation();
 
     // Verify initial state
-    const initialStatus = await page.textContent('#status');
+    const initialStatus = await page.$eval('#status', (el) => el.textContent);
     expect(initialStatus).toBe('Idle');
 
     // Click the button (triggers 2s fetch)
@@ -129,7 +129,7 @@ describe.skipIf(skipIntegration)('Network Idle Stabilization (Integration)', () 
     // After waitForQuiet returns, status should be "Loaded!"
     // This is the critical assertion - if network idle detection
     // isn't working, we'd see "Loading..." here.
-    const finalStatus = await page.textContent('#status');
+    const finalStatus = await page.$eval('#status', (el) => el.textContent);
     expect(finalStatus).toBe('Loaded!');
   }, 10000); // 10s timeout for the test
 
@@ -147,11 +147,11 @@ describe.skipIf(skipIntegration)('Network Idle Stabilization (Integration)', () 
     expect(idle).toBe(false);
 
     // Status should still be "Loading..." since fetch isn't done
-    const status = await page.textContent('#status');
+    const status = await page.$eval('#status', (el) => el.textContent);
     expect(status).toBe('Loading...');
 
     // Wait for fetch to actually complete (cleanup)
-    await page.waitForTimeout(2500);
+    await new Promise((resolve) => setTimeout(resolve, 2500));
   }, 10000);
 });
 

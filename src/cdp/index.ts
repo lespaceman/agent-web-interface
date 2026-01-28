@@ -14,7 +14,7 @@ export type {
 } from './cdp-client.interface.js';
 
 // Implementations
-export { PlaywrightCdpClient } from './playwright-cdp-client.js';
+export { PuppeteerCdpClient } from './puppeteer-cdp-client.js';
 
 // Re-export devtools-protocol types for convenience
 export type { Protocol } from 'devtools-protocol';

@@ -1,11 +1,11 @@
 /**
  * Page Registry
  *
- * Tracks active Playwright pages and their CDP sessions.
+ * Tracks active Puppeteer pages and their CDP sessions.
  * Provides a central registry for page lifecycle management.
  */
 
-import type { Page } from 'playwright';
+import type { Page } from 'puppeteer-core';
 import type { CdpClient } from '../cdp/cdp-client.interface.js';
 import { randomUUID } from 'crypto';
 
@@ -16,7 +16,7 @@ export interface PageHandle {
   /** Unique identifier for this page */
   page_id: string;
 
-  /** Playwright Page instance */
+  /** Puppeteer Page instance */
   page: Page;
 
   /** CDP client for this page */
@@ -43,13 +43,13 @@ export class PageRegistry {
   /**
    * Register a new page with its CDP session
    *
-   * @param page - Playwright Page instance
+   * @param page - Puppeteer Page instance
    * @param cdp - CDP client for the page
    * @returns PageHandle with unique page_id
    * @throws Error if page is already closed
    */
   register(page: Page, cdp: CdpClient): PageHandle {
-    // Validate page is not closed
+    // Validate page is not closed (Puppeteer uses isClosed())
     if (page.isClosed()) {
       throw new Error('Cannot register a closed page');
     }
@@ -174,9 +174,9 @@ export class PageRegistry {
   }
 
   /**
-   * Find a handle by its Playwright Page instance
+   * Find a handle by its Puppeteer Page instance
    *
-   * @param page - Playwright Page instance to find
+   * @param page - Puppeteer Page instance to find
    * @returns PageHandle if found, undefined otherwise
    */
   findByPage(page: Page): PageHandle | undefined {
@@ -207,17 +207,7 @@ export class PageRegistry {
       return false;
     }
 
-    // Check if page is closed
-    if (handle.page.isClosed()) {
-      return false;
-    }
-
-    // Check if CDP session is still active
-    if (!handle.cdp.isActive()) {
-      return false;
-    }
-
-    return true;
+    return !handle.page.isClosed() && handle.cdp.isActive();
   }
 
   /**

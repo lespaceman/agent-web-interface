@@ -1,15 +1,15 @@
 /**
  * Session Manager
  *
- * Manages Playwright browser lifecycle with a single shared BrowserContext.
+ * Manages Puppeteer browser lifecycle with a single shared BrowserContext.
  * All pages share cookies/storage within the context.
  */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chromium, type Browser, type BrowserContext } from 'playwright';
-import { PlaywrightCdpClient } from '../cdp/playwright-cdp-client.js';
+import puppeteer, { type Browser, type BrowserContext, type Page } from 'puppeteer-core';
+import { PuppeteerCdpClient } from '../cdp/puppeteer-cdp-client.js';
 import { PageRegistry, type PageHandle } from './page-registry.js';
 import { getLogger } from '../shared/services/logging.service.js';
 import { BrowserSessionError } from '../shared/errors/browser-session.error.js';
@@ -17,6 +17,9 @@ import type { ConnectionHealth } from '../state/health.types.js';
 import { observationAccumulator } from '../observation/index.js';
 import { waitForNetworkQuiet, NAVIGATION_NETWORK_IDLE_TIMEOUT_MS } from './page-stabilization.js';
 import { getOrCreateTracker, removeTracker } from './page-network-tracker.js';
+
+/** Type alias for Puppeteer Page (exported for downstream use) */
+export type { Page };
 
 /**
  * Connection state machine states
@@ -34,54 +37,86 @@ export interface ConnectionStateChangeEvent {
 
 /**
  * Storage state for cookies and localStorage.
- * Re-exports Playwright's BrowserContext storageState return type for convenience.
+ * Puppeteer doesn't have a built-in storageState type like Playwright.
  */
-export type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
+export interface StorageState {
+  cookies: {
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+    expires: number;
+    httpOnly: boolean;
+    secure: boolean;
+    sameSite?: 'Strict' | 'Lax' | 'None';
+  }[];
+  origins: {
+    origin: string;
+    localStorage: { name: string; value: string }[];
+  }[];
+}
+
+/** Default user data directory for persistent browser profiles */
+const DEFAULT_USER_DATA_DIR = path.join(
+  os.homedir(),
+  '.cache',
+  'athena-browser-mcp',
+  'chrome-profile'
+);
 
 /**
  * Options for launching a new browser
  */
 export interface LaunchOptions {
-  /** Run browser in headless mode (default: true) */
+  /** Run browser in headless mode (default: false) */
   headless?: boolean;
 
   /** Viewport dimensions */
   viewport?: { width: number; height: number };
 
-  /** Custom user agent string */
-  userAgent?: string;
+  /** Chrome channel to use */
+  channel?: 'chrome' | 'chrome-canary' | 'chrome-beta' | 'chrome-dev';
 
-  /** Browser locale (e.g., 'en-US') */
-  locale?: string;
+  /** Path to Chrome executable (overrides channel) */
+  executablePath?: string;
 
-  /** Timezone ID (e.g., 'America/New_York') */
-  timezone?: string;
-
-  /** Path to storage state file or storage state object (cookies, localStorage) */
-  storageState?: string | StorageState;
+  /** Use isolated temp profile instead of persistent (default: false) */
+  isolated?: boolean;
 
   /** Directory for persistent browser profile (user data dir) */
   userDataDir?: string;
+
+  /** Additional Chrome command-line arguments */
+  args?: string[];
+
+  /** Use pipe transport instead of WebSocket (default: true, more secure) */
+  pipe?: boolean;
 }
 
 /** Default CDP port for Athena Browser */
 const DEFAULT_CDP_PORT = 9223;
 /** Default CDP host */
 const DEFAULT_CDP_HOST = '127.0.0.1';
-/** Default connection timeout in ms */
-const DEFAULT_CONNECTION_TIMEOUT = 10000;
+/** Default connection timeout in ms (30s to handle slow networks and remote browsers) */
+const DEFAULT_CONNECTION_TIMEOUT = 30000;
 
 /**
  * Options for connecting to an existing browser via CDP
  */
 export interface ConnectOptions {
-  /** CDP endpoint URL (default: http://127.0.0.1:9223) */
+  /** WebSocket endpoint URL (e.g., ws://localhost:9222/devtools/browser/...) */
+  browserWSEndpoint?: string;
+
+  /** HTTP endpoint URL for Puppeteer to discover WebSocket (e.g., http://localhost:9222) */
+  browserURL?: string;
+
+  /** CDP endpoint URL (legacy, converted to browserURL) */
   endpointUrl?: string;
 
-  /** CDP host (default: 127.0.0.1) - used if endpointUrl not provided */
+  /** CDP host (default: 127.0.0.1) - used if no endpoint provided */
   host?: string;
 
-  /** CDP port (default: 9223) - used if endpointUrl not provided */
+  /** CDP port (default: 9223) - used if no endpoint provided */
   port?: number;
 
   /** Connection timeout in ms (default: 10000) */
@@ -199,8 +234,6 @@ export class SessionManager {
   private readonly registry: PageRegistry;
   private readonly logger = getLogger();
   private isExternalBrowser = false;
-  /** Whether context was launched with userDataDir (persistent profile) */
-  private isPersistentContext = false;
   /** Connection state machine */
   private _connectionState: ConnectionState = 'idle';
   /** State change listeners */
@@ -270,71 +303,57 @@ export class SessionManager {
     const {
       headless = true,
       viewport,
-      userAgent,
-      locale,
-      timezone,
-      storageState,
+      channel = 'chrome',
+      executablePath,
+      isolated = false,
       userDataDir,
+      args = [],
+      pipe = true,
     } = options;
+
+    // Determine profile directory
+    let profileDir: string | undefined;
+    if (!isolated) {
+      profileDir = userDataDir ?? DEFAULT_USER_DATA_DIR;
+      await fs.promises.mkdir(profileDir, { recursive: true });
+    }
 
     this.logger.info('Launching browser', {
       headless,
       viewport,
-      locale,
-      timezone,
-      hasPersistentProfile: !!userDataDir,
+      channel,
+      isolated,
+      hasPersistentProfile: !!profileDir,
     });
 
     let browser: Browser | null = null;
-    let context: BrowserContext | null = null;
 
     try {
-      // Build context options (used for both regular and persistent contexts)
-      const contextOptions: Parameters<Browser['newContext']>[0] = {};
+      // Build Chrome args
+      const chromeArgs = [
+        '--hide-crash-restore-bubble',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        ...args,
+      ];
 
-      if (viewport) {
-        contextOptions.viewport = viewport;
-      }
-      if (userAgent) {
-        contextOptions.userAgent = userAgent;
-      }
-      if (locale) {
-        contextOptions.locale = locale;
-      }
-      if (timezone) {
-        contextOptions.timezoneId = timezone;
-      }
-      if (storageState) {
-        contextOptions.storageState = storageState;
-      }
+      browser = await puppeteer.launch({
+        channel: executablePath ? undefined : channel,
+        executablePath,
+        headless,
+        userDataDir: profileDir,
+        defaultViewport: viewport ?? null,
+        pipe,
+        args: chromeArgs,
+      });
 
-      if (userDataDir) {
-        // Persistent context mode - use launchPersistentContext
-        // This returns a BrowserContext directly (no separate Browser instance)
-        context = await chromium.launchPersistentContext(userDataDir, {
-          headless,
-          ...contextOptions,
-        });
-        this.context = context;
-        this.browser = null; // No separate browser for persistent context
-        this.isPersistentContext = true;
-        this.isExternalBrowser = false;
-      } else {
-        // Regular mode - launch browser then create context
-        browser = await chromium.launch({
-          headless,
-        });
+      // Get the default context (first one)
+      this.context = browser.defaultBrowserContext();
+      this.browser = browser;
+      this.isExternalBrowser = false;
 
-        this.context = await browser.newContext(contextOptions);
-        this.browser = browser;
-        this.isPersistentContext = false;
-        this.isExternalBrowser = false;
-      }
-
-      // Setup disconnect listener (only for non-persistent contexts with browser)
-      if (this.browser) {
-        this.setupBrowserListeners();
-      }
+      // Setup disconnect listener
+      this.setupBrowserListeners();
 
       this.transitionTo('connected');
       this.logger.info('Browser launched successfully');
@@ -342,11 +361,6 @@ export class SessionManager {
       // Cleanup on failure - ignore close errors as browser may be in bad state
       if (browser) {
         await browser.close().catch(() => {
-          /* Intentionally empty - cleanup is best-effort */
-        });
-      }
-      if (context && this.isPersistentContext) {
-        await context.close().catch(() => {
           /* Intentionally empty - cleanup is best-effort */
         });
       }
@@ -363,7 +377,7 @@ export class SessionManager {
    *
    * Use this to connect to Athena Browser or any Chromium with remote debugging enabled.
    *
-   * @param options - Connection options (host/port, endpointUrl, or autoConnect)
+   * @param options - Connection options (browserWSEndpoint, browserURL, or autoConnect)
    * @throws BrowserSessionError if browser is already running, connection in progress, or URL is invalid
    *
    * @example
@@ -371,9 +385,11 @@ export class SessionManager {
    * // Connect to Athena Browser on default port
    * await session.connect();
    *
-   * // Connect to custom endpoint
-   * await session.connect({ port: 9222 });
-   * await session.connect({ endpointUrl: 'http://localhost:9223' });
+   * // Connect to custom endpoint (HTTP - Puppeteer discovers WebSocket)
+   * await session.connect({ browserURL: 'http://localhost:9222' });
+   *
+   * // Connect via WebSocket directly
+   * await session.connect({ browserWSEndpoint: 'ws://localhost:9222/devtools/browser/...' });
    *
    * // Auto-connect to Chrome 144+ with UI-based remote debugging
    * await session.connect({ autoConnect: true });
@@ -385,57 +401,84 @@ export class SessionManager {
     }
 
     const timeout = options.timeout ?? DEFAULT_CONNECTION_TIMEOUT;
-    let endpointUrl: string;
+    let connectOptions: { browserWSEndpoint?: string; browserURL?: string };
+    let endpointForLogging: string;
 
     // Determine connection method
     if (options.autoConnect) {
       // Chrome 144+ auto-connect via DevToolsActivePort
       const userDataDir = options.userDataDir ?? getDefaultChromeUserDataDir();
       try {
-        endpointUrl = await readDevToolsActivePort(userDataDir);
-        this.logger.info('Auto-connect: found DevToolsActivePort', { userDataDir, endpointUrl });
+        const wsEndpoint = await readDevToolsActivePort(userDataDir);
+        connectOptions = { browserWSEndpoint: wsEndpoint };
+        endpointForLogging = wsEndpoint;
+        this.logger.info('Auto-connect: found DevToolsActivePort', { userDataDir, wsEndpoint });
       } catch (error) {
         throw BrowserSessionError.connectionFailed(
           error instanceof Error ? error : new Error(String(error)),
           { operation: 'autoConnect', userDataDir }
         );
       }
-    } else if (options.endpointUrl) {
-      endpointUrl = options.endpointUrl;
-      // Validate URL format (HTTP, HTTPS, WS, or WSS)
-      if (!isValidHttpUrl(endpointUrl) && !isValidWsUrl(endpointUrl)) {
-        throw BrowserSessionError.invalidUrl(endpointUrl);
+    } else if (options.browserWSEndpoint) {
+      // Direct WebSocket connection
+      if (!isValidWsUrl(options.browserWSEndpoint)) {
+        throw BrowserSessionError.invalidUrl(options.browserWSEndpoint);
       }
+      connectOptions = { browserWSEndpoint: options.browserWSEndpoint };
+      endpointForLogging = options.browserWSEndpoint;
+    } else if (options.browserURL) {
+      // HTTP endpoint - Puppeteer discovers WebSocket
+      if (!isValidHttpUrl(options.browserURL)) {
+        throw BrowserSessionError.invalidUrl(options.browserURL);
+      }
+      connectOptions = { browserURL: options.browserURL };
+      endpointForLogging = options.browserURL;
+    } else if (options.endpointUrl) {
+      // Legacy endpointUrl support - convert to appropriate option
+      if (isValidWsUrl(options.endpointUrl)) {
+        connectOptions = { browserWSEndpoint: options.endpointUrl };
+      } else if (isValidHttpUrl(options.endpointUrl)) {
+        connectOptions = { browserURL: options.endpointUrl };
+      } else {
+        throw BrowserSessionError.invalidUrl(options.endpointUrl);
+      }
+      endpointForLogging = options.endpointUrl;
     } else {
+      // Default: construct HTTP URL from host/port
       const host = options.host ?? process.env.CEF_BRIDGE_HOST ?? DEFAULT_CDP_HOST;
       const port = options.port ?? Number(process.env.CEF_BRIDGE_PORT ?? DEFAULT_CDP_PORT);
-      endpointUrl = `http://${host}:${port}`;
+      const browserURL = `http://${host}:${port}`;
+      connectOptions = { browserURL };
+      endpointForLogging = browserURL;
     }
 
     this.transitionTo('connecting');
-    this.logger.info('Connecting to browser via CDP', { endpointUrl, timeout });
+    this.logger.info('Connecting to browser via CDP', { endpoint: endpointForLogging, timeout });
 
     let browser: Browser | null = null;
     let timeoutId: NodeJS.Timeout | undefined;
 
     try {
-      // Connect with timeout - connectOverCDP supports both HTTP and WebSocket URLs
-      const connectionPromise = chromium.connectOverCDP(endpointUrl);
+      // Connect with timeout
+      const connectionPromise = puppeteer.connect({
+        ...connectOptions,
+        defaultViewport: null,
+      });
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(BrowserSessionError.connectionTimeout(endpointUrl, timeout));
+          reject(BrowserSessionError.connectionTimeout(endpointForLogging, timeout));
         }, timeout);
       });
 
       browser = await Promise.race([connectionPromise, timeoutPromise]);
 
       // Get the default context (existing browser's context)
-      const contexts = browser.contexts();
+      const contexts = browser.browserContexts();
       if (contexts.length > 0) {
         this.context = contexts[0];
       } else {
-        // If no context exists, create one (shouldn't happen with Athena)
-        this.context = await browser.newContext();
+        // If no context exists, use default (shouldn't happen with Athena)
+        this.context = browser.defaultBrowserContext();
       }
 
       this.browser = browser;
@@ -444,21 +487,24 @@ export class SessionManager {
       // Setup disconnect listener
       this.setupBrowserListeners();
 
+      // Get page count for logging
+      const pages = await this.context.pages();
+
       this.transitionTo('connected');
       this.logger.info('Connected to browser successfully', {
         contexts: contexts.length,
-        pages: this.context.pages().length,
+        pages: pages.length,
       });
     } catch (error) {
-      // Cleanup on failure - ignore close errors as browser may be in bad state
+      // Cleanup on failure - for external browsers, disconnect instead of close
       if (browser) {
-        await browser.close().catch(() => {
+        await browser.disconnect().catch(() => {
           /* Intentionally empty - cleanup is best-effort */
         });
       }
       this.transitionTo('failed');
       this.logger.error('Failed to connect', error instanceof Error ? error : undefined, {
-        endpointUrl,
+        endpoint: endpointForLogging,
       });
 
       // Re-throw BrowserSessionError as-is, wrap others
@@ -467,7 +513,7 @@ export class SessionManager {
       }
       throw BrowserSessionError.connectionFailed(
         error instanceof Error ? error : new Error(String(error)),
-        { endpointUrl }
+        { endpointUrl: endpointForLogging }
       );
     } finally {
       if (timeoutId) {
@@ -481,11 +527,12 @@ export class SessionManager {
    *
    * @returns Number of pages, or 0 if browser not running
    */
-  getPageCount(): number {
+  async getPageCount(): Promise<number> {
     if (!this.context) {
       return 0;
     }
-    return this.context.pages().length;
+    const pages = await this.context.pages();
+    return pages.length;
   }
 
   /**
@@ -506,7 +553,7 @@ export class SessionManager {
       throw new Error('Browser not running');
     }
 
-    const pages = this.context.pages();
+    const pages = await this.context.pages();
     if (index < 0 || index >= pages.length) {
       throw new Error(`Invalid page index: ${index}. Browser has ${pages.length} pages.`);
     }
@@ -520,26 +567,13 @@ export class SessionManager {
       return existing;
     }
 
-    // Create CDP session for this page
-    const cdpSession = await this.context.newCDPSession(page);
-    const cdpClient = new PlaywrightCdpClient(cdpSession);
-
-    // Register page
+    const cdpSession = await page.createCDPSession();
+    const cdpClient = new PuppeteerCdpClient(cdpSession);
     const handle = this.registry.register(page, cdpClient);
 
-    this.registry.updateMetadata(handle.page_id, {
-      url: page.url(),
-    });
+    this.registry.updateMetadata(handle.page_id, { url: page.url() });
 
-    // Inject observation accumulator for DOM mutation tracking
-    await observationAccumulator.inject(page);
-
-    // Attach network tracker for this page
-    const tracker = getOrCreateTracker(page);
-    tracker.attach(page);
-
-    // Cleanup tracker on unexpected page close
-    page.on('close', () => removeTracker(page));
+    await this.setupPageTracking(page);
 
     this.logger.debug('Adopted page', { page_id: handle.page_id, url: page.url() });
 
@@ -558,35 +592,19 @@ export class SessionManager {
       throw new Error('Browser not running');
     }
 
-    // Create new page
     const page = await this.context.newPage();
-
-    // Create CDP session for this page
-    const cdpSession = await this.context.newCDPSession(page);
-    const cdpClient = new PlaywrightCdpClient(cdpSession);
-
-    // Register page
+    const cdpSession = await page.createCDPSession();
+    const cdpClient = new PuppeteerCdpClient(cdpSession);
     const handle = this.registry.register(page, cdpClient);
 
     this.logger.debug('Created page', { page_id: handle.page_id });
 
-    // Navigate if URL provided
     if (url) {
       await page.goto(url, { waitUntil: 'domcontentloaded' });
-      this.registry.updateMetadata(handle.page_id, {
-        url: page.url(),
-      });
+      this.registry.updateMetadata(handle.page_id, { url: page.url() });
     }
 
-    // Inject observation accumulator for DOM mutation tracking
-    await observationAccumulator.inject(page);
-
-    // Attach network tracker for this page
-    const tracker = getOrCreateTracker(page);
-    tracker.attach(page);
-
-    // Cleanup tracker on unexpected page close
-    page.on('close', () => removeTracker(page));
+    await this.setupPageTracking(page);
 
     return handle;
   }
@@ -648,9 +666,7 @@ export class SessionManager {
       return handle;
     }
 
-    // Try to get MRU page, or create one if no pages exist
-    const handle = this.registry.getMostRecent() ?? (await this.createPage());
-    return handle;
+    return this.registry.getMostRecent() ?? (await this.createPage());
   }
 
   /**
@@ -751,19 +767,17 @@ export class SessionManager {
    * Shutdown the browser session.
    *
    * For launched browsers: closes all pages, context, and browser.
-   * For connected browsers: detaches CDP sessions but does NOT close the browser.
-   * For persistent contexts: closes context (which closes pages and browser).
+   * For connected browsers: disconnects but does NOT close the browser.
    */
   async shutdown(): Promise<void> {
-    // Check if there's anything to shut down (browser or persistent context)
-    if ((!this.browser && !this.isPersistentContext) || this._connectionState === 'disconnecting') {
+    // Check if there's anything to shut down
+    if (!this.browser || this._connectionState === 'disconnecting') {
       return;
     }
 
     this.transitionTo('disconnecting');
     this.logger.info('Shutting down browser session', {
       isExternalBrowser: this.isExternalBrowser,
-      isPersistentContext: this.isPersistentContext,
     });
 
     // Remove browser disconnect listener to prevent duplicate handling
@@ -774,50 +788,45 @@ export class SessionManager {
     for (const page of pages) {
       try {
         await page.cdp.close();
-      } catch {
+      } catch (err) {
         // CDP session may already be closed
+        this.logger.debug('CDP session close failed during shutdown', {
+          page_id: page.page_id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
     if (this.isExternalBrowser) {
       // For external browser: just disconnect, don't close pages or browser
-      this.logger.info('Disconnecting from external browser (not closing it)');
-    } else if (this.isPersistentContext) {
-      // For persistent context: closing context is sufficient
-      // (it handles pages and browser internally)
-      if (this.context) {
-        try {
-          await this.context.close();
-        } catch {
-          // Context may already be closed
-        }
+      if (this.browser) {
+        // disconnect() is synchronous in Puppeteer
+        void this.browser.disconnect();
       }
-      this.logger.info('Persistent context closed');
+      this.logger.info('Disconnected from external browser (not closing it)');
     } else {
       // For launched browser: close everything
       for (const page of pages) {
         try {
           await page.page.close();
-        } catch {
+        } catch (err) {
           // Page may already be closed
+          this.logger.debug('Page close failed during shutdown', {
+            page_id: page.page_id,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
 
-      // Close context
-      if (this.context) {
-        try {
-          await this.context.close();
-        } catch {
-          // Context may already be closed
-        }
-      }
-
-      // Close browser
+      // Close browser (this closes all pages and contexts)
       if (this.browser) {
         try {
           await this.browser.close();
-        } catch {
+        } catch (err) {
           // Browser may already be closed
+          this.logger.debug('Browser close failed during shutdown', {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     }
@@ -825,7 +834,6 @@ export class SessionManager {
     this.browser = null;
     this.context = null;
     this.isExternalBrowser = false;
-    this.isPersistentContext = false;
     this.registry.clear();
 
     this.transitionTo('idle');
@@ -838,11 +846,7 @@ export class SessionManager {
    * @returns true if browser is active
    */
   isRunning(): boolean {
-    // For persistent contexts, we don't have a browser object
-    if (this.isPersistentContext) {
-      return this.context !== null && this._connectionState === 'connected';
-    }
-    return this.browser?.isConnected() ?? false;
+    return this.browser?.connected ?? false;
   }
 
   /**
@@ -866,20 +870,22 @@ export class SessionManager {
     }
 
     const results = await Promise.all(
-      pages.map(async (page) => {
-        if (page.page.isClosed()) {
+      pages.map(async (pageHandle) => {
+        // Check if page is closed using Puppeteer's isClosed() method
+        if (pageHandle.page.isClosed()) {
           return false;
         }
-        if (!page.cdp.isActive()) {
+
+        if (!pageHandle.cdp.isActive()) {
           return false;
         }
 
         try {
-          await page.cdp.send('Page.getFrameTree', undefined);
+          await pageHandle.cdp.send('Page.getFrameTree', undefined);
           return true;
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          this.logger.warning('CDP probe failed', { page_id: page.page_id, error: message });
+          this.logger.warning('CDP probe failed', { page_id: pageHandle.page_id, error: message });
           return false;
         }
       })
@@ -904,6 +910,7 @@ export class SessionManager {
       throw new Error(`Page not found: ${page_id}`);
     }
 
+    // Check if page is still accessible
     if (handle.page.isClosed()) {
       throw new Error(`Page is closed: ${page_id}`);
     }
@@ -915,13 +922,17 @@ export class SessionManager {
     // Close old CDP session (best effort)
     try {
       await handle.cdp.close();
-    } catch {
-      // Ignore - may already be closed
+    } catch (err) {
+      // May already be closed
+      this.logger.debug('Old CDP session close failed during rebind', {
+        page_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
-    // Create new CDP session
-    const cdpSession = await this.context.newCDPSession(handle.page);
-    const newCdp = new PlaywrightCdpClient(cdpSession);
+    // Create new CDP session (Puppeteer creates CDP from page, not context)
+    const cdpSession = await handle.page.createCDPSession();
+    const newCdp = new PuppeteerCdpClient(cdpSession);
 
     // Update registry with new handle
     const newHandle: PageHandle = {
@@ -939,19 +950,84 @@ export class SessionManager {
   /**
    * Save the current storage state (cookies, localStorage).
    *
-   * @param path - Optional file path to save state to. If not provided, returns the state object.
+   * Note: Puppeteer doesn't have built-in storageState like Playwright.
+   * This method collects cookies and localStorage manually.
+   *
+   * @param savePath - Optional file path to save state to. If not provided, returns the state object.
    * @returns The storage state object
    * @throws Error if browser not running
    */
-  async saveStorageState(path?: string): Promise<StorageState> {
+  async saveStorageState(savePath?: string): Promise<StorageState> {
     if (!this.context) {
       throw new Error('Browser not running');
     }
 
-    if (path) {
-      return await this.context.storageState({ path });
+    // Get cookies from all pages
+    const pages = await this.context.pages();
+    const allCookies = await Promise.all(pages.map((page) => page.cookies()));
+    const cookieSet = new Map<string, StorageState['cookies'][0]>();
+
+    // Deduplicate cookies by name+domain+path
+    for (const pageCookies of allCookies) {
+      for (const cookie of pageCookies) {
+        const key = `${cookie.name}|${cookie.domain}|${cookie.path}`;
+        cookieSet.set(key, {
+          name: cookie.name,
+          value: cookie.value,
+          domain: cookie.domain,
+          path: cookie.path,
+          expires: cookie.expires,
+          httpOnly: cookie.httpOnly ?? false,
+          secure: cookie.secure ?? false,
+          sameSite: (cookie.sameSite ?? undefined) as 'Strict' | 'Lax' | 'None' | undefined,
+        });
+      }
     }
-    return await this.context.storageState();
+
+    // Get localStorage from each origin
+    const originsMap = new Map<string, { name: string; value: string }[]>();
+    for (const page of pages) {
+      try {
+        const url = page.url();
+        if (!url || url === 'about:blank') continue;
+
+        const origin = new URL(url).origin;
+        /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
+        const localStorage = await page.evaluate(() => {
+          const storage = (globalThis as any).localStorage;
+          const items: { name: string; value: string }[] = [];
+          for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            if (key) {
+              items.push({ name: key, value: storage.getItem(key) ?? '' });
+            }
+          }
+          return items;
+        });
+        /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
+        originsMap.set(origin, localStorage);
+      } catch (err) {
+        // Page may not be accessible
+        this.logger.debug('Failed to extract localStorage during storage state save', {
+          url: page.url(),
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const state: StorageState = {
+      cookies: Array.from(cookieSet.values()),
+      origins: Array.from(originsMap.entries()).map(([origin, localStorage]) => ({
+        origin,
+        localStorage,
+      })),
+    };
+
+    if (savePath) {
+      await fs.promises.writeFile(savePath, JSON.stringify(state, null, 2));
+    }
+
+    return state;
   }
 
   /**
@@ -1003,5 +1079,18 @@ export class SessionManager {
       this.browser.off('disconnected', this.browserDisconnectHandler);
       this.browserDisconnectHandler = null;
     }
+  }
+
+  /**
+   * Setup tracking infrastructure for a page.
+   * Injects observation accumulator and attaches network tracker.
+   */
+  private async setupPageTracking(page: Page): Promise<void> {
+    await observationAccumulator.inject(page);
+
+    const tracker = getOrCreateTracker(page);
+    tracker.attach(page);
+
+    page.on('close', () => removeTracker(page));
   }
 }

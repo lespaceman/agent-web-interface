@@ -5,12 +5,12 @@
  * Used by session-manager and execute-action.
  *
  * IMPORTANT: This module uses PageNetworkTracker for reliable network idle
- * detection. Unlike Playwright's waitForLoadState('networkidle'), the tracker
+ * detection. Unlike Puppeteer's waitForNetworkIdle(), the tracker
  * monitors actual request/response events and works for in-page actions
  * (not just navigation load states).
  */
 
-import type { Page } from 'playwright';
+import type { Page } from 'puppeteer-core';
 import { getOrCreateTracker } from './page-network-tracker.js';
 
 /** Default timeout for network idle waiting after actions (ms) */
@@ -29,10 +29,10 @@ export const DEFAULT_QUIET_WINDOW_MS = 500;
  * which monitors request/response events directly, providing reliable detection
  * of network activity for both navigation and in-page actions.
  *
- * Unlike Playwright's waitForLoadState('networkidle'), this works correctly
+ * Unlike Puppeteer's waitForNetworkIdle(), this works correctly
  * for fetch/XHR requests triggered by user actions after page load.
  *
- * @param page - Playwright Page instance
+ * @param page - Puppeteer Page instance
  * @param timeoutMs - Maximum time to wait for network idle
  * @param quietWindowMs - Time with 0 inflight requests to consider "idle" (default: 500ms)
  * @returns Whether network became idle (false = timed out, but that's OK - never throws)

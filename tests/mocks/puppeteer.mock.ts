@@ -1,26 +1,26 @@
 /**
- * Mock Playwright for unit tests
+ * Mock Puppeteer for unit tests
  *
- * Provides mock implementations of Playwright Browser, BrowserContext,
+ * Provides mock implementations of Puppeteer Browser, BrowserContext,
  * Page, and CDPSession for testing without launching a real browser.
  */
 
 import { vi, type Mock } from 'vitest';
 
 /**
- * Mock Request - subset of Playwright Request interface used in tests
+ * Mock HTTPRequest - subset of Puppeteer HTTPRequest interface used in tests
  */
-export interface MockRequest {
+export interface MockHTTPRequest {
   resourceType: Mock;
   url: Mock;
 }
 
 /**
- * Creates a mock Playwright Request
+ * Creates a mock Puppeteer HTTPRequest
  */
-export function createMockRequest(
+export function createMockHTTPRequest(
   options: { resourceType?: string; url?: string } = {}
-): MockRequest {
+): MockHTTPRequest {
   return {
     resourceType: vi.fn().mockReturnValue(options.resourceType ?? 'fetch'),
     url: vi.fn().mockReturnValue(options.url ?? 'https://example.com/api'),
@@ -38,7 +38,7 @@ export interface MockCDPSession {
 }
 
 /**
- * Mock Page
+ * Mock Page - Puppeteer-specific API
  */
 export interface MockPage {
   url: Mock;
@@ -46,32 +46,32 @@ export interface MockPage {
   goto: Mock;
   close: Mock;
   isClosed: Mock;
-  waitForLoadState: Mock;
   evaluate: Mock;
-  viewportSize: Mock;
+  viewport: Mock; // Puppeteer uses viewport() instead of viewportSize()
+  createCDPSession: Mock; // Puppeteer creates CDP session from Page
+  cookies: Mock;
   on: Mock;
   off: Mock;
 }
 
 /**
- * Mock BrowserContext
+ * Mock BrowserContext - Puppeteer-specific API
  */
 export interface MockBrowserContext {
   newPage: Mock;
-  newCDPSession: Mock;
   close: Mock;
-  pages: Mock;
-  storageState: Mock;
+  pages: Mock; // Returns Promise in Puppeteer
 }
 
 /**
- * Mock Browser
+ * Mock Browser - Puppeteer-specific API
  */
 export interface MockBrowser {
-  newContext: Mock;
   close: Mock;
-  isConnected: Mock;
-  contexts: Mock;
+  disconnect: Mock; // Puppeteer-specific: disconnect without closing
+  connected: boolean; // Puppeteer uses property, not method
+  browserContexts: Mock; // Puppeteer uses browserContexts() instead of contexts()
+  defaultBrowserContext: Mock;
   on: Mock;
   off: Mock;
 }
@@ -92,17 +92,25 @@ export function createMockCDPSession(): MockCDPSession {
  * Creates a mock Page
  */
 export function createMockPage(
-  options: { url?: string; title?: string; viewport?: { width: number; height: number } } = {}
+  options: {
+    url?: string;
+    title?: string;
+    viewport?: { width: number; height: number };
+    cdpSession?: MockCDPSession;
+  } = {}
 ): MockPage {
+  const cdpSession = options.cdpSession ?? createMockCDPSession();
+
   return {
     url: vi.fn().mockReturnValue(options.url ?? 'about:blank'),
     title: vi.fn().mockResolvedValue(options.title ?? ''),
     goto: vi.fn().mockResolvedValue(null),
     close: vi.fn().mockResolvedValue(undefined),
     isClosed: vi.fn().mockReturnValue(false),
-    waitForLoadState: vi.fn().mockResolvedValue(undefined),
     evaluate: vi.fn().mockResolvedValue(undefined),
-    viewportSize: vi.fn().mockReturnValue(options.viewport ?? { width: 1280, height: 720 }),
+    viewport: vi.fn().mockReturnValue(options.viewport ?? { width: 1280, height: 720 }),
+    createCDPSession: vi.fn().mockResolvedValue(cdpSession),
+    cookies: vi.fn().mockResolvedValue([]),
     on: vi.fn(),
     off: vi.fn(),
   };
@@ -116,11 +124,11 @@ export interface MockPageWithEvents extends MockPage {
   /** Emit any event to registered listeners */
   emitEvent: (event: string, data: unknown) => void;
   /** Emit a 'request' event with a mock request */
-  emitRequest: (options?: { resourceType?: string; url?: string }) => MockRequest;
+  emitRequest: (options?: { resourceType?: string; url?: string }) => MockHTTPRequest;
   /** Emit a 'requestfinished' event */
-  emitRequestFinished: (request: MockRequest) => void;
+  emitRequestFinished: (request: MockHTTPRequest) => void;
   /** Emit a 'requestfailed' event */
-  emitRequestFailed: (request: MockRequest) => void;
+  emitRequestFailed: (request: MockHTTPRequest) => void;
   /** Get all registered handlers for an event */
   getHandlers: (event: string) => Set<(arg: unknown) => void>;
 }
@@ -131,9 +139,15 @@ export interface MockPageWithEvents extends MockPage {
  * provides helper methods to emit events for testing.
  */
 export function createMockPageWithEvents(
-  options: { url?: string; title?: string; viewport?: { width: number; height: number } } = {}
+  options: {
+    url?: string;
+    title?: string;
+    viewport?: { width: number; height: number };
+    cdpSession?: MockCDPSession;
+  } = {}
 ): MockPageWithEvents {
   const listeners = new Map<string, Set<(arg: unknown) => void>>();
+  const cdpSession = options.cdpSession ?? createMockCDPSession();
 
   const getOrCreateListenerSet = (event: string): Set<(arg: unknown) => void> => {
     if (!listeners.has(event)) {
@@ -148,9 +162,10 @@ export function createMockPageWithEvents(
     goto: vi.fn().mockResolvedValue(null),
     close: vi.fn().mockResolvedValue(undefined),
     isClosed: vi.fn().mockReturnValue(false),
-    waitForLoadState: vi.fn().mockResolvedValue(undefined),
     evaluate: vi.fn().mockResolvedValue(undefined),
-    viewportSize: vi.fn().mockReturnValue(options.viewport ?? { width: 1280, height: 720 }),
+    viewport: vi.fn().mockReturnValue(options.viewport ?? { width: 1280, height: 720 }),
+    createCDPSession: vi.fn().mockResolvedValue(cdpSession),
+    cookies: vi.fn().mockResolvedValue([]),
     on: vi.fn((event: string, handler: (arg: unknown) => void) => {
       getOrCreateListenerSet(event).add(handler);
     }),
@@ -161,14 +176,14 @@ export function createMockPageWithEvents(
       listeners.get(event)?.forEach((handler) => handler(data));
     },
     emitRequest: (reqOptions?: { resourceType?: string; url?: string }) => {
-      const request = createMockRequest(reqOptions);
+      const request = createMockHTTPRequest(reqOptions);
       page.emitEvent('request', request);
       return request;
     },
-    emitRequestFinished: (request: MockRequest) => {
+    emitRequestFinished: (request: MockHTTPRequest) => {
       page.emitEvent('requestfinished', request);
     },
-    emitRequestFailed: (request: MockRequest) => {
+    emitRequestFailed: (request: MockHTTPRequest) => {
       page.emitEvent('requestfailed', request);
     },
     getHandlers: (event: string) => {
@@ -183,14 +198,12 @@ export function createMockPageWithEvents(
  * Creates a mock BrowserContext with preconfigured page and CDP session.
  *
  * For multi-page scenarios:
- * - `pages()` returns all pages in the array
+ * - `pages()` returns Promise of all pages (Puppeteer async)
  * - `newPage()` cycles through pages (creates new mock if exhausted)
- * - `newCDPSession()` creates a new CDP session per call
  */
 export function createMockBrowserContext(
   options: {
     pages?: MockPage[];
-    cdpSession?: MockCDPSession;
   } = {}
 ): MockBrowserContext {
   const initialPages = options.pages ?? [createMockPage()];
@@ -208,23 +221,11 @@ export function createMockBrowserContext(
     return Promise.resolve(newPage);
   });
 
-  // newCDPSession creates a fresh session each call (or uses provided one for first call)
-  let cdpCallCount = 0;
-  const newCDPSessionMock = vi.fn().mockImplementation(() => {
-    if (cdpCallCount === 0 && options.cdpSession) {
-      cdpCallCount++;
-      return Promise.resolve(options.cdpSession);
-    }
-    cdpCallCount++;
-    return Promise.resolve(createMockCDPSession());
-  });
-
   return {
     newPage: newPageMock,
-    newCDPSession: newCDPSessionMock,
     close: vi.fn().mockResolvedValue(undefined),
-    pages: vi.fn().mockImplementation(() => pages),
-    storageState: vi.fn().mockResolvedValue({ cookies: [], origins: [] }),
+    // Puppeteer's pages() returns Promise
+    pages: vi.fn().mockImplementation(() => Promise.resolve(pages)),
   };
 }
 
@@ -234,42 +235,46 @@ export function createMockBrowserContext(
 export function createMockBrowser(
   options: {
     contexts?: MockBrowserContext[];
+    connected?: boolean;
   } = {}
 ): MockBrowser {
   const mockContext = options.contexts?.[0] ?? createMockBrowserContext();
 
   return {
-    newContext: vi.fn().mockResolvedValue(mockContext),
     close: vi.fn().mockResolvedValue(undefined),
-    isConnected: vi.fn().mockReturnValue(true),
-    contexts: vi.fn().mockReturnValue(options.contexts ?? [mockContext]),
+    disconnect: vi.fn(), // Puppeteer's disconnect is sync
+    connected: options.connected ?? true, // Property, not method
+    browserContexts: vi.fn().mockReturnValue(options.contexts ?? [mockContext]),
+    defaultBrowserContext: vi.fn().mockReturnValue(mockContext),
     on: vi.fn(),
     off: vi.fn(),
   };
 }
 
 /**
- * Mock chromium launcher
+ * Mock puppeteer default export
  */
-export const mockChromium = {
+export const mockPuppeteer = {
   launch: vi.fn().mockResolvedValue(createMockBrowser()),
+  connect: vi.fn().mockResolvedValue(createMockBrowser()),
 };
 
 /**
- * Full mock setup for Playwright module
- * Use this with vi.mock('playwright', () => createPlaywrightMock())
+ * Full mock setup for Puppeteer module
+ * Use this with vi.mock('puppeteer-core', () => createPuppeteerMock())
  */
-export function createPlaywrightMock() {
+export function createPuppeteerMock() {
   return {
-    chromium: mockChromium,
+    default: mockPuppeteer,
   };
 }
 
 /**
- * Reset all Playwright mocks
+ * Reset all Puppeteer mocks
  */
-export function resetPlaywrightMocks(): void {
-  mockChromium.launch.mockClear();
+export function resetPuppeteerMocks(): void {
+  mockPuppeteer.launch.mockClear();
+  mockPuppeteer.connect.mockClear();
 }
 
 /**
@@ -289,9 +294,12 @@ export function createLinkedMocks(
   } = {}
 ): LinkedMocks {
   const cdpSession = createMockCDPSession();
-  const page = createMockPage({ url: options.url, title: options.title });
-  const context = createMockBrowserContext({ pages: [page], cdpSession });
+  const page = createMockPage({ url: options.url, title: options.title, cdpSession });
+  const context = createMockBrowserContext({ pages: [page] });
   const browser = createMockBrowser({ contexts: [context] });
 
   return { browser, context, page, cdpSession };
 }
+
+// Re-export for backwards compatibility during migration
+export { MockHTTPRequest as MockRequest, createMockHTTPRequest as createMockRequest };
