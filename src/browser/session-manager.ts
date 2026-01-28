@@ -93,6 +93,33 @@ export interface LaunchOptions {
   pipe?: boolean;
 }
 
+/**
+ * Extract a meaningful error message from any thrown value.
+ */
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message || error.name || 'Unknown Error';
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object') {
+    // Check common error-like properties
+    const obj = error as Record<string, unknown>;
+    if (typeof obj.message === 'string') return obj.message;
+    if (typeof obj.error === 'string') return obj.error;
+    if (typeof obj.reason === 'string') return obj.reason;
+    // Try to stringify, but handle circular refs
+    try {
+      const str = JSON.stringify(error);
+      return str !== '{}' ? str : `Unknown error object: ${Object.keys(obj).join(', ') || 'empty'}`;
+    } catch {
+      return `Non-serializable error: ${Object.prototype.toString.call(error)}`;
+    }
+  }
+  return String(error);
+}
+
 /** Default CDP port for Athena Browser */
 const DEFAULT_CDP_PORT = 9223;
 /** Default CDP host */
@@ -366,7 +393,7 @@ export class SessionManager {
       }
       this.transitionTo('failed');
       throw BrowserSessionError.connectionFailed(
-        error instanceof Error ? error : new Error(String(error)),
+        error instanceof Error ? error : new Error(extractErrorMessage(error)),
         { operation: 'launch' }
       );
     }
@@ -415,7 +442,7 @@ export class SessionManager {
         this.logger.info('Auto-connect: found DevToolsActivePort', { userDataDir, wsEndpoint });
       } catch (error) {
         throw BrowserSessionError.connectionFailed(
-          error instanceof Error ? error : new Error(String(error)),
+          error instanceof Error ? error : new Error(extractErrorMessage(error)),
           { operation: 'autoConnect', userDataDir }
         );
       }
@@ -512,7 +539,7 @@ export class SessionManager {
         throw error;
       }
       throw BrowserSessionError.connectionFailed(
-        error instanceof Error ? error : new Error(String(error)),
+        error instanceof Error ? error : new Error(extractErrorMessage(error)),
         { endpointUrl: endpointForLogging }
       );
     } finally {
