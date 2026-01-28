@@ -12,7 +12,7 @@ describe('parseArgs', () => {
     const args: ServerArgs = parseArgs([]);
 
     expect(args).toEqual({
-      headless: true,
+      headless: false,
       isolated: false,
       browserUrl: undefined,
       wsEndpoint: undefined,
@@ -103,7 +103,7 @@ describe('parseArgs', () => {
     const args = parseArgs(['--unknownArg', 'value', '--anotherUnknown']);
 
     expect(args).toEqual({
-      headless: true,
+      headless: false,
       isolated: false,
       browserUrl: undefined,
       wsEndpoint: undefined,

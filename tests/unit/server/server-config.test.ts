@@ -39,7 +39,7 @@ describe('ServerConfig', () => {
     initServerConfig([]);
     const config = getServerConfig();
 
-    expect(config.headless).toBe(true);
+    expect(config.headless).toBe(false);
     expect(config.autoConnect).toBe(false);
   });
 
@@ -47,10 +47,10 @@ describe('ServerConfig', () => {
     const { initServerConfig, getServerConfig } =
       await import('../../../src/server/server-config.js');
 
-    initServerConfig(['--headless=false', '--autoConnect']);
+    initServerConfig(['--headless=true', '--autoConnect']);
     const config = getServerConfig();
 
-    expect(config.headless).toBe(false);
+    expect(config.headless).toBe(true);
     expect(config.autoConnect).toBe(true);
   });
 

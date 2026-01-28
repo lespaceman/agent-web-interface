@@ -14,7 +14,7 @@ const logger = getLogger();
  * Options for lazy browser initialization.
  */
 export interface EnsureBrowserOptions {
-  /** Run browser in headless mode (default: true) */
+  /** Run browser in headless mode (default: false) */
   headless?: boolean;
 
   /** Use isolated temp profile (default: false) */
@@ -79,7 +79,7 @@ export async function ensureBrowserReady(
   } else {
     // Launch new browser
     await session.launch({
-      headless: options.headless ?? true,
+      headless: options.headless ?? false,
       isolated: options.isolated ?? false,
       userDataDir: options.userDataDir,
       channel: options.channel,

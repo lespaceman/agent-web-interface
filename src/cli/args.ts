@@ -9,7 +9,7 @@
  * Server configuration from CLI arguments
  */
 export interface ServerArgs {
-  /** Run browser in headless mode (default: true) */
+  /** Run browser in headless mode (default: false) */
   headless: boolean;
 
   /** Use isolated temp profile instead of persistent (default: false) */
@@ -42,7 +42,7 @@ export interface ServerArgs {
  */
 export function parseArgs(argv: string[]): ServerArgs {
   const args: ServerArgs = {
-    headless: true,
+    headless: false,
     isolated: false,
     autoConnect: false,
   };

@@ -64,27 +64,27 @@ describe('ensureBrowserReady', () => {
   });
 
   describe('when browser is not running', () => {
-    it('should launch browser with default options', async () => {
+    it('should launch browser with default options (headless: false)', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
       await ensureBrowserReady(sessionManager, {});
 
       expect(puppeteer.launch).toHaveBeenCalledWith(
         expect.objectContaining({
-          headless: true,
+          headless: false,
         })
       );
       expect(sessionManager.isRunning()).toBe(true);
     });
 
-    it('should launch with headless=false when specified', async () => {
+    it('should launch with headless=true when specified', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      await ensureBrowserReady(sessionManager, { headless: false });
+      await ensureBrowserReady(sessionManager, { headless: true });
 
       expect(puppeteer.launch).toHaveBeenCalledWith(
         expect.objectContaining({
-          headless: false,
+          headless: true,
         })
       );
     });
