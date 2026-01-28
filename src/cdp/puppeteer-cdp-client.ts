@@ -114,12 +114,21 @@ export class PuppeteerCdpClient implements CdpClient {
       this.lastError = errorMessage;
       this.lastErrorTime = new Date();
 
-      if (
+      // Check for session-level failures that indicate CDP is no longer usable
+      // Be specific to avoid false positives from operation-level Protocol errors
+      // (e.g., "Protocol error (Accessibility.getFullAXTree): Frame with the given frameId is not found")
+      const isSessionDead =
         errorMessage.includes('Target closed') ||
         errorMessage.includes('Session closed') ||
-        errorMessage.includes('detached') ||
-        errorMessage.includes('Protocol error')
-      ) {
+        errorMessage.includes('Session detached') ||
+        errorMessage.includes('Target crashed') ||
+        // Specific protocol errors that indicate session death
+        (errorMessage.includes('Protocol error') &&
+          (errorMessage.includes('Cannot find context') ||
+            errorMessage.includes('Inspected target navigated') ||
+            errorMessage.includes('No target with given id')));
+
+      if (isSessionDead) {
         this.active = false;
         this.enabledDomains.clear();
       }

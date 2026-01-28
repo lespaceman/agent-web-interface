@@ -116,13 +116,28 @@ describe('PuppeteerCdpClient', () => {
       expect(client.isActive()).toBe(false);
     });
 
-    it('should mark session as inactive on Protocol error', async () => {
+    it('should mark session as inactive on fatal Protocol error', async () => {
+      // Only specific Protocol errors that indicate session death should mark inactive
       mockSend
         .mockResolvedValueOnce({}) // DOM.enable
-        .mockRejectedValueOnce(new Error('Protocol error'));
+        .mockRejectedValueOnce(new Error('Protocol error: Cannot find context'));
 
-      await expect(client.send('DOM.getDocument')).rejects.toThrow('Protocol error');
+      await expect(client.send('DOM.getDocument')).rejects.toThrow('Cannot find context');
       expect(client.isActive()).toBe(false);
+    });
+
+    it('should NOT mark session as inactive on non-fatal Protocol error', async () => {
+      // Protocol errors like "Frame not found" are operation failures, not session death
+      mockSend
+        .mockResolvedValueOnce({}) // DOM.enable
+        .mockRejectedValueOnce(
+          new Error(
+            'Protocol error (Accessibility.getFullAXTree): Frame with the given frameId is not found.'
+          )
+        );
+
+      await expect(client.send('DOM.getDocument')).rejects.toThrow('Frame with the given frameId');
+      expect(client.isActive()).toBe(true); // Session should still be active
     });
 
     it('should not mark session as inactive on other errors', async () => {
