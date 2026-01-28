@@ -207,14 +207,14 @@ export function buildFindElementsResponse(
 }
 
 /**
- * Build XML response for get_node_details tool.
+ * Build XML response for get_element_details tool.
  *
  * @param pageId - The page ID
  * @param snapshotId - The snapshot ID
  * @param node - The node details
  * @returns XML result string
  */
-export function buildGetNodeDetailsResponse(
+export function buildGetElementDetailsResponse(
   pageId: string,
   snapshotId: string,
   node: NodeDetails
@@ -222,7 +222,7 @@ export function buildGetNodeDetailsResponse(
   const lines: string[] = [];
 
   lines.push(
-    `<result type="get_node_details" page_id="${escapeXml(pageId)}" snapshot_id="${escapeXml(snapshotId)}">`
+    `<result type="get_element_details" page_id="${escapeXml(pageId)}" snapshot_id="${escapeXml(snapshotId)}">`
   );
 
   // Node element with core attributes

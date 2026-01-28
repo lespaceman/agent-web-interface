@@ -64,7 +64,7 @@ import {
   buildCloseSessionResponse,
   buildListTabsResponse,
   buildFindElementsResponse,
-  buildGetNodeDetailsResponse,
+  buildGetElementDetailsResponse,
   type FindElementsMatch,
 } from './response-builder.js';
 import { ElementNotFoundError, StaleElementError, SnapshotRequiredError } from './errors.js';
@@ -698,7 +698,7 @@ export function getNodeDetails(
     details.attributes = { ...node.attributes };
   }
 
-  return buildGetNodeDetailsResponse(page_id, snap.snapshot_id, details);
+  return buildGetElementDetailsResponse(page_id, snap.snapshot_id, details);
 }
 
 /**

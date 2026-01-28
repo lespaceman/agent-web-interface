@@ -77,7 +77,7 @@ export {
   FindElementsOutputSchema,
   type FindElementsInput,
   type FindElementsOutput,
-  // get_node_details
+  // get_element_details
   GetNodeDetailsInputSchema,
   GetNodeDetailsOutputSchema,
   type GetNodeDetailsInput,
