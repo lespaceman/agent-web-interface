@@ -21,6 +21,7 @@ import {
   initializeTools,
   initializeFormTools,
   // Tool handlers
+  listTabs,
   closePage,
   closeSession,
   navigate,
@@ -40,6 +41,7 @@ import {
   getFormUnderstanding,
   getFieldContext,
   // Input schemas only (all outputs are XML strings now)
+  ListTabsInputSchema,
   ClosePageInputSchema,
   CloseSessionInputSchema,
   NavigateInputSchema,
@@ -121,6 +123,17 @@ function initializeServer(): BrowserAutomationServer {
   // ============================================================================
   // SESSION TOOLS
   // ============================================================================
+
+  server.registerTool(
+    'list_tabs',
+    {
+      title: 'List Tabs',
+      description:
+        'List all open browser tabs with their page_id, URL, and title. Use page_id to target a specific tab in other tools.',
+      inputSchema: ListTabsInputSchema.shape,
+    },
+    withLazyInit(listTabs, 'list_tabs')
+  );
 
   server.registerTool(
     'close_page',

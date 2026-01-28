@@ -405,6 +405,18 @@ export type ClickOutcome = z.infer<typeof ClickOutcomeSchema>;
 // ============================================================================
 
 // ============================================================================
+// list_tabs - List all open browser tabs
+// ============================================================================
+
+export const ListTabsInputSchema = z.object({});
+
+/** Returns XML result string */
+export const ListTabsOutputSchema = z.string();
+
+export type ListTabsInput = z.infer<typeof ListTabsInputSchema>;
+export type ListTabsOutput = z.infer<typeof ListTabsOutputSchema>;
+
+// ============================================================================
 // close_page - Close a specific page
 // ============================================================================
 

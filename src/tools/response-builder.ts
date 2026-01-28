@@ -80,6 +80,34 @@ export function buildErrorResponse(pageId: string, error: Error | string): State
 // ============================================================================
 
 /**
+ * Tab metadata for list_tabs response.
+ */
+export interface TabInfo {
+  page_id: string;
+  url: string;
+  title: string;
+}
+
+/**
+ * Build XML response for list_tabs tool.
+ *
+ * @param tabs - Array of tab metadata
+ * @returns XML result string
+ */
+export function buildListTabsResponse(tabs: TabInfo[]): string {
+  const tabLines = tabs.map(
+    (tab) =>
+      `    <tab page_id="${escapeXml(tab.page_id)}" url="${escapeXml(tab.url)}" title="${escapeXml(tab.title)}" />`
+  );
+
+  return `<result type="list_tabs" status="success">
+  <tabs count="${tabs.length}">
+${tabLines.join('\n')}
+  </tabs>
+</result>`;
+}
+
+/**
  * Build XML response for close_page tool.
  *
  * @param pageId - The page ID that was closed

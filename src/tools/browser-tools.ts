@@ -62,6 +62,7 @@ import type { RuntimeHealth } from '../state/health.types.js';
 import {
   buildClosePageResponse,
   buildCloseSessionResponse,
+  buildListTabsResponse,
   buildFindElementsResponse,
   buildGetNodeDetailsResponse,
   type FindElementsMatch,
@@ -375,6 +376,22 @@ async function executeNavigationAction(
 // ============================================================================
 // SIMPLIFIED API - Tool handlers with clearer contracts
 // ============================================================================
+
+/**
+ * List all open browser tabs with their metadata.
+ *
+ * @returns XML result with tab list
+ */
+export function listTabs(): import('./tool-schemas.js').ListTabsOutput {
+  const session = getSessionManager();
+  const pages = session.listPages();
+  const tabs = pages.map((h) => ({
+    page_id: h.page_id,
+    url: h.url ?? '',
+    title: h.title ?? '',
+  }));
+  return buildListTabsResponse(tabs);
+}
 
 /**
  * Close a specific page.
