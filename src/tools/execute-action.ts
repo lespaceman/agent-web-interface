@@ -233,7 +233,7 @@ async function captureSnapshotFallback(
  *
  * 1. Wait for DOM to stabilize (MutationObserver) - catches SPA rendering
  * 2. Wait for network to quiet down (networkidle) - catches pending API calls
- * 3. If DOM stabilization fails (navigation), fall back to Playwright load state
+ * 3. If DOM stabilization fails (navigation), fall back to network idle wait
  *
  * Timeouts are generous but never throw - we proceed even if network stays busy
  * (common with analytics, long-polling, websockets).

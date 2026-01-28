@@ -228,8 +228,12 @@ export class PuppeteerCdpClient implements CdpClient {
       for (const handler of handlers) {
         try {
           this.session.off(event as Parameters<CDPSession['off']>[0], handler as () => void);
-        } catch {
+        } catch (err) {
           // Handler may already be removed
+          this.logger.debug('Failed to remove event handler during cleanup', {
+            event,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     }

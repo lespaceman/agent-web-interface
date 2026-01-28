@@ -3,7 +3,7 @@
 /**
  * Browser Automation MCP Server
  *
- * Main entry point - initializes the MCP server with Playwright-based browser automation.
+ * Main entry point - initializes the MCP server with Puppeteer-based browser automation.
  */
 
 import { BrowserAutomationServer } from './server/mcp-server.js';

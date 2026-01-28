@@ -76,7 +76,7 @@ const DEFAULT_MAX_TIMEOUT_MS = 2000;
  * - maxTimeoutMs elapsed (timeout)
  * - An error occurred (error)
  *
- * @param page - Playwright Page instance
+ * @param page - Puppeteer Page instance
  * @param options - Stabilization options
  * @returns StabilizationResult with status and timing info
  */

@@ -437,7 +437,7 @@ export class SnapshotCompiler {
    * Compile a snapshot from the current page state.
    *
    * @param cdp - CDP client for the page
-   * @param page - Playwright Page instance
+   * @param page - Puppeteer Page instance
    * @param _pageId - Page identifier (for logging/tracking)
    * @returns Complete BaseSnapshot
    */

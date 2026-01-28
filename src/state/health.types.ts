@@ -46,7 +46,7 @@ export interface CdpHealth {
 }
 
 /**
- * Detailed CDP health diagnostics from PlaywrightCdpClient.
+ * Detailed CDP health diagnostics from PuppeteerCdpClient.
  */
 export interface CdpHealthDiagnostics {
   /** Whether session is active */

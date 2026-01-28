@@ -125,7 +125,7 @@ export interface CaptureWithStabilizationResult {
  * 5. Return best result (or last attempt if all failed)
  *
  * @param cdp - CDP client
- * @param page - Playwright Page
+ * @param page - Puppeteer Page
  * @param pageId - Page identifier
  * @param options - Capture options
  * @returns Snapshot with health status and attempt count

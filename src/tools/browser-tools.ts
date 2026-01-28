@@ -390,7 +390,14 @@ export async function launchBrowser(
   const input = LaunchBrowserInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  await session.launch({ headless: input.headless });
+  await session.launch({
+    headless: input.headless,
+    channel: input.channel,
+    executablePath: input.executablePath,
+    isolated: input.isolated,
+    userDataDir: input.userDataDir,
+    args: input.args,
+  });
   let handle = await session.createPage();
 
   // Auto-capture snapshot
@@ -416,14 +423,27 @@ export async function connectBrowser(
   const input = ConnectBrowserInputSchema.parse(rawInput);
   const session = getSessionManager();
 
-  if (input.endpoint_url) {
-    await session.connect({ endpointUrl: input.endpoint_url });
+  // Build connect options from input
+  const connectOptions: Parameters<typeof session.connect>[0] = {};
+
+  if (input.browserWSEndpoint) {
+    connectOptions.browserWSEndpoint = input.browserWSEndpoint;
+  } else if (input.browserURL) {
+    connectOptions.browserURL = input.browserURL;
+  } else if (input.endpoint_url) {
+    // Legacy endpoint_url support
+    connectOptions.endpointUrl = input.endpoint_url;
   } else if (input.auto_connect || process.env.AUTO_CONNECT === 'true') {
     // Chrome 144+ auto-connect via DevToolsActivePort
-    await session.connect({ autoConnect: true });
-  } else {
-    await session.connect();
+    connectOptions.autoConnect = true;
   }
+
+  // Pass userDataDir if provided (used for autoConnect)
+  if (input.userDataDir) {
+    connectOptions.userDataDir = input.userDataDir;
+  }
+
+  await session.connect(connectOptions);
 
   // Try to adopt existing page, or create one if none exist
   let handle;

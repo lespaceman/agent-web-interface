@@ -788,8 +788,12 @@ export class SessionManager {
     for (const page of pages) {
       try {
         await page.cdp.close();
-      } catch {
+      } catch (err) {
         // CDP session may already be closed
+        this.logger.debug('CDP session close failed during shutdown', {
+          page_id: page.page_id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -805,8 +809,12 @@ export class SessionManager {
       for (const page of pages) {
         try {
           await page.page.close();
-        } catch {
+        } catch (err) {
           // Page may already be closed
+          this.logger.debug('Page close failed during shutdown', {
+            page_id: page.page_id,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
 
@@ -814,8 +822,11 @@ export class SessionManager {
       if (this.browser) {
         try {
           await this.browser.close();
-        } catch {
+        } catch (err) {
           // Browser may already be closed
+          this.logger.debug('Browser close failed during shutdown', {
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     }
@@ -860,12 +871,8 @@ export class SessionManager {
 
     const results = await Promise.all(
       pages.map(async (pageHandle) => {
-        // Puppeteer Page doesn't have isClosed() - check via property
-        const page = pageHandle.page;
-        try {
-          // If we can access the URL, the page is still open
-          page.url();
-        } catch {
+        // Check if page is closed using Puppeteer's isClosed() method
+        if (pageHandle.page.isClosed()) {
           return false;
         }
 
@@ -903,10 +910,8 @@ export class SessionManager {
       throw new Error(`Page not found: ${page_id}`);
     }
 
-    // Check if page is still accessible (Puppeteer doesn't have isClosed())
-    try {
-      handle.page.url();
-    } catch {
+    // Check if page is still accessible
+    if (handle.page.isClosed()) {
       throw new Error(`Page is closed: ${page_id}`);
     }
 
@@ -917,8 +922,12 @@ export class SessionManager {
     // Close old CDP session (best effort)
     try {
       await handle.cdp.close();
-    } catch {
-      // Ignore - may already be closed
+    } catch (err) {
+      // May already be closed
+      this.logger.debug('Old CDP session close failed during rebind', {
+        page_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     // Create new CDP session (Puppeteer creates CDP from page, not context)
@@ -997,8 +1006,12 @@ export class SessionManager {
         });
         /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
         originsMap.set(origin, localStorage);
-      } catch {
+      } catch (err) {
         // Page may not be accessible
+        this.logger.debug('Failed to extract localStorage during storage state save', {
+          url: page.url(),
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
