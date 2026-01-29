@@ -674,9 +674,7 @@ const TypeInputSchemaBase = z.object({
   /** Stable element ID from find_elements or snapshot */
   eid: z
     .string()
-    .describe(
-      'Element ID of the input field from find_elements results or the page snapshot.'
-    ),
+    .describe('Element ID of the input field from find_elements results or the page snapshot.'),
   /** Clear existing text before typing (default: false) */
   clear: z
     .boolean()
@@ -715,7 +713,9 @@ export type PressOutput = z.infer<typeof PressOutputSchema>;
 // select - Select a dropdown option (no agent_version)
 const SelectInputSchemaBase = z.object({
   /** Stable element ID from find_elements or snapshot */
-  eid: z.string().describe('Element ID of the dropdown from find_elements results or the page snapshot.'),
+  eid: z
+    .string()
+    .describe('Element ID of the dropdown from find_elements results or the page snapshot.'),
   /** Option value or visible text to select */
   value: z
     .string()
@@ -737,9 +737,7 @@ export type SelectOutput = z.infer<typeof SelectOutputSchema>;
 // hover - Hover over an element (no agent_version)
 const HoverInputSchemaBase = z.object({
   /** Stable element ID from find_elements or snapshot */
-  eid: z
-    .string()
-    .describe('Element ID from find_elements results or the page snapshot.'),
+  eid: z.string().describe('Element ID from find_elements results or the page snapshot.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });

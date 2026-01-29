@@ -223,7 +223,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Find Elements',
       description:
-        'Search for interactive elements OR read page text content. Filter by `kind` (button, link, textbox), `label` (fuzzy text match), or `region` (header, main, footer). To READ page content, ensure `include_readable: true` (default) which includes paragraphs and headings.',
+        'Search for interactive elements OR read page text content. Filter by `kind` (button, link, textbox), `label` (case-insensitive substring match), or `region` (header, main, footer). To READ page content, ensure `include_readable: true` (default) which includes paragraphs and headings.',
       inputSchema: FindElementsInputSchema.shape,
     },
     withLazyInit(findElements, 'find_elements')
