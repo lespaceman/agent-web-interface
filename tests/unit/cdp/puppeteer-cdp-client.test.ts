@@ -482,5 +482,18 @@ describe('PuppeteerCdpClient', () => {
 
       expect(client.isActive()).toBe(true);
     });
+
+    it('should treat Accessibility.getFullAXTree failure for removed frame as expected', async () => {
+      mockSend
+        .mockResolvedValueOnce({}) // Accessibility.enable
+        .mockRejectedValueOnce(new Error('Frame with the given frameId is not found'));
+
+      await expect(
+        client.send('Accessibility.getFullAXTree', { frameId: 'removed-frame' })
+      ).rejects.toThrow('Frame with the given frameId is not found');
+
+      // Session should still be active (expected failure for cross-origin/removed frames)
+      expect(client.isActive()).toBe(true);
+    });
   });
 });

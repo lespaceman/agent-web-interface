@@ -114,30 +114,31 @@ export class PuppeteerCdpClient implements CdpClient {
       this.lastError = errorMessage;
       this.lastErrorTime = new Date();
 
-      // Check for session-level failures that indicate CDP is no longer usable
-      // Be specific to avoid false positives from operation-level Protocol errors
-      // (e.g., "Protocol error (Accessibility.getFullAXTree): Frame with the given frameId is not found")
-      const isSessionDead =
-        errorMessage.includes('Target closed') ||
-        errorMessage.includes('Session closed') ||
-        errorMessage.includes('Session detached') ||
-        errorMessage.includes('Target crashed') ||
-        // Specific protocol errors that indicate session death
-        (errorMessage.includes('Protocol error') &&
-          (errorMessage.includes('Cannot find context') ||
-            errorMessage.includes('Inspected target navigated') ||
-            errorMessage.includes('No target with given id')));
-
-      if (isSessionDead) {
-        this.active = false;
-        this.enabledDomains.clear();
-      }
-
-      // Use debug level for expected failures (e.g., box model for hidden elements)
+      // Check if this is an expected failure BEFORE evaluating session state
+      // Expected failures (like cross-origin frame access) shouldn't affect session health
       const isExpectedFailure = this.isExpectedCdpFailure(method, errorMessage);
+
       if (isExpectedFailure) {
         this.logger.debug(`CDP command expected failure: ${method} - ${errorMessage}`);
       } else {
+        // Check for session-level failures that indicate CDP is no longer usable
+        // Be specific to avoid false positives from operation-level Protocol errors
+        const isSessionDead =
+          errorMessage.includes('Target closed') ||
+          errorMessage.includes('Session closed') ||
+          errorMessage.includes('Session detached') ||
+          errorMessage.includes('Target crashed') ||
+          // Specific protocol errors that indicate session death
+          (errorMessage.includes('Protocol error') &&
+            (errorMessage.includes('Cannot find context') ||
+              errorMessage.includes('Inspected target navigated') ||
+              errorMessage.includes('No target with given id')));
+
+        if (isSessionDead) {
+          this.active = false;
+          this.enabledDomains.clear();
+        }
+
         this.logger.error(
           `CDP command failed: ${method}`,
           error instanceof Error ? error : undefined
