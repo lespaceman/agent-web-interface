@@ -527,13 +527,20 @@ export type CaptureSnapshotOutput = z.infer<typeof CaptureSnapshotOutputSchema>;
 export const FindElementsInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page to search within.'),
-  /** Filter by semantic type (e.g., 'radio' for form options). */
+  /** Filter by element type. */
   kind: z
     .enum(['button', 'link', 'radio', 'checkbox', 'textbox', 'combobox', 'image', 'heading'])
     .optional()
-    .describe("Filter by semantic type (e.g., 'radio' for form options)."),
-  /** Fuzzy match for visible text or accessible name. */
-  label: z.string().optional().describe('Fuzzy match for visible text or accessible name.'),
+    .describe(
+      "Filter by element type: 'button' for clickable buttons, 'link' for hyperlinks, 'textbox' for input fields, 'checkbox'/'radio' for toggles, 'combobox' for dropdowns, 'heading' for section titles, 'image' for images."
+    ),
+  /** Search text to match against element labels. */
+  label: z
+    .string()
+    .optional()
+    .describe(
+      'Search text to match against element labels - uses case-insensitive substring matching. Example: label "Sign" matches "Sign In", "Sign Up", "Signature".'
+    ),
   /** Restrict search to a specific area. */
   region: z
     .enum(['main', 'nav', 'header', 'footer'])
@@ -541,13 +548,13 @@ export const FindElementsInputSchema = z.object({
     .describe('Restrict search to a specific area.'),
   /** Maximum number of results (default: 10) */
   limit: z.number().int().min(1).max(100).default(10).describe('Number of results to return.'),
-  /** Include non-interactive readable content (text, paragraph, dialog) */
+  /** Include readable content with semantic IDs in results. */
   include_readable: z
     .boolean()
     .default(true)
     .optional()
     .describe(
-      'Include non-interactive readable content (text, heading, paragraph, dialog). These get rd-* IDs.'
+      'When true (default), text content (paragraphs, headings) gets semantic IDs (rd-*) for reference. Set to true when you need to read page content. Use the `kind` parameter to filter to specific element types.'
     ),
 });
 
@@ -558,7 +565,7 @@ export type FindElementsInput = z.infer<typeof FindElementsInputSchema>;
 export type FindElementsOutput = z.infer<typeof FindElementsOutputSchema>;
 
 // ============================================================================
-// get_node_details - Get full details for a specific node
+// get_element_details - Get full details for a specific element
 // ============================================================================
 
 export const GetNodeDetailsInputSchema = z.object({
@@ -579,8 +586,12 @@ export type GetNodeDetailsOutput = z.infer<typeof GetNodeDetailsOutputSchema>;
 // ============================================================================
 
 const ScrollElementIntoViewInputSchemaBase = z.object({
-  /** Stable element ID from actionables list */
-  eid: z.string().describe('The eid of the element to scroll into view.'),
+  /** Stable element ID from find_elements or snapshot */
+  eid: z
+    .string()
+    .describe(
+      'Element ID of the off-screen element from find_elements results or the page snapshot.'
+    ),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
@@ -639,8 +650,12 @@ export const SupportedKeys = [
 const ClickInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page containing the element.'),
-  /** Stable element ID from actionables list */
-  eid: z.string().describe('The internal element ID (eid) from the snapshot.'),
+  /** Stable element ID from find_elements or snapshot */
+  eid: z
+    .string()
+    .describe(
+      'Element ID from find_elements results or the page snapshot. Every interactive element has a unique eid.'
+    ),
 });
 export const ClickInputSchema = ClickInputSchemaBase;
 // Re-export base for .shape access
@@ -656,10 +671,17 @@ export type ClickOutput = z.infer<typeof ClickOutputSchema>;
 const TypeInputSchemaBase = z.object({
   /** Text to type */
   text: z.string().describe('The text to type into the element.'),
-  /** Stable element ID from actionables list */
-  eid: z.string().describe('The eid of the input element.'),
+  /** Stable element ID from find_elements or snapshot */
+  eid: z
+    .string()
+    .describe('Element ID of the input field from find_elements results or the page snapshot.'),
   /** Clear existing text before typing (default: false) */
-  clear: z.boolean().default(false).describe('Clear existing text before typing.'),
+  clear: z
+    .boolean()
+    .default(false)
+    .describe(
+      'If true, clear the field before typing (replaces content). If false (default), append to existing text.'
+    ),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
@@ -690,10 +712,16 @@ export type PressOutput = z.infer<typeof PressOutputSchema>;
 
 // select - Select a dropdown option (no agent_version)
 const SelectInputSchemaBase = z.object({
-  /** Stable element ID from actionables list */
-  eid: z.string().describe('The eid of the <select> element.'),
+  /** Stable element ID from find_elements or snapshot */
+  eid: z
+    .string()
+    .describe('Element ID of the dropdown from find_elements results or the page snapshot.'),
   /** Option value or visible text to select */
-  value: z.string().describe('Option value or visible text to select.'),
+  value: z
+    .string()
+    .describe(
+      'The option to select - can be either the value attribute or the visible text of the option.'
+    ),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
@@ -708,8 +736,8 @@ export type SelectOutput = z.infer<typeof SelectOutputSchema>;
 
 // hover - Hover over an element (no agent_version)
 const HoverInputSchemaBase = z.object({
-  /** Stable element ID from actionables list */
-  eid: z.string().describe('The eid of the element to hover over.'),
+  /** Stable element ID from find_elements or snapshot */
+  eid: z.string().describe('Element ID from find_elements results or the page snapshot.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });

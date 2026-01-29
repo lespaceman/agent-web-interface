@@ -129,7 +129,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'List Pages',
       description:
-        'List all open browser pages with their page_id, URL, and title. Use page_id to target a specific page in other tools.',
+        'List all open browser pages with their page_id, URL, and title. Use when working with multiple pages or to get the page_id for targeting a specific page.',
       inputSchema: ListPagesInputSchema.shape,
     },
     withLazyInit(listPages, 'list_pages')
@@ -139,7 +139,7 @@ function initializeServer(): BrowserAutomationServer {
     'close_page',
     {
       title: 'Close Page',
-      description: 'Close a specific page by page_id.',
+      description: 'Close a browser tab. Use list_pages first to get the page_id.',
       inputSchema: ClosePageInputSchema.shape,
     },
     withLazyInit(closePage, 'close_page')
@@ -150,7 +150,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Close Session',
       description:
-        'Close the browser session and clear all state. The browser will be re-initialized automatically on the next tool call.',
+        'Close the entire browser and clear all state. Use when done with browser tasks or to reset after errors. Browser auto-restarts on next tool call.',
       inputSchema: CloseSessionInputSchema.shape,
     },
     withLazyInit(closeSession, 'close_session')
@@ -164,7 +164,8 @@ function initializeServer(): BrowserAutomationServer {
     'navigate',
     {
       title: 'Navigate',
-      description: 'Navigate directly to a URL and return the new snapshot.',
+      description:
+        'Go to a URL. Returns page snapshot with interactive elements. This is typically your first action when starting browser automation.',
       inputSchema: NavigateInputSchema.shape,
     },
     withLazyInit(navigate, 'navigate')
@@ -174,7 +175,8 @@ function initializeServer(): BrowserAutomationServer {
     'go_back',
     {
       title: 'Go Back',
-      description: 'Navigate back in browser history.',
+      description:
+        'Go back one page in browser history (like clicking the back button). Returns updated page snapshot.',
       inputSchema: GoBackInputSchema.shape,
     },
     withLazyInit(goBack, 'go_back')
@@ -184,7 +186,7 @@ function initializeServer(): BrowserAutomationServer {
     'go_forward',
     {
       title: 'Go Forward',
-      description: 'Navigate forward in browser history.',
+      description: 'Go forward one page in browser history. Returns updated page snapshot.',
       inputSchema: GoForwardInputSchema.shape,
     },
     withLazyInit(goForward, 'go_forward')
@@ -194,7 +196,8 @@ function initializeServer(): BrowserAutomationServer {
     'reload',
     {
       title: 'Reload',
-      description: 'Reload the current page and return the refreshed snapshot.',
+      description:
+        'Refresh the current page. Use when content may be stale or after waiting for server-side changes. Returns updated snapshot.',
       inputSchema: ReloadInputSchema.shape,
     },
     withLazyInit(reload, 'reload')
@@ -204,7 +207,8 @@ function initializeServer(): BrowserAutomationServer {
     'capture_snapshot',
     {
       title: 'Capture Snapshot',
-      description: 'Capture a fresh snapshot of the current page.',
+      description:
+        'Re-capture the page state without performing any action. Use when the page may have changed on its own (timers, live updates, animations completing). NOT needed after click/type/etc - those already return fresh snapshots.',
       inputSchema: CaptureSnapshotInputSchema.shape,
     },
     withLazyInit(captureSnapshot, 'capture_snapshot')
@@ -218,20 +222,22 @@ function initializeServer(): BrowserAutomationServer {
     'find_elements',
     {
       title: 'Find Elements',
-      description: 'Find elements by kind, label, or region in the current snapshot.',
+      description:
+        'Search for interactive elements OR read page text content. Filter by `kind` (button, link, textbox), `label` (case-insensitive substring match), or `region` (header, main, footer). To READ page content, ensure `include_readable: true` (default) which includes paragraphs and headings.',
       inputSchema: FindElementsInputSchema.shape,
     },
     withLazyInit(findElements, 'find_elements')
   );
 
   server.registerTool(
-    'get_node_details',
+    'get_element_details',
     {
-      title: 'Get Node Details',
-      description: 'Return full details for a single eid.',
+      title: 'Get Element Details',
+      description:
+        'Get complete details for one element: exact position, size, state, attributes. Use when you need more info than find_elements provides, like precise coordinates or full attribute list.',
       inputSchema: GetNodeDetailsInputSchema.shape,
     },
-    withLazyInit(getNodeDetails, 'get_node_details')
+    withLazyInit(getNodeDetails, 'get_element_details')
   );
 
   // ============================================================================
@@ -242,7 +248,8 @@ function initializeServer(): BrowserAutomationServer {
     'scroll_element_into_view',
     {
       title: 'Scroll Element Into View',
-      description: 'Scroll a specific element into view.',
+      description:
+        'Scroll until a specific element is visible in the viewport. Use BEFORE clicking or interacting with elements that are off-screen.',
       inputSchema: ScrollElementIntoViewInputSchemaBase.shape,
     },
     withLazyInit(scrollElementIntoView, 'scroll_element_into_view')
@@ -252,7 +259,8 @@ function initializeServer(): BrowserAutomationServer {
     'scroll_page',
     {
       title: 'Scroll Page',
-      description: 'Scroll the page up or down by a specified amount.',
+      description:
+        'Scroll the viewport up or down by pixels. Use to explore page content, load lazy content, or reach elements below the fold. Returns updated snapshot.',
       inputSchema: ScrollPageInputSchema.shape,
     },
     withLazyInit(scrollPage, 'scroll_page')
@@ -262,7 +270,8 @@ function initializeServer(): BrowserAutomationServer {
     'click',
     {
       title: 'Click Element',
-      description: 'Click an element by eid.',
+      description:
+        'Click an element. Use for buttons, links, checkboxes, or any clickable element. Returns updated page snapshot reflecting any changes from the click.',
       inputSchema: ClickInputSchemaBase.shape,
     },
     withLazyInit(click, 'click')
@@ -272,7 +281,8 @@ function initializeServer(): BrowserAutomationServer {
     'type',
     {
       title: 'Type Text',
-      description: 'Type text into a specific element (by eid) with optional clearing.',
+      description:
+        'Type text into an input field, search box, or text area. Set `clear: true` to replace existing text instead of appending. Returns updated snapshot.',
       inputSchema: TypeInputSchemaBase.shape,
     },
     withLazyInit(type, 'type')
@@ -282,7 +292,8 @@ function initializeServer(): BrowserAutomationServer {
     'press',
     {
       title: 'Press Key',
-      description: 'Press a keyboard key with optional modifiers.',
+      description:
+        'Press a keyboard key (Enter, Tab, Escape, arrows, etc.) with optional Ctrl/Shift/Alt modifiers. Use for: submitting forms (Enter), moving between fields (Tab), closing dialogs (Escape), or keyboard shortcuts.',
       inputSchema: PressInputSchema.shape,
     },
     withLazyInit(press, 'press')
@@ -292,7 +303,8 @@ function initializeServer(): BrowserAutomationServer {
     'select',
     {
       title: 'Select Option',
-      description: 'Select an option from a <select> element (by eid) by value or text.',
+      description:
+        'Choose an option from a dropdown menu. Specify the option by its value attribute or visible text. Returns updated snapshot.',
       inputSchema: SelectInputSchemaBase.shape,
     },
     withLazyInit(select, 'select')
@@ -302,7 +314,8 @@ function initializeServer(): BrowserAutomationServer {
     'hover',
     {
       title: 'Hover Element',
-      description: 'Hover over an element by eid.',
+      description:
+        'Move mouse over an element without clicking. Use to trigger hover menus, tooltips, or reveal hidden content that appears on mouseover.',
       inputSchema: HoverInputSchemaBase.shape,
     },
     withLazyInit(hover, 'hover')
@@ -317,7 +330,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Get Form Understanding',
       description:
-        'Analyze forms on the page and return semantic understanding of form regions, fields, dependencies, and state. Use this to understand complex form interactions.',
+        'Analyze all forms on the page: fields, required inputs, validation rules, and field dependencies. Use BEFORE filling complex forms (multi-step, conditional fields) to understand what is required and in what order.',
       inputSchema: GetFormUnderstandingInputSchema.shape,
     },
     withLazyInit(getFormUnderstanding, 'get_form_understanding')
@@ -328,7 +341,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Get Field Context',
       description:
-        'Get detailed context for a specific form field including purpose inference, constraints, dependencies, and suggested next action.',
+        'Get detailed info about one form field: what it is for, valid input formats, dependencies on other fields, and suggested values. Use when unsure how to fill a specific field.',
       inputSchema: GetFieldContextInputSchema.shape,
     },
     withLazyInit(getFieldContext, 'get_field_context')

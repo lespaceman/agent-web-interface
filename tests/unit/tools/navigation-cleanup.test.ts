@@ -143,7 +143,7 @@ vi.mock('../../../src/tools/response-builder.js', () => ({
   buildClosePageResponse: vi.fn().mockReturnValue({ success: true }),
   buildCloseSessionResponse: vi.fn().mockReturnValue({ success: true }),
   buildFindElementsResponse: vi.fn(),
-  buildGetNodeDetailsResponse: vi.fn(),
+  buildGetElementDetailsResponse: vi.fn(),
 }));
 
 // Import module under test AFTER mocks are set up

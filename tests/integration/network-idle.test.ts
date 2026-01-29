@@ -80,7 +80,7 @@ describe.skipIf(skipIntegration)('Network Idle Stabilization (Integration)', () 
 
     // Launch browser
     browser = await puppeteer.launch({ headless: true, channel: 'chrome' });
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (browser) {

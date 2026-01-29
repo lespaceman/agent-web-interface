@@ -35,8 +35,10 @@ jobs:
       - name: Type check
         run: npm run type-check
 
-      - name: Install Chrome for Puppeteer
-        run: npx puppeteer browsers install chrome
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
 
       - name: Run integration tests
         run: npm run test:integration
