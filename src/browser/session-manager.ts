@@ -147,7 +147,7 @@ export interface ConnectOptions {
   /** CDP port (default: 9223) - used if no endpoint provided */
   port?: number;
 
-  /** Connection timeout in ms (default: 10000) */
+  /** Connection timeout in ms (default: 30000) */
   timeout?: number;
 
   /**
@@ -1056,6 +1056,56 @@ export class SessionManager {
     }
 
     return state;
+  }
+
+  /**
+   * Sync registry with actual browser pages.
+   *
+   * Adopts any browser pages not yet registered. This ensures the registry
+   * reflects the true state of the browser, especially after reconnection
+   * or when external tabs are opened.
+   *
+   * Note: This method does NOT remove stale/closed pages from the registry.
+   * Failed adoptions (e.g., CDP session errors) are logged as warnings but do not throw.
+   * Successfully synced pages have network tracking set up.
+   *
+   * @returns Array of all PageHandle objects after sync (includes previously registered pages)
+   */
+  async syncPages(): Promise<PageHandle[]> {
+    if (!this.context) {
+      return this.registry.list();
+    }
+
+    const browserPages = await this.context.pages();
+
+    for (const page of browserPages) {
+      // Skip if already registered
+      if (this.registry.findByPage(page)) {
+        continue;
+      }
+
+      // Skip closed pages
+      if (page.isClosed()) {
+        continue;
+      }
+
+      // Adopt the unregistered page
+      try {
+        const cdpSession = await page.createCDPSession();
+        const cdpClient = new PuppeteerCdpClient(cdpSession);
+        const handle = this.registry.register(page, cdpClient);
+        this.registry.updateMetadata(handle.page_id, { url: page.url() });
+        await this.setupPageTracking(page);
+        this.logger.debug('Synced unregistered page', { page_id: handle.page_id, url: page.url() });
+      } catch (err) {
+        this.logger.warning('Failed to sync page', {
+          url: page.url(),
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return this.registry.list();
   }
 
   /**

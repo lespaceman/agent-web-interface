@@ -7,9 +7,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { SessionManager } from '../../../src/browser/session-manager.js';
 
 // Mock session manager
-const mockListPages = vi.fn();
+const mockSyncPages = vi.fn();
 const mockSessionManager = {
-  listPages: mockListPages,
+  syncPages: mockSyncPages,
 } as unknown as SessionManager;
 
 vi.mock('../../../src/browser/session-manager.js', () => ({}));
@@ -85,11 +85,11 @@ describe('listPages', () => {
     vi.clearAllMocks();
   });
 
-  it('should return empty pages list when no pages are registered', () => {
-    mockListPages.mockReturnValue([]);
+  it('should return empty pages list when no pages are registered', async () => {
+    mockSyncPages.mockResolvedValue([]);
     initializeTools(mockSessionManager);
 
-    const result = listPages();
+    const result = await listPages();
 
     expect(result).toContain('type="list_pages"');
     expect(result).toContain('status="success"');
@@ -97,8 +97,8 @@ describe('listPages', () => {
     expect(result).not.toContain('<page ');
   });
 
-  it('should return correct metadata for multiple pages', () => {
-    mockListPages.mockReturnValue([
+  it('should return correct metadata for multiple pages', async () => {
+    mockSyncPages.mockResolvedValue([
       {
         page_id: 'page-abc',
         url: 'https://example.com',
@@ -118,7 +118,7 @@ describe('listPages', () => {
     ]);
     initializeTools(mockSessionManager);
 
-    const result = listPages();
+    const result = await listPages();
 
     expect(result).toContain('count="2"');
     expect(result).toContain('page_id="page-abc"');
@@ -129,8 +129,8 @@ describe('listPages', () => {
     expect(result).toContain('title="Other Site"');
   });
 
-  it('should handle pages with missing url and title', () => {
-    mockListPages.mockReturnValue([
+  it('should handle pages with missing url and title', async () => {
+    mockSyncPages.mockResolvedValue([
       {
         page_id: 'page-new',
         page: {},
@@ -140,7 +140,7 @@ describe('listPages', () => {
     ]);
     initializeTools(mockSessionManager);
 
-    const result = listPages();
+    const result = await listPages();
 
     expect(result).toContain('count="1"');
     expect(result).toContain('page_id="page-new"');
@@ -148,8 +148,8 @@ describe('listPages', () => {
     expect(result).toContain('title=""');
   });
 
-  it('should escape XML special characters in page metadata', () => {
-    mockListPages.mockReturnValue([
+  it('should escape XML special characters in page metadata', async () => {
+    mockSyncPages.mockResolvedValue([
       {
         page_id: 'page-special',
         url: 'https://example.com?foo=1&bar=2',
@@ -161,7 +161,7 @@ describe('listPages', () => {
     ]);
     initializeTools(mockSessionManager);
 
-    const result = listPages();
+    const result = await listPages();
 
     expect(result).toContain('&amp;');
     expect(result).toContain('&lt;Page&gt;');

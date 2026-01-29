@@ -444,11 +444,34 @@ export class SnapshotCompiler {
   async compile(cdp: CdpClient, page: Page, _pageId: string): Promise<BaseSnapshot> {
     const startTime = Date.now();
 
-    const viewport = page.viewport() ?? { width: 1280, height: 720 };
+    // Get viewport - prefer page.viewport() but fall back to CDP layout metrics
+    // for external browsers where no viewport is explicitly set
+    let viewport = page.viewport();
+    let viewportFallbackError: string | undefined;
+    if (!viewport) {
+      try {
+        const metrics = await cdp.send('Page.getLayoutMetrics', undefined);
+        // Use cssLayoutViewport which gives CSS pixels (not device pixels)
+        const cssViewport = metrics.cssLayoutViewport;
+        viewport = {
+          width: Math.round(cssViewport.clientWidth),
+          height: Math.round(cssViewport.clientHeight),
+        };
+      } catch (err) {
+        // Fall back to common desktop viewport if CDP call fails (e.g., target closed, permissions)
+        viewport = { width: 1280, height: 720 };
+        viewportFallbackError = err instanceof Error ? err.message : String(err);
+      }
+    }
     const ctx = createExtractorContext(cdp, viewport, this.options);
 
     let partial = false;
     const warnings: string[] = [];
+
+    // Add viewport fallback warning if CDP detection failed
+    if (viewportFallbackError) {
+      warnings.push(`Viewport detection failed, using fallback 1280x720: ${viewportFallbackError}`);
+    }
 
     // Phase 1: Extract DOM first to discover frame IDs, then AX with frame context
     let domResult: DomExtractionResult | undefined;
