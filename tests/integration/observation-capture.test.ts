@@ -27,7 +27,7 @@ describe.skipIf(skipIntegration)('Observation Capture Integration', () => {
   beforeAll(async () => {
     browser = await puppeteer.launch({ headless: true, channel: 'chrome' });
     page = await browser.newPage();
-  });
+  }, 30000);
 
   afterAll(async () => {
     await browser?.close();
