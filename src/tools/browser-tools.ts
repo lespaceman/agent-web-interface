@@ -380,11 +380,15 @@ async function executeNavigationAction(
 /**
  * List all open browser pages with their metadata.
  *
+ * Syncs with browser context to ensure all tabs are registered,
+ * including tabs opened externally or after reconnection.
+ *
  * @returns XML result with page list
  */
-export function listPages(): import('./tool-schemas.js').ListPagesOutput {
+export async function listPages(): Promise<import('./tool-schemas.js').ListPagesOutput> {
   const session = getSessionManager();
-  const pages = session.listPages();
+  // Sync to pick up any unregistered browser tabs
+  const pages = await session.syncPages();
   const pageInfos = pages.map((h) => ({
     page_id: h.page_id,
     url: h.url ?? '',

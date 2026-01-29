@@ -82,9 +82,10 @@ export function renderStateXml(response: StateResponseObject): string {
   }
 
   // 4. Actionables (Grouped by Region)
-  // In diff mode: only render added/changed elements
+  // In diff mode: only render added/changed elements (unless in overlay layer)
   // In baseline mode: render all elements
-  const filteredActionables = filterActionablesForMode(actionables, diff);
+  const activeLayer = state.layer.active;
+  const filteredActionables = filterActionablesForMode(actionables, diff, activeLayer);
   const regions = groupActionablesByRegion(filteredActionables);
 
   for (const [regionName, items] of Object.entries(regions)) {
@@ -101,21 +102,40 @@ export function renderStateXml(response: StateResponseObject): string {
 }
 
 /**
- * Filter actionables based on diff mode.
+ * Overlay layer types that should always show all actionables.
+ * When in these layers, we show all elements regardless of diff mode
+ * because the user needs to see the overlay content to interact with it.
+ *
+ * These values correspond to non-'main' values of LayerDetectionResult.active.
+ * See layer-detector.ts for detection logic.
+ */
+const OVERLAY_LAYERS = new Set(['modal', 'popover', 'drawer']);
+
+/**
+ * Filter actionables based on diff mode and active layer.
  *
  * In baseline mode: return all actionables
- * In diff mode: return only added elements + elements with state changes
+ * In diff mode with overlay layer: return all actionables (user needs to see overlay content)
+ * In diff mode with main layer: return only added elements + elements with property changes
+ *   (visibility, enabled, checked, selected, expanded, focused, value, label)
  */
 function filterActionablesForMode(
   actionables: ActionableInfo[],
-  diff: StateResponseObject['diff']
+  diff: StateResponseObject['diff'],
+  activeLayer: string
 ): ActionableInfo[] {
   // Baseline mode: return all
   if (diff.mode === 'baseline') {
     return actionables;
   }
 
-  // Diff mode: only include added and changed elements
+  // Overlay layers (modal, popover, drawer): always show all actionables
+  // The user needs to see the overlay content to interact with it
+  if (OVERLAY_LAYERS.has(activeLayer)) {
+    return actionables;
+  }
+
+  // Diff mode with main layer: only include added and changed elements
   const d = diff;
   const addedSet = new Set(d.diff.actionables.added);
   const changedSet = new Set(d.diff.actionables.changed.map((c) => c.eid));
