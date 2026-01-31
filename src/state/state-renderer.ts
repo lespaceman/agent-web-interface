@@ -10,6 +10,7 @@
 
 import type { StateResponseObject, ActionableInfo, RenderOptions } from './types.js';
 import type { DOMObservation, ObservationGroups } from '../observation/observation.types.js';
+import { escapeXml } from '../lib/text-utils.js';
 
 // ============================================================================
 // Region Trimming Configuration
@@ -47,7 +48,7 @@ export function trimRegionElements(
   if (elements.length <= total) return { kept: elements, trimmedCount: 0 };
 
   const head = elements.slice(0, limits.head);
-  const tail = elements.slice(-limits.tail);
+  const tail = limits.tail > 0 ? elements.slice(-limits.tail) : [];
   const trimmedCount = elements.length - total;
 
   return { kept: [...head, ...tail], trimmedCount };
@@ -141,20 +142,14 @@ export function renderStateXml(response: StateResponseObject, options?: RenderOp
 
     lines.push(`  <region name="${regionName}">`);
 
-    // Render head portion
-    const headItems = trimmedCount > 0 ? kept.slice(0, limits.head) : kept;
-    for (const item of headItems) {
-      lines.push(`    ${renderActionable(item, diff)}`);
-    }
-
-    // Insert trimmed marker and tail portion when elements were trimmed
-    if (trimmedCount > 0) {
-      lines.push(
-        `    <trimmed count="${trimmedCount}" region="${regionName}" hint="Use find_elements with region=${regionName} to see all items" />`
-      );
-      for (const item of kept.slice(limits.head)) {
-        lines.push(`    ${renderActionable(item, diff)}`);
+    for (let i = 0; i < kept.length; i++) {
+      // Insert trimmed marker between head and tail portions
+      if (trimmedCount > 0 && i === limits.head) {
+        lines.push(
+          `    <trimmed count="${trimmedCount}" region="${regionName}" hint="Use find_elements with region=${regionName} to see all items" />`
+        );
       }
+      lines.push(`    ${renderActionable(kept[i], diff)}`);
     }
 
     lines.push(`  </region>`);
@@ -272,29 +267,6 @@ function groupActionablesByRegion(actionables: ActionableInfo[]): Record<string,
     regions[region].push(item);
   }
   return regions;
-}
-
-/**
- * Simple XML escaping.
- */
-function escapeXml(unsafe: string): string {
-  if (!unsafe) return '';
-  return unsafe.replace(/[<>&"']/g, (c) => {
-    switch (c) {
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '&':
-        return '&amp;';
-      case '"':
-        return '&quot;';
-      case "'":
-        return '&apos;';
-      default:
-        return c;
-    }
-  });
 }
 
 // ============================================================================

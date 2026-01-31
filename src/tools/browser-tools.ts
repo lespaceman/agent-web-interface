@@ -368,9 +368,9 @@ async function executeNavigationAction(
   const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  // Return XML state response
+  // Return XML state response (trimmed for navigation snapshots)
   const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return stateManager.generateResponse(snapshot, { trimRegions: true });
 }
 
 // ============================================================================

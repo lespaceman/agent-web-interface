@@ -207,6 +207,8 @@ export function buildGetElementDetailsResponse(
 
   // Location (flattened from <where>)
   if (node.where.group_id) attrs.push(`group="${escapeXml(node.where.group_id)}"`);
+  if (node.where.group_path)
+    attrs.push(`path="${escapeXml(node.where.group_path.join('/'))}"`);
   if (node.where.heading_context) attrs.push(`heading="${escapeXml(node.where.heading_context)}"`);
 
   // Layout (flattened)
@@ -214,6 +216,8 @@ export function buildGetElementDetailsResponse(
   attrs.push(`y="${node.layout.bbox.y}"`);
   attrs.push(`w="${node.layout.bbox.w}"`);
   attrs.push(`h="${node.layout.bbox.h}"`);
+  if (node.layout.display) attrs.push(`display="${escapeXml(node.layout.display)}"`);
+  if (node.layout.screen_zone) attrs.push(`zone="${escapeXml(node.layout.screen_zone)}"`);
 
   // State flags - only include non-defaults
   if (node.state) {
@@ -228,37 +232,36 @@ export function buildGetElementDetailsResponse(
     if (node.state.readonly) attrs.push('readonly="true"');
   }
 
-  // Check if we have child elements
-  const hasSelector = node.find?.primary;
-  const hasAttrs = node.attributes && Object.keys(node.attributes).length > 0;
+  // Build optional child elements
+  const children: string[] = [];
 
-  if (hasSelector || hasAttrs) {
-    lines.push(`<node ${attrs.join(' ')}>${escapeXml(node.label)}`);
-
-    // Selector (formerly <find>)
-    if (node.find) {
-      const selectorAttrs = [xmlAttr('primary', node.find.primary)];
-      if (node.find.alternates && node.find.alternates.length > 0) {
-        selectorAttrs.push(xmlAttr('alternates', node.find.alternates.join(';')));
-      }
-      lines.push(`  <selector ${selectorAttrs.join(' ')} />`);
+  if (node.find?.primary) {
+    const selectorAttrs = [xmlAttr('primary', node.find.primary)];
+    if (node.find.alternates && node.find.alternates.length > 0) {
+      selectorAttrs.push(xmlAttr('alternates', node.find.alternates.join(';')));
     }
+    children.push(`  <selector ${selectorAttrs.join(' ')} />`);
+  }
 
-    // Attributes
-    if (hasAttrs) {
-      const attrPairs: string[] = [];
-      for (const [key, value] of Object.entries(node.attributes!)) {
-        if (value !== undefined) {
-          attrPairs.push(`${escapeXml(key)}="${escapeXml(String(value))}"`);
-        }
+  if (node.attributes) {
+    const attrPairs: string[] = [];
+    for (const [key, value] of Object.entries(node.attributes)) {
+      if (value !== undefined) {
+        attrPairs.push(`${escapeXml(key)}="${escapeXml(String(value))}"`);
       }
-      lines.push(`  <attrs ${attrPairs.join(' ')} />`);
     }
+    if (attrPairs.length > 0) {
+      children.push(`  <attrs ${attrPairs.join(' ')} />`);
+    }
+  }
 
+  const nodeOpen = `<node ${attrs.join(' ')}>${escapeXml(node.label)}`;
+  if (children.length > 0) {
+    lines.push(nodeOpen);
+    lines.push(...children);
     lines.push('</node>');
   } else {
-    // Self-closing if no children
-    lines.push(`<node ${attrs.join(' ')}>${escapeXml(node.label)}</node>`);
+    lines.push(`${nodeOpen}</node>`);
   }
 
   return lines.join('\n');

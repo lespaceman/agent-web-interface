@@ -152,6 +152,61 @@ describe('buildGetElementDetailsResponse', () => {
     expect(result.split('\n').length).toBe(1);
   });
 
+  it('should include group_path as flattened path attribute', () => {
+    const node: NodeDetails = {
+      eid: 'link-1',
+      kind: 'link',
+      label: 'Running Shoes',
+      where: {
+        region: 'main',
+        group_id: 'cat-nav',
+        group_path: ['Men', 'Shoes', 'Running'],
+      },
+      layout: { bbox: { x: 0, y: 0, w: 200, h: 30 } },
+    };
+
+    const result = buildGetElementDetailsResponse('page-1', 'snap-1', node);
+
+    expect(result).toContain('path="Men/Shoes/Running"');
+    expect(result).not.toContain('group_path=');
+  });
+
+  it('should include display and screen_zone when present', () => {
+    const node: NodeDetails = {
+      eid: 'btn-1',
+      kind: 'button',
+      label: 'Submit',
+      where: { region: 'main' },
+      layout: {
+        bbox: { x: 100, y: 200, w: 80, h: 32 },
+        display: 'flex',
+        screen_zone: 'center',
+      },
+    };
+
+    const result = buildGetElementDetailsResponse('page-1', 'snap-1', node);
+
+    expect(result).toContain('display="flex"');
+    expect(result).toContain('zone="center"');
+  });
+
+  it('should render attributes when present', () => {
+    const node: NodeDetails = {
+      eid: 'input-1',
+      kind: 'textbox',
+      label: 'Email',
+      where: { region: 'main' },
+      layout: { bbox: { x: 0, y: 0, w: 200, h: 30 } },
+      attributes: { input_type: 'email', placeholder: 'Enter email' },
+    };
+
+    const result = buildGetElementDetailsResponse('page-1', 'snap-1', node);
+
+    expect(result).toContain('<attrs');
+    expect(result).toContain('input_type="email"');
+    expect(result).toContain('placeholder="Enter email"');
+  });
+
   it('should include heading context when present', () => {
     const node: NodeDetails = {
       eid: 'input-1',
