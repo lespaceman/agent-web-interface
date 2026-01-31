@@ -8,16 +8,59 @@
  * In baseline mode, renders all actionables.
  */
 
-import type { StateResponseObject, ActionableInfo } from './types.js';
+import type { StateResponseObject, ActionableInfo, RenderOptions } from './types.js';
 import type { DOMObservation, ObservationGroups } from '../observation/observation.types.js';
+
+// ============================================================================
+// Region Trimming Configuration
+// ============================================================================
+
+/**
+ * Per-region limits for trimming actionable elements in snapshot responses.
+ * For each region, keep the first `head` and last `tail` elements; trim the middle.
+ */
+const REGION_TRIM_LIMITS: Record<string, { head: number; tail: number }> = {
+  header: { head: 3, tail: 2 },
+  nav: { head: 3, tail: 2 },
+  main: { head: 5, tail: 5 },
+  aside: { head: 3, tail: 2 },
+  footer: { head: 2, tail: 2 },
+  dialog: { head: 5, tail: 5 },
+  search: { head: 2, tail: 2 },
+  form: { head: 5, tail: 3 },
+};
+
+const DEFAULT_TRIM_LIMITS = { head: 5, tail: 3 };
+
+/**
+ * Trim a region's elements to head + tail, dropping the middle.
+ *
+ * @param elements - Full list of actionable elements in a region
+ * @param limits - How many to keep from the start (head) and end (tail)
+ * @returns The kept elements and count of trimmed elements
+ */
+export function trimRegionElements(
+  elements: ActionableInfo[],
+  limits: { head: number; tail: number }
+): { kept: ActionableInfo[]; trimmedCount: number } {
+  const total = limits.head + limits.tail;
+  if (elements.length <= total) return { kept: elements, trimmedCount: 0 };
+
+  const head = elements.slice(0, limits.head);
+  const tail = elements.slice(-limits.tail);
+  const trimmedCount = elements.length - total;
+
+  return { kept: [...head, ...tail], trimmedCount };
+}
 
 /**
  * Render a StateResponseObject as a dense XML string.
  *
  * @param response - Internal state response object
+ * @param options - Optional rendering options (e.g., trimRegions)
  * @returns Dense XML string
  */
-export function renderStateXml(response: StateResponseObject): string {
+export function renderStateXml(response: StateResponseObject, options?: RenderOptions): string {
   const { state, diff, actionables, atoms } = response;
 
   const lines: string[] = [];
@@ -88,11 +131,32 @@ export function renderStateXml(response: StateResponseObject): string {
   const filteredActionables = filterActionablesForMode(actionables, diff, activeLayer);
   const regions = groupActionablesByRegion(filteredActionables);
 
+  const shouldTrim = options?.trimRegions === true;
+
   for (const [regionName, items] of Object.entries(regions)) {
+    const limits = REGION_TRIM_LIMITS[regionName] ?? DEFAULT_TRIM_LIMITS;
+    const { kept, trimmedCount } = shouldTrim
+      ? trimRegionElements(items, limits)
+      : { kept: items, trimmedCount: 0 };
+
     lines.push(`  <region name="${regionName}">`);
-    for (const item of items) {
+
+    // Render head portion
+    const headItems = trimmedCount > 0 ? kept.slice(0, limits.head) : kept;
+    for (const item of headItems) {
       lines.push(`    ${renderActionable(item, diff)}`);
     }
+
+    // Insert trimmed marker and tail portion when elements were trimmed
+    if (trimmedCount > 0) {
+      lines.push(
+        `    <trimmed count="${trimmedCount}" region="${regionName}" hint="Use find_elements with region=${regionName} to see all items" />`
+      );
+      for (const item of kept.slice(limits.head)) {
+        lines.push(`    ${renderActionable(item, diff)}`);
+      }
+    }
+
     lines.push(`  </region>`);
   }
 

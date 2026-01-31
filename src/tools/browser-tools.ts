@@ -464,9 +464,9 @@ export async function navigate(
   const snapshot = captureResult.snapshot;
   snapshotStore.store(page_id, snapshot);
 
-  // Return XML state response directly
+  // Return XML state response directly (trimmed for navigation snapshots)
   const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return stateManager.generateResponse(snapshot, { trimRegions: true });
 }
 
 /**
@@ -539,9 +539,9 @@ export async function captureSnapshot(
 
   snapshotStore.store(page_id, snapshot);
 
-  // Return XML state response directly
+  // Return XML state response directly (trimmed for observation snapshots)
   const stateManager = getStateManager(page_id);
-  return stateManager.generateResponse(snapshot);
+  return stateManager.generateResponse(snapshot, { trimRegions: true });
 }
 
 /**

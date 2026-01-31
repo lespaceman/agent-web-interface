@@ -57,6 +57,14 @@ export interface StateResponseObject {
 }
 
 /**
+ * Options for rendering and response generation.
+ */
+export interface RenderOptions {
+  /** When true, trim large regions to head+tail elements with a <trimmed> tag. */
+  trimRegions?: boolean;
+}
+
+/**
  * State handle - always returned with every response.
  */
 export interface StateHandle {

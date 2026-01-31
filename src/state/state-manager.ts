@@ -22,6 +22,7 @@ import type {
   ScoringContext,
   ElementTargetRef,
   Atoms,
+  RenderOptions,
 } from './types.js';
 import { computeEid, resolveEidCollision } from './element-identity.js';
 import { detectLayers } from './layer-detector.js';
@@ -181,7 +182,7 @@ export class StateManager {
    * @param snapshot - Current snapshot
    * @returns State response with StateHandle + Diff/Baseline + Actionables + Atoms
    */
-  generateResponse(snapshot: BaseSnapshot): StateResponse {
+  generateResponse(snapshot: BaseSnapshot, options?: RenderOptions): StateResponse {
     // Concurrency protection: if already processing, use latest snapshot
     if (this.isProcessing) {
       this.pendingSnapshot = snapshot;
@@ -192,7 +193,7 @@ export class StateManager {
     this.isProcessing = true;
 
     try {
-      const response = this.doGenerateResponse(snapshot);
+      const response = this.doGenerateResponse(snapshot, options);
 
       // Check if there's a pending snapshot that came in during processing
       if (this.pendingSnapshot) {
@@ -200,7 +201,7 @@ export class StateManager {
         this.pendingSnapshot = null;
         // Process the pending snapshot (recursively, but now isProcessing will be false)
         this.isProcessing = false;
-        return this.generateResponse(pending);
+        return this.generateResponse(pending, options);
       }
 
       return response;
@@ -216,7 +217,7 @@ export class StateManager {
   /**
    * Internal response generation (called with concurrency protection).
    */
-  private doGenerateResponse(snapshot: BaseSnapshot): StateResponse {
+  private doGenerateResponse(snapshot: BaseSnapshot, options?: RenderOptions): StateResponse {
     // Increment step counter
     this.context.stepCounter++;
 
@@ -318,7 +319,7 @@ export class StateManager {
     }
 
     // Return dense XML representation
-    return renderStateXml(response);
+    return renderStateXml(response, options);
   }
 
   /**
