@@ -5,7 +5,7 @@
  * Captures snapshot and generates StateHandle + Diff + Actionables response.
  * Includes automatic retry logic for stale element errors.
  *
- * NEW: Navigation-aware click outcome model for better error classification.
+ * Navigation-aware click outcome model for better error classification.
  */
 
 import type { Page } from 'puppeteer-core';
@@ -303,7 +303,7 @@ export async function stabilizeAfterNavigation(page: Page): Promise<Stabilizatio
 }
 
 /**
- * Execute a mutating action with automatic snapshot capture and FactPack generation.
+ * Execute a mutating action with automatic snapshot capture and state response generation.
  *
  * Simple flow:
  * 1. Record pre-action timestamp for observation capture
@@ -311,8 +311,8 @@ export async function stabilizeAfterNavigation(page: Page): Promise<Stabilizatio
  * 3. Stabilize DOM
  * 4. Capture observations from the action window
  * 5. Capture snapshot
- * 6. Generate page_summary
- * 7. Return {success, page_summary, metadata}
+ * 6. Generate state_response
+ * 7. Return {success, state_response, metadata}
  *
  * @param handle - Page handle with CDP client
  * @param action - The action to execute
@@ -755,14 +755,31 @@ export async function executeActionWithOutcome(
     snapshot.observations = filteredObservations;
   }
 
+  // Late navigation detection: SPA/Turbo frameworks change URL asynchronously
+  // after the click resolves but before stabilization completes.
+  // Re-check URL now that the page has stabilized.
+  if (outcome.status === 'success' && !outcome.navigated) {
+    const postStabilizeUrl = handle.page.url();
+    if (postStabilizeUrl !== preClickState.url) {
+      outcome = { status: 'success', navigated: true };
+      getDependencyTracker().clearPage(handle.page_id);
+    }
+  }
+
+  // Determine if click caused a navigation (used for trimming and dependency tracking)
+  const didNavigate = outcome.status === 'success' && outcome.navigated;
+
   // Generate state response using StateManager
+  // Trim regions when navigation occurred (same rationale as navigate() tool)
   const stateManager = getStateManager(handle.page_id);
   // Get previous snapshot BEFORE generateResponse shifts it
   const prevSnapshot = stateManager.getPreviousSnapshot();
-  const state_response = stateManager.generateResponse(snapshot);
+  const state_response = stateManager.generateResponse(
+    snapshot,
+    didNavigate ? { trimRegions: true } : undefined
+  );
 
   // Record effect for dependency tracking (skip if navigation occurred - tracker was cleared)
-  const didNavigate = outcome.status === 'success' && outcome.navigated;
   if (success && !didNavigate) {
     const effect = computeObservedEffect(node.node_id, 'click', prevSnapshot, snapshot);
     if (effect) {

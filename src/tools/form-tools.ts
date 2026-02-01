@@ -58,7 +58,7 @@ function resolvePage(session: SessionManager, page_id: string | undefined): Page
   if (!handle) {
     const message = page_id
       ? `Page not found: ${page_id}`
-      : 'No page available. Use launch_browser first.';
+      : 'No page available. Use navigate first.';
     throw new Error(message);
   }
   session.touchPage(handle.page_id);
@@ -113,12 +113,8 @@ function buildFormUnderstandingXml(
 ): string {
   const lines: string[] = [];
 
-  // Root element with optional limitations
-  if (limitations) {
-    lines.push(`<forms page="${escapeXml(pageId)}" limitations="${escapeXml(limitations)}">`);
-  } else {
-    lines.push(`<forms page="${escapeXml(pageId)}">`);
-  }
+  const limitAttr = limitations ? ` limitations="${escapeXml(limitations)}"` : '';
+  lines.push(`<forms page="${escapeXml(pageId)}"${limitAttr}>`);
 
   // Sort forms by form_id for deterministic output
   const sortedForms = [...forms].sort((a, b) => a.form_id.localeCompare(b.form_id));

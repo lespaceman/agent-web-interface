@@ -128,7 +128,7 @@ describe('buildGetElementDetailsResponse', () => {
 
     expect(result).toContain('<selector');
     // Note: > and ' are escaped in XML
-    expect(result).toContain("primary=\"button &gt;&gt; text=&apos;Submit&apos;\"");
+    expect(result).toContain('primary="button &gt;&gt; text=&apos;Submit&apos;"');
     expect(result).toContain('alternates=');
     expect(result).toContain('#submit-btn');
     // Should NOT use old <find> name
@@ -549,7 +549,12 @@ describe('buildFieldElementXml', () => {
   it('should use depends instead of depends_on', () => {
     const field = createMockField({
       depends_on: [
-        { source_eid: 'country', type: 'enables', confidence: 0.9, detection_method: 'aria_controls' },
+        {
+          source_eid: 'country',
+          type: 'enables',
+          confidence: 0.9,
+          detection_method: 'aria_controls',
+        },
       ],
     });
 
@@ -562,8 +567,18 @@ describe('buildFieldElementXml', () => {
   it('should sort and join multiple dependencies', () => {
     const field = createMockField({
       depends_on: [
-        { source_eid: 'field-c', type: 'enables', confidence: 0.9, detection_method: 'aria_controls' },
-        { source_eid: 'field-a', type: 'reveals', confidence: 0.8, detection_method: 'observed_mutation' },
+        {
+          source_eid: 'field-c',
+          type: 'enables',
+          confidence: 0.9,
+          detection_method: 'aria_controls',
+        },
+        {
+          source_eid: 'field-a',
+          type: 'reveals',
+          confidence: 0.8,
+          detection_method: 'observed_mutation',
+        },
       ],
     });
 
@@ -772,8 +787,18 @@ describe('buildFieldContextXml', () => {
     const field = createMockField();
     const form = createMockForm();
     const dependencies: FieldDependency[] = [
-      { source_eid: 'country', type: 'enables', confidence: 0.9, detection_method: 'aria_controls' },
-      { source_eid: 'region', type: 'populates', confidence: 0.8, detection_method: 'observed_mutation' },
+      {
+        source_eid: 'country',
+        type: 'enables',
+        confidence: 0.9,
+        detection_method: 'aria_controls',
+      },
+      {
+        source_eid: 'region',
+        type: 'populates',
+        confidence: 0.8,
+        detection_method: 'observed_mutation',
+      },
     ];
 
     const result = buildFieldContextXml(field, form, dependencies);
@@ -785,7 +810,12 @@ describe('buildFieldContextXml', () => {
     const field = createMockField();
     const form = createMockForm();
     const dependencies: FieldDependency[] = [
-      { source_eid: 'country', type: 'enables', confidence: 0.9, detection_method: 'aria_controls' },
+      {
+        source_eid: 'country',
+        type: 'enables',
+        confidence: 0.9,
+        detection_method: 'aria_controls',
+      },
     ];
 
     const result = buildFieldContextXml(field, form, dependencies);

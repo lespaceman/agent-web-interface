@@ -642,25 +642,25 @@ This document walks through a real browser automation session using **athena-bro
 
 ## Summary
 
-| Step | Tool | Action | Result | Response Tokens |
-|------|------|--------|--------|-----------------|
-| 1 | `navigate` | Load apple.com | Homepage baseline (trimmed) | 735 |
-| 2 | `find_elements` | Find "iPhone" links in nav | 2 matches found | 171 |
-| 3 | `click` | Click iPhone nav link | iPhone landing page baseline (trimmed) | 820 |
-| 4 | `find_elements` | Find "Buy" links in main | 6 matches found | 499 |
-| 5 | `click` | Click "Buy, iPhone 17" | Configuration page baseline (trimmed) | 713 |
-| 6 | `find_elements` | Discover all radio buttons | 20 radios across 6 tiers | 1,505 |
-| 7 | `click` | Select Lavender | Diff: color set, storage enabled | 249 |
-| 8 | `click` | Select 256GB | Diff: storage set, trade-in enabled | 330 |
-| 9 | `click` | Select No trade-in | Diff: payment tier enabled | 350 |
-| 10 | `click` | Select Buy (full price) | Diff: carrier tier enabled | 395 |
-| 11 | `click` | Select Unlocked | Full config URL baseline (untrimmed) | 6,375 |
-| 12 | `click` | Select No AppleCare | Diff: Add to Bag enabled | 276 |
-| 13 | `click` | Add to Bag | Accessories upsell baseline (untrimmed) | 6,060 |
-| 14 | `click` | Review Bag | Shopping Bag baseline (untrimmed) | 4,168 |
-| 15 | `capture_snapshot` | Verify stability | Empty diff (no changes) | 59 |
-| 16 | `close_session` | Close browser | Session closed | 20 |
-| | | | **Total** | **22,725** |
+| Step | Tool               | Action                     | Result                                  | Response Tokens |
+| ---- | ------------------ | -------------------------- | --------------------------------------- | --------------- |
+| 1    | `navigate`         | Load apple.com             | Homepage baseline (trimmed)             | 735             |
+| 2    | `find_elements`    | Find "iPhone" links in nav | 2 matches found                         | 171             |
+| 3    | `click`            | Click iPhone nav link      | iPhone landing page baseline (trimmed)  | 820             |
+| 4    | `find_elements`    | Find "Buy" links in main   | 6 matches found                         | 499             |
+| 5    | `click`            | Click "Buy, iPhone 17"     | Configuration page baseline (trimmed)   | 713             |
+| 6    | `find_elements`    | Discover all radio buttons | 20 radios across 6 tiers                | 1,505           |
+| 7    | `click`            | Select Lavender            | Diff: color set, storage enabled        | 249             |
+| 8    | `click`            | Select 256GB               | Diff: storage set, trade-in enabled     | 330             |
+| 9    | `click`            | Select No trade-in         | Diff: payment tier enabled              | 350             |
+| 10   | `click`            | Select Buy (full price)    | Diff: carrier tier enabled              | 395             |
+| 11   | `click`            | Select Unlocked            | Full config URL baseline (untrimmed)    | 6,375           |
+| 12   | `click`            | Select No AppleCare        | Diff: Add to Bag enabled                | 276             |
+| 13   | `click`            | Add to Bag                 | Accessories upsell baseline (untrimmed) | 6,060           |
+| 14   | `click`            | Review Bag                 | Shopping Bag baseline (untrimmed)       | 4,168           |
+| 15   | `capture_snapshot` | Verify stability           | Empty diff (no changes)                 | 59              |
+| 16   | `close_session`    | Close browser              | Session closed                          | 20              |
+|      |                    |                            | **Total**                               | **22,725**      |
 
 ### Token Costs
 
@@ -672,61 +672,61 @@ _Token analysis methodology: Counts generated using `@xenova/transformers` with 
 
 **Step 1: `navigate` — apple.com homepage (735 tokens) — trimmed**
 
-| Region | Tokens | % of Total |
-|--------|--------|------------|
-| main | 385 | 52.4% |
-| footer | 148 | 20.1% |
-| nav | 146 | 19.9% |
-| _header (state/meta) | 50 | 6.8% |
+| Region                | Tokens | % of Total |
+| --------------------- | ------ | ---------- |
+| main                  | 385    | 52.4%      |
+| footer                | 148    | 20.1%      |
+| nav                   | 146    | 19.9%      |
+| \_header (state/meta) | 50     | 6.8%       |
 
 **Step 3: `click` — iPhone landing page (820 tokens) — trimmed**
 
-| Region | Tokens | % of Total |
-|--------|--------|------------|
-| main | 351 | 42.8% |
-| footer | 163 | 19.9% |
-| nav | 146 | 17.8% |
-| header | 99 | 12.1% |
-| _header (state/meta) | 54 | 6.6% |
+| Region                | Tokens | % of Total |
+| --------------------- | ------ | ---------- |
+| main                  | 351    | 42.8%      |
+| footer                | 163    | 19.9%      |
+| nav                   | 146    | 17.8%      |
+| header                | 99     | 12.1%      |
+| \_header (state/meta) | 54     | 6.6%       |
 
 **Step 5: `click` — Buy iPhone 17 config page (713 tokens) — trimmed**
 
-| Region | Tokens | % of Total |
-|--------|--------|------------|
-| main | 302 | 42.4% |
-| footer | 178 | 25.0% |
-| nav | 163 | 22.9% |
-| _header (state/meta) | 64 | 9.0% |
+| Region                | Tokens | % of Total |
+| --------------------- | ------ | ---------- |
+| main                  | 302    | 42.4%      |
+| footer                | 178    | 25.0%      |
+| nav                   | 163    | 22.9%      |
+| \_header (state/meta) | 64     | 9.0%       |
 
 **Step 11: `click` — Unlocked carrier / full config URL (6,375 tokens) — untrimmed**
 
-| Region | Tokens | % of Total |
-|--------|--------|------------|
-| nav | 2,732 | 42.9% |
-| main | 1,866 | 29.3% |
-| footer | 1,612 | 25.3% |
-| _header (state/meta) | 85 | 1.3% |
-| form | 40 | 0.6% |
-| _observations | 32 | 0.5% |
+| Region                | Tokens | % of Total |
+| --------------------- | ------ | ---------- |
+| nav                   | 2,732  | 42.9%      |
+| main                  | 1,866  | 29.3%      |
+| footer                | 1,612  | 25.3%      |
+| \_header (state/meta) | 85     | 1.3%       |
+| form                  | 40     | 0.6%       |
+| \_observations        | 32     | 0.5%       |
 
 **Step 13: `click` — Add to Bag / accessories upsell (6,060 tokens) — untrimmed**
 
-| Region | Tokens | % of Total |
-|--------|--------|------------|
-| nav | 2,871 | 47.4% |
-| main | 2,375 | 39.2% |
-| footer | 712 | 11.7% |
-| _header (state/meta) | 64 | 1.1% |
-| form | 31 | 0.5% |
+| Region                | Tokens | % of Total |
+| --------------------- | ------ | ---------- |
+| nav                   | 2,871  | 47.4%      |
+| main                  | 2,375  | 39.2%      |
+| footer                | 712    | 11.7%      |
+| \_header (state/meta) | 64     | 1.1%       |
+| form                  | 31     | 0.5%       |
 
 **Step 14: `click` — Shopping Bag (4,168 tokens) — untrimmed**
 
-| Region | Tokens | % of Total |
-|--------|--------|------------|
-| nav | 2,673 | 64.1% |
-| main | 1,172 | 28.1% |
-| footer | 261 | 6.3% |
-| _header (state/meta) | 56 | 1.3% |
+| Region                | Tokens | % of Total |
+| --------------------- | ------ | ---------- |
+| nav                   | 2,673  | 64.1%      |
+| main                  | 1,172  | 28.1%      |
+| footer                | 261    | 6.3%       |
+| \_header (state/meta) | 56     | 1.3%       |
 
 **Key finding — trimmed vs untrimmed:** Region trimming reduced early baselines to 713–820 tokens (nav ~146–163 tokens). Without trimming, the Apple Store nav alone costs 2,673–2,871 tokens. On the Bag page, untrimmed nav accounts for 64% of the entire response.
 
@@ -734,38 +734,38 @@ _Token analysis methodology: Counts generated using `@xenova/transformers` with 
 
 Across 6 baselines: **349 unique eids**, of which **115 appear in 2+ baselines**.
 
-| Steps Present | Shared EIDs | Description |
-|---------------|-------------|-------------|
-| 11, 13, 14 | 86 | Apple Store pages share the full store nav |
-| 5, 11 | 11 | Config page before/after carrier selection |
-| 5, 11, 13, 14 | 6 | Global nav elements (Apple, Store, Legal, Site Map) |
-| 1, 3 | 6 | Apple.com → iPhone page shared nav links |
-| 11, 13 | 5 | Store nav elements unique to pre-bag pages |
-| All 6 baselines | 1 | `b366be1381dd` ("Store menu" button) |
+| Steps Present   | Shared EIDs | Description                                         |
+| --------------- | ----------- | --------------------------------------------------- |
+| 11, 13, 14      | 86          | Apple Store pages share the full store nav          |
+| 5, 11           | 11          | Config page before/after carrier selection          |
+| 5, 11, 13, 14   | 6           | Global nav elements (Apple, Store, Legal, Site Map) |
+| 1, 3            | 6           | Apple.com → iPhone page shared nav links            |
+| 11, 13          | 5           | Store nav elements unique to pre-bag pages          |
+| All 6 baselines | 1           | `b366be1381dd` ("Store menu" button)                |
 
 **What are these shared elements?** Almost exclusively nav/footer links — Store, Mac, iPad, iPhone, Watch, Accessories, Support, account links, service links, etc. These are the global Apple Store navigation that appears identically on every page.
 
-| EID | Element |
-|-----|---------|
-| `053e142b39f8` | `<link>Accessories</link>` |
-| `061efb6d0889` | `<link>Health on Apple Watch</link>` |
-| `0a96c4541fec` | `<link>Apple Books</link>` |
-| `0d33f0c32f88` | `<btn>Search apple.com</btn>` |
-| `140007205b9a` | `<btn>TV and Home menu</btn>` |
-| `16dfe280014d` | `<link>Find a Store</link>` |
+| EID            | Element                               |
+| -------------- | ------------------------------------- |
+| `053e142b39f8` | `<link>Accessories</link>`            |
+| `061efb6d0889` | `<link>Health on Apple Watch</link>`  |
+| `0a96c4541fec` | `<link>Apple Books</link>`            |
+| `0d33f0c32f88` | `<btn>Search apple.com</btn>`         |
+| `140007205b9a` | `<btn>TV and Home menu</btn>`         |
+| `16dfe280014d` | `<link>Find a Store</link>`           |
 | `1a0e6c6be854` | `<link>Carrier Deals at Apple</link>` |
-| `1bc2db033802` | `<link>Sales and Refunds</link>` |
+| `1bc2db033802` | `<link>Sales and Refunds</link>`      |
 
 **Token cost of repeated elements per baseline:**
 
-| Step | Page | Repeated EID Tokens | Total Tokens | % Repeated |
-|------|------|---------------------|-------------|------------|
-| 1 | Homepage (trimmed) | 150 | 735 | 20.4% |
-| 3 | iPhone landing (trimmed) | 150 | 820 | 18.3% |
-| 5 | Config page (trimmed) | 500 | 713 | 70.1% |
-| 11 | Config page (untrimmed) | 3,296 | 6,375 | 51.7% |
-| 13 | Accessories upsell | 2,973 | 6,060 | 49.1% |
-| 14 | Shopping Bag | 2,814 | 4,168 | 67.5% |
+| Step | Page                     | Repeated EID Tokens | Total Tokens | % Repeated |
+| ---- | ------------------------ | ------------------- | ------------ | ---------- |
+| 1    | Homepage (trimmed)       | 150                 | 735          | 20.4%      |
+| 3    | iPhone landing (trimmed) | 150                 | 820          | 18.3%      |
+| 5    | Config page (trimmed)    | 500                 | 713          | 70.1%      |
+| 11   | Config page (untrimmed)  | 3,296               | 6,375        | 51.7%      |
+| 13   | Accessories upsell       | 2,973               | 6,060        | 49.1%      |
+| 14   | Shopping Bag             | 2,814               | 4,168        | 67.5%      |
 
 Steps 11 and 14 (untrimmed baselines on the same site) carry 52–68% repeated content — the same Apple Store nav rendered again on each page. Region trimming partially addresses this for steps 1, 3, and 5 by collapsing repeated nav elements behind `<trimmed>` tags.
 

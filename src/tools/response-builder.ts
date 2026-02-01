@@ -207,8 +207,7 @@ export function buildGetElementDetailsResponse(
 
   // Location (flattened from <where>)
   if (node.where.group_id) attrs.push(`group="${escapeXml(node.where.group_id)}"`);
-  if (node.where.group_path)
-    attrs.push(`path="${escapeXml(node.where.group_path.join('/'))}"`);
+  if (node.where.group_path) attrs.push(`path="${escapeXml(node.where.group_path.join('/'))}"`);
   if (node.where.heading_context) attrs.push(`heading="${escapeXml(node.where.heading_context)}"`);
 
   // Layout (flattened)

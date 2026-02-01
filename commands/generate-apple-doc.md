@@ -14,6 +14,7 @@ Write the final document to: `docs/examples/tool-use-example-add-iphone-to-cart.
 ## Phase 1: Browser Automation
 
 Execute the following steps using athena-browser-mcp tools. After EACH tool call, record:
+
 - The tool name (without the `mcp__athena-browser-mcp__` prefix)
 - The exact input JSON you sent
 - The full XML response you received (you will trim it later for the doc)
@@ -65,7 +66,7 @@ After completing the browser flow, write `docs/examples/tool-use-example-add-iph
 
 ### Document structure
 
-```markdown
+````markdown
 # Tool Use Example: Add iPhone 17 to Cart on Apple.com
 
 [1-2 sentence intro describing the walkthrough]
@@ -79,6 +80,7 @@ After completing the browser flow, write `docs/examples/tool-use-example-add-iph
 ```json
 { ... input ... }
 ```
+````
 
 **Response (trimmed):**
 
@@ -118,7 +120,8 @@ After completing the browser flow, write `docs/examples/tool-use-example-add-iph
 
 [6-7 numbered observations about: progressive disclosure, diff-based responses,
 stable element IDs, navigation vs mutation, semantic regions, nav dominance, totals]
-```
+
+````
 
 ### Trimming responses
 
@@ -137,7 +140,7 @@ Find the current session's JSONL transcript file by running:
 
 ```bash
 ls -t ~/.claude/projects/$(echo "$PWD" | sed 's|/|-|g; s|^-||')/*.jsonl | head -1
-```
+````
 
 Save this path to a variable — you'll pass it to the analysis scripts. Read the file to confirm it contains this session's MCP tool calls (look for `athena-browser-mcp` in the content).
 
@@ -150,6 +153,7 @@ node scripts/count-tool-tokens.mjs <SESSION_FILE>
 ```
 
 If the script doesn't exist or errors, create it. It should:
+
 1. Load `@xenova/transformers` with `Xenova/claude-tokenizer`
 2. Accept the session JSONL path as `process.argv[2]`
 3. Parse the JSONL to extract MCP tool calls and their responses
@@ -165,6 +169,7 @@ node scripts/analyze-baseline-regions.mjs <SESSION_FILE>
 ```
 
 If the script doesn't exist or errors, create it. It should:
+
 1. Parse each baseline snapshot response into `<region>` blocks
 2. Count tokens per region using the Claude tokenizer
 3. Extract all `id="..."` attributes from each baseline
@@ -175,6 +180,7 @@ If the script doesn't exist or errors, create it. It should:
 ### Step 3d: Update the doc with token counts
 
 Edit the markdown file to add:
+
 - `**Response tokens:** N` after each step's response block
 - The "Response Tokens" column in the summary table
 - The full "Token Costs" section with region breakdown and eid analysis
@@ -183,6 +189,7 @@ Edit the markdown file to add:
 ## Quality Checklist
 
 Before finishing, verify:
+
 - [ ] Every tool call in the flow is documented as a step
 - [ ] Each step has: tool name, input JSON, trimmed response, token count, narrative
 - [ ] The summary table is complete with all steps and token column

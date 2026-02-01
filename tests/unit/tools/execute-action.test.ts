@@ -536,6 +536,131 @@ describe('Execute Action', () => {
       }
     });
 
+    it('should trim regions in state_response when click causes navigation', async () => {
+      // Create 20 nodes to exceed main region head+tail limits (5+5=10)
+      const manyNodes = Array.from({ length: 20 }, (_, i) =>
+        createMockNode({
+          node_id: `n${i}`,
+          backend_node_id: 100 + i,
+          kind: 'button',
+          label: `Button ${i + 1}`,
+          where: { region: 'main', group_path: [] },
+          state: { visible: true, enabled: true },
+        })
+      );
+      const snapshot = createMockSnapshot(manyNodes);
+
+      // Mock navigation detection: URL changes between pre-click and post-click
+      let urlCallCount = 0;
+      const mockPage = {
+        url: vi.fn(() => {
+          urlCallCount++;
+          return urlCallCount === 1 ? 'https://example.com/page1' : 'https://example.com/page2';
+        }),
+        waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
+      };
+
+      const handle = createMockPageHandle({
+        page: mockPage as unknown as PageHandle['page'],
+      });
+      const node = manyNodes[0];
+      const action = vi.fn().mockResolvedValue(undefined);
+      const capture = createMockCapture(snapshot);
+
+      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+
+      // Verify navigation was detected
+      expect(result.outcome.status).toBe('success');
+      if (result.outcome.status === 'success') {
+        expect(result.outcome.navigated).toBe(true);
+      }
+
+      // Verify trimming was applied to state_response
+      expect(result.state_response).toContain('<!-- trimmed');
+    });
+
+    it('should trim regions for SPA navigation (URL changes after stabilization)', async () => {
+      // Create 20 nodes to exceed main region head+tail limits (5+5=10)
+      const manyNodes = Array.from({ length: 20 }, (_, i) =>
+        createMockNode({
+          node_id: `n${i}`,
+          backend_node_id: 100 + i,
+          kind: 'button',
+          label: `Button ${i + 1}`,
+          where: { region: 'main', group_path: [] },
+          state: { visible: true, enabled: true },
+        })
+      );
+      const snapshot = createMockSnapshot(manyNodes);
+
+      // SPA navigation: URL stays the same during early checks (pre-click + immediate post-click)
+      // but changes by the time late check runs (after stabilization)
+      let urlCallCount = 0;
+      const mockPage = {
+        url: vi.fn(() => {
+          urlCallCount++;
+          // Calls 1-2: pre-click and immediate post-click (URL hasn't changed yet)
+          // Call 3+: after stabilization (SPA navigation completed)
+          return urlCallCount <= 2 ? 'https://example.com/page1' : 'https://example.com/page2';
+        }),
+        waitForLoadState: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
+      };
+
+      const handle = createMockPageHandle({
+        page: mockPage as unknown as PageHandle['page'],
+      });
+      const node = manyNodes[0];
+      const action = vi.fn().mockResolvedValue(undefined);
+      const capture = createMockCapture(snapshot);
+
+      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+
+      // Verify late navigation detection caught it
+      expect(result.outcome.status).toBe('success');
+      if (result.outcome.status === 'success') {
+        expect(result.outcome.navigated).toBe(true);
+      }
+
+      // Verify trimming was applied
+      expect(result.state_response).toContain('<!-- trimmed');
+    });
+
+    it('should NOT trim regions when click does not cause navigation', async () => {
+      // Create 20 nodes
+      const manyNodes = Array.from({ length: 20 }, (_, i) =>
+        createMockNode({
+          node_id: `n${i}`,
+          backend_node_id: 100 + i,
+          kind: 'button',
+          label: `Button ${i + 1}`,
+          where: { region: 'main', group_path: [] },
+          state: { visible: true, enabled: true },
+        })
+      );
+      const snapshot = createMockSnapshot(manyNodes);
+
+      // No navigation: URL stays the same
+      const handle = createMockPageHandle();
+      const node = manyNodes[0];
+      const action = vi.fn().mockResolvedValue(undefined);
+      const capture = createMockCapture(snapshot);
+
+      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+
+      // Verify no navigation
+      expect(result.outcome.status).toBe('success');
+      if (result.outcome.status === 'success') {
+        expect(result.outcome.navigated).toBe(false);
+      }
+
+      // Verify NO trimming for non-navigation clicks
+      expect(result.state_response).not.toContain('<!-- trimmed');
+    });
+
     it('should return error outcome for non-stale errors', async () => {
       const handle = createMockPageHandle();
       const node = createMockNode();

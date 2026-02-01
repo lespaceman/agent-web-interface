@@ -60,7 +60,7 @@ export interface StateResponseObject {
  * Options for rendering and response generation.
  */
 export interface RenderOptions {
-  /** When true, trim large regions to head+tail elements with a <trimmed> tag. */
+  /** When true, trim large regions to head+tail elements with a comment marker. */
   trimRegions?: boolean;
 }
 

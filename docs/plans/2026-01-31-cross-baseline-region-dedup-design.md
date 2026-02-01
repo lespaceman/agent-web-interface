@@ -41,7 +41,7 @@ When a region has changed, it renders normally (with trimming applied if enabled
 ### Scope
 
 - **Applies to:** navigate and capture_snapshot only (when `trimRegions: true`)
-- **Does not apply to:** Action tools (click, type, press, select, hover, scroll_*) — these always return full snapshots
+- **Does not apply to:** Action tools (click, type, press, select, hover, scroll\_\*) — these always return full snapshots
 - **All regions eligible:** Dedup applies universally to any region whose eid set matches the previous baseline
 
 ## Implementation
@@ -58,6 +58,7 @@ previousBaselineRegions: Map<string, string[]> | null;
 ```
 
 In `doGenerateResponse()`, after `getBaselineInfo()` determines this is a baseline:
+
 - After `formatActionables()` builds the ActionableInfo[] array, extract region → eid mapping
 - Pass `previousBaselineRegions` into `renderStateXml()` via `RenderOptions`
 - After rendering, update `previousBaselineRegions` with the current baseline's regions
@@ -152,14 +153,14 @@ navigate() / captureSnapshot()
 
 Based on Apple Store "add iPhone to cart" flow analysis:
 
-| Step | Current | After Dedup | Savings |
-|------|---------|-------------|---------|
-| 1 (homepage) | 3,517 | 3,517 | 0% (first baseline) |
-| 3 (iPhone page) | 5,559 | ~3,071 | ~45% |
-| 4 (configurator) | 6,283 | ~1,937 | ~69% |
-| 10 (carrier page) | 6,372 | ~1,951 | ~69% |
-| 12 (upsell) | 3,445 | ~679 | ~80% |
-| 14 (bag page) | 4,043 | ~1,229 | ~70% |
+| Step              | Current | After Dedup | Savings             |
+| ----------------- | ------- | ----------- | ------------------- |
+| 1 (homepage)      | 3,517   | 3,517       | 0% (first baseline) |
+| 3 (iPhone page)   | 5,559   | ~3,071      | ~45%                |
+| 4 (configurator)  | 6,283   | ~1,937      | ~69%                |
+| 10 (carrier page) | 6,372   | ~1,951      | ~69%                |
+| 12 (upsell)       | 3,445   | ~679        | ~80%                |
+| 14 (bag page)     | 4,043   | ~1,229      | ~70%                |
 
 **Estimated total: ~34,701 → ~22,100 tokens (~36% reduction)**
 

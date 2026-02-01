@@ -16,6 +16,9 @@ import { escapeXml } from '../lib/text-utils.js';
 // Region Trimming Configuration
 // ============================================================================
 
+/** When 'false', disables region trimming globally regardless of per-tool options. Default: enabled. */
+const TRIM_ENABLED = process.env.ATHENA_TRIM_REGIONS !== 'false';
+
 /**
  * Per-region limits for trimming actionable elements in snapshot responses.
  * For each region, keep the first `head` and last `tail` elements; trim the middle.
@@ -132,7 +135,7 @@ export function renderStateXml(response: StateResponseObject, options?: RenderOp
   const filteredActionables = filterActionablesForMode(actionables, diff, activeLayer);
   const regions = groupActionablesByRegion(filteredActionables);
 
-  const shouldTrim = options?.trimRegions === true;
+  const shouldTrim = TRIM_ENABLED && options?.trimRegions === true;
 
   for (const [regionName, items] of Object.entries(regions)) {
     const limits = REGION_TRIM_LIMITS[regionName] ?? DEFAULT_TRIM_LIMITS;
@@ -142,14 +145,14 @@ export function renderStateXml(response: StateResponseObject, options?: RenderOp
 
     lines.push(`  <region name="${regionName}">`);
 
-    for (let i = 0; i < kept.length; i++) {
-      // Insert trimmed marker between head and tail portions
-      if (trimmedCount > 0 && i === limits.head) {
-        lines.push(
-          `    <trimmed count="${trimmedCount}" region="${regionName}" hint="Use find_elements with region=${regionName} to see all items" />`
-        );
-      }
-      lines.push(`    ${renderActionable(kept[i], diff)}`);
+    for (const item of kept) {
+      lines.push(`    ${renderActionable(item, diff)}`);
+    }
+
+    if (trimmedCount > 0) {
+      lines.push(
+        `    <!-- trimmed ${trimmedCount} items. Use find_elements with region=${regionName} to see all -->`
+      );
     }
 
     lines.push(`  </region>`);
