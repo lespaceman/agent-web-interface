@@ -1,3 +1,8 @@
+## [4.0.0] - 2026-02-01
+
+- Merge pull request #47 from lespaceman/rename/agent-web-interface
+- chore!: rename athena-browser-mcp to agent-web-interface (v3.0.0)
+
 ## [2.2.4] - 2026-02-01
 
 - Merge pull request #46 from lespaceman/feat/region-trimming
