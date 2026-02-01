@@ -1,3 +1,16 @@
+## [2.2.4] - 2026-02-01
+
+- Merge pull request #46 from lespaceman/feat/region-trimming
+- fix: address final PR review findings and fix formatting
+- feat: add generate-apple-doc plugin and clean up dead scripts
+- fix: add targetFilter to puppeteer.connect() to prevent autoConnect hang
+- style: fix prettier formatting in state-renderer tests
+- fix: address PR review findings for region trimming and XML optimization
+- docs: add cross-baseline region deduplication design
+- refactor: optimize XML output format for form and element detail tools (#34)
+- chore: clean up scattered docs from repo root
+- feat: add region trimming for navigate and capture_snapshot responses
+
 ## [2.2.3] - 2026-01-29
 
 - Merge pull request #45 from lespaceman/fix/browser-sync-viewport-overlay-layers
