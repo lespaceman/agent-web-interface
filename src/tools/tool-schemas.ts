@@ -768,14 +768,14 @@ const TakeScreenshotInputSchemaBase = z.object({
   /** Capture full page beyond viewport. Cannot combine with eid. */
   fullPage: z
     .boolean()
-    .default(false)
     .optional()
+    .default(false)
     .describe('Capture full page height beyond the viewport. Cannot be combined with eid.'),
   /** Image format (default: png) */
   format: z
     .enum(['png', 'jpeg'])
-    .default('png')
     .optional()
+    .default('png')
     .describe("Image format: 'png' (lossless, default) or 'jpeg' (lossy with quality control)."),
   /** JPEG quality 0-100 (ignored for PNG) */
   quality: z

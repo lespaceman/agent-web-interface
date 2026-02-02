@@ -72,7 +72,6 @@ describe('captureScreenshot', () => {
       format: 'png',
       quality: undefined,
       optimizeForSpeed: true,
-      captureBeyondViewport: false,
     });
   });
 
@@ -86,7 +85,6 @@ describe('captureScreenshot', () => {
       format: 'jpeg',
       quality: 75,
       optimizeForSpeed: true,
-      captureBeyondViewport: false,
     });
   });
 
@@ -134,16 +132,38 @@ describe('captureScreenshot', () => {
     );
   });
 
-  it('should set captureBeyondViewport for full page screenshots', async () => {
-    vi.mocked(cdp.send).mockResolvedValue({ data: 'abc' });
+  it('should call Page.getLayoutMetrics and set clip for full page screenshots', async () => {
+    vi.mocked(cdp.send)
+      .mockResolvedValueOnce({
+        cssContentSize: { width: 1280, height: 5000 },
+        cssLayoutViewport: { clientWidth: 1280, clientHeight: 720 },
+        cssVisualViewport: { clientWidth: 1280, clientHeight: 720 },
+      })
+      .mockResolvedValueOnce({ data: 'abc' });
     vi.mocked(computeBase64ByteSize).mockReturnValue(3);
 
     await captureScreenshot(cdp, { captureBeyondViewport: true });
 
-    expect(cdp.send).toHaveBeenCalledWith(
-      'Page.captureScreenshot',
-      expect.objectContaining({ captureBeyondViewport: true })
-    );
+    expect(cdp.send).toHaveBeenCalledWith('Page.getLayoutMetrics', undefined);
+    expect(cdp.send).toHaveBeenCalledWith('Page.captureScreenshot', expect.objectContaining({
+      captureBeyondViewport: true,
+      clip: { x: 0, y: 0, width: 1280, height: 5000, scale: 1 },
+    }));
+  });
+
+  it('should not call Page.getLayoutMetrics for viewport screenshots', async () => {
+    vi.mocked(cdp.send).mockResolvedValue({ data: 'abc' });
+    vi.mocked(computeBase64ByteSize).mockReturnValue(3);
+
+    await captureScreenshot(cdp);
+
+    expect(cdp.send).not.toHaveBeenCalledWith('Page.getLayoutMetrics', undefined);
+    expect(cdp.send).toHaveBeenCalledTimes(1);
+    expect(cdp.send).toHaveBeenCalledWith('Page.captureScreenshot', {
+      format: 'png',
+      quality: undefined,
+      optimizeForSpeed: true,
+    });
   });
 
   it('should respect optimizeForSpeed=false', async () => {

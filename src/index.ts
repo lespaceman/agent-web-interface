@@ -15,6 +15,7 @@ import {
   isSessionManagerInitialized,
 } from './server/server-config.js';
 import { getLogger } from './shared/services/logging.service.js';
+import { cleanupTempFiles } from './lib/temp-file.js';
 
 const logger = getLogger();
 import {
@@ -376,6 +377,7 @@ async function main(): Promise<void> {
       console.error(`Shutting down... (${signal})`);
       void (async () => {
         try {
+          await cleanupTempFiles();
           // Shutdown browser session first (only if initialized)
           if (isSessionManagerInitialized()) {
             const session = getSessionManager();

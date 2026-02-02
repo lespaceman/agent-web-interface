@@ -53,10 +53,19 @@ export async function captureScreenshot(
     format,
     quality: format === 'jpeg' ? (options.quality ?? 80) : undefined,
     optimizeForSpeed: options.optimizeForSpeed ?? true,
-    captureBeyondViewport: options.captureBeyondViewport ?? false,
   };
 
-  if (options.clip) {
+  if (options.captureBeyondViewport) {
+    const metrics = await cdp.send('Page.getLayoutMetrics', undefined);
+    params.clip = {
+      x: 0,
+      y: 0,
+      width: metrics.cssContentSize.width,
+      height: metrics.cssContentSize.height,
+      scale: 1,
+    };
+    params.captureBeyondViewport = true;
+  } else if (options.clip) {
     params.clip = options.clip;
   }
 

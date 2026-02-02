@@ -107,10 +107,29 @@ vi.mock('../../../src/lib/temp-file.js', () => ({
 }));
 
 import { initializeTools, takeScreenshot } from '../../../src/tools/browser-tools.js';
+import { TakeScreenshotInputSchema } from '../../../src/tools/tool-schemas.js';
 
 // ============================================================================
 // Tests
 // ============================================================================
+
+describe('TakeScreenshotInput schema', () => {
+  it('should default fullPage to false when omitted', () => {
+    const result = TakeScreenshotInputSchema.parse({});
+    expect(result).toHaveProperty('fullPage', false);
+  });
+
+  it('should default format to png when omitted', () => {
+    const result = TakeScreenshotInputSchema.parse({});
+    expect(result.format).toBe('png');
+  });
+
+  it('should preserve explicit values', () => {
+    const result = TakeScreenshotInputSchema.parse({ fullPage: true, format: 'jpeg' });
+    expect(result.fullPage).toBe(true);
+    expect(result.format).toBe('jpeg');
+  });
+});
 
 describe('takeScreenshot', () => {
   const mockCdp = {

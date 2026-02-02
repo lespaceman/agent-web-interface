@@ -49,8 +49,10 @@ export function computeBase64ByteSize(base64: string): number {
  */
 export async function cleanupTempFiles(): Promise<void> {
   const deletions = [...trackedFiles].map((filepath) =>
-    unlink(filepath).catch(() => {
-      /* already deleted or inaccessible — ignore */
+    unlink(filepath).catch((err: NodeJS.ErrnoException) => {
+      if (err.code !== 'ENOENT') {
+        console.warn(`[cleanup] Failed to delete temp file ${filepath}: ${err.message}`);
+      }
     })
   );
   await Promise.all(deletions);

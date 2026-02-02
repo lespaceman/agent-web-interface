@@ -103,12 +103,32 @@ describe('cleanupTempFiles', () => {
     expect(unlink).not.toHaveBeenCalled();
   });
 
-  it('should silently ignore already-deleted files', async () => {
-    vi.mocked(unlink).mockRejectedValue(new Error('ENOENT'));
+  it('should silently ignore already-deleted files (ENOENT)', async () => {
+    const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
+      code: 'ENOENT',
+    });
+    vi.mocked(unlink).mockRejectedValue(enoentError);
 
     await writeTempFile('dGVzdA==', 'png');
 
-    // Should not throw
+    // Should not throw and should not warn
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { /* noop */ });
     await expect(cleanupTempFiles()).resolves.toBeUndefined();
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('should log warning for non-ENOENT errors (e.g. EACCES)', async () => {
+    const eaccesError = Object.assign(new Error('EACCES: permission denied'), {
+      code: 'EACCES',
+    });
+    vi.mocked(unlink).mockRejectedValue(eaccesError);
+
+    await writeTempFile('dGVzdA==', 'png');
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { /* noop */ });
+    await expect(cleanupTempFiles()).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
+    warnSpy.mockRestore();
   });
 });
