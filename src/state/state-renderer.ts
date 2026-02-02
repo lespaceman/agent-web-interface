@@ -58,6 +58,15 @@ export function trimRegionElements(
 }
 
 /**
+ * Normalize region name. Maps 'unknown' to 'main' as the default region.
+ * Used by both the renderer grouping and the state-manager's region extraction
+ * to ensure deduplication comparisons use consistent keys.
+ */
+export function normalizeRegion(region: string): string {
+  return region === 'unknown' ? 'main' : region;
+}
+
+/**
  * Check if two eid lists are exactly equal (same length, same values, same order).
  */
 export function areEidListsEqual(a: string[], b: string[]): boolean {
@@ -150,12 +159,14 @@ export function renderStateXml(response: StateResponseObject, options?: RenderOp
 
   for (const [regionName, items] of Object.entries(regions)) {
     // Dedup check: only in baseline mode (diff mode has filtered actionables)
-    const currentEids = items.map((item) => item.eid);
-    const previousEids = options?.previousBaselineRegions?.get(regionName);
+    const previousEids =
+      diff.mode === 'baseline' ? options?.previousResponseRegions?.get(regionName) : undefined;
     const isUnchanged =
-      diff.mode === 'baseline' &&
       previousEids !== undefined &&
-      areEidListsEqual(currentEids, previousEids);
+      areEidListsEqual(
+        items.map((item) => item.eid),
+        previousEids
+      );
 
     if (isUnchanged) {
       lines.push(`  <region name="${regionName}" unchanged="true" count="${items.length}" />`);
@@ -287,8 +298,7 @@ function mapKindToTag(kind: string): string {
 function groupActionablesByRegion(actionables: ActionableInfo[]): Record<string, ActionableInfo[]> {
   const regions: Record<string, ActionableInfo[]> = {};
   for (const item of actionables) {
-    // Use semantic region, fallback to 'main' if unknown
-    const region = item.ctx.region === 'unknown' ? 'main' : item.ctx.region;
+    const region = normalizeRegion(item.ctx.region);
     if (!regions[region]) regions[region] = [];
     regions[region].push(item);
   }

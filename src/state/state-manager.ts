@@ -33,7 +33,7 @@ import { linkObservationsToSnapshot } from '../observation/index.js';
 import { generateLocator } from './locator-generator.js';
 import { ElementRegistry } from './element-registry.js';
 import { validateSnapshotHealth, isErrorHealth } from '../snapshot/snapshot-health.js';
-import { renderStateXml } from './state-renderer.js';
+import { renderStateXml, normalizeRegion } from './state-renderer.js';
 
 // ============================================================================
 // Default Configuration
@@ -132,7 +132,7 @@ export class StateManager {
       currentSnapshot: null,
       previousSnapshot: null,
       currentDocId: null,
-      previousBaselineRegions: null,
+      previousResponseRegions: null,
       config: { ...DEFAULT_CONFIG, ...options.config },
     };
     this.elementRegistry = new ElementRegistry();
@@ -208,6 +208,8 @@ export class StateManager {
       return response;
     } catch (err) {
       // Error recovery: return baseline with error reason
+      // Clear dedup state to prevent stale comparisons after error recovery
+      this.context.previousResponseRegions = null;
       const errorMessage = err instanceof Error ? err.message : String(err);
       return this.createErrorBaseline('error', errorMessage);
     } finally {
@@ -251,11 +253,6 @@ export class StateManager {
 
     // Decide baseline vs diff and get reason
     const baselineInfo = this.getBaselineInfo(snapshot, isNavigation);
-
-    // Reset dedup state on navigation baselines (new page has different eids)
-    if (baselineInfo.sendBaseline && baselineInfo.reason === 'navigation') {
-      this.context.previousBaselineRegions = null;
-    }
 
     // Generate state handle (with sanitized URL)
     const state = this.generateStateHandle(snapshot, layerResult);
@@ -325,16 +322,17 @@ export class StateManager {
     }
 
     // Extract current region → eid mapping for deduplication
-    const currentRegions = this.extractRegionEidMapping(actionables);
+    // NOTE: This must use the unfiltered actionables (before renderStateXml filters for diff mode)
+    const currentRegions = extractRegionEidMapping(actionables);
 
     // Return dense XML representation with deduplication support
     const xml = renderStateXml(response, {
       ...options,
-      previousBaselineRegions: this.context.previousBaselineRegions ?? undefined,
+      previousResponseRegions: this.context.previousResponseRegions ?? undefined,
     });
 
-    // Update baseline regions for next response (all responses update the map)
-    this.context.previousBaselineRegions = currentRegions;
+    // Update region map for next response (all responses update the map)
+    this.context.previousResponseRegions = currentRegions;
 
     return xml;
   }
@@ -624,26 +622,6 @@ export class StateManager {
   }
 
   /**
-   * Extract region → ordered eid list mapping from actionables.
-   * Uses the same region normalization as groupActionablesByRegion in the renderer.
-   */
-  private extractRegionEidMapping(actionables: ActionableInfo[]): Map<string, string[]> {
-    const regions = new Map<string, string[]>();
-
-    for (const item of actionables) {
-      const region = item.ctx.region === 'unknown' ? 'main' : item.ctx.region;
-      let eids = regions.get(region);
-      if (!eids) {
-        eids = [];
-        regions.set(region, eids);
-      }
-      eids.push(item.eid);
-    }
-
-    return regions;
-  }
-
-  /**
    * Estimate token count for response.
    */
   private estimateTokens(response: Omit<StateResponseObject, 'tokens'>): number {
@@ -755,6 +733,25 @@ function sanitizeHref(href: string): string {
 // ============================================================================
 // Utilities
 // ============================================================================
+
+/**
+ * Extract region → ordered eid list mapping from actionables.
+ */
+function extractRegionEidMapping(actionables: ActionableInfo[]): Map<string, string[]> {
+  const regions = new Map<string, string[]>();
+
+  for (const item of actionables) {
+    const region = normalizeRegion(item.ctx.region);
+    let eids = regions.get(region);
+    if (!eids) {
+      eids = [];
+      regions.set(region, eids);
+    }
+    eids.push(item.eid);
+  }
+
+  return regions;
+}
 
 /**
  * Compute document ID from snapshot.

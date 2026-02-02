@@ -62,8 +62,8 @@ export interface StateResponseObject {
 export interface RenderOptions {
   /** When true, trim large regions to head+tail elements with a comment marker. */
   trimRegions?: boolean;
-  /** Previous region signatures for deduplication (region name → ordered eid list). */
-  previousBaselineRegions?: Map<string, string[]>;
+  /** Previous region eid lists for deduplication (region name → ordered eid list). */
+  previousResponseRegions?: Map<string, string[]>;
 }
 
 /**
@@ -81,7 +81,7 @@ export interface StateHandle {
     url: string;
     origin: string;
     title: string;
-    doc_id: string; // hash of origin + pathname + signature
+    doc_id: string; // hash of origin + pathname
     nav_type: 'soft' | 'hard';
     history_idx: number;
   };
@@ -388,8 +388,8 @@ export interface StateManagerContext {
   /** Document tracking */
   currentDocId: string | null;
 
-  /** Region deduplication: maps region name → ordered eid list from most recent response */
-  previousBaselineRegions: Map<string, string[]> | null;
+  /** Region deduplication: maps region name → ordered eid list. Updated after every response (baseline and diff), but only consulted during baseline rendering. */
+  previousResponseRegions: Map<string, string[]> | null;
 
   /** Configuration */
   config: StateManagerConfig;

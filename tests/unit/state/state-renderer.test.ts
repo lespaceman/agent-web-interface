@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   areEidListsEqual,
+  normalizeRegion,
   renderObservations,
   renderSingleObservation,
   renderStateXml,
@@ -983,6 +984,31 @@ describe('AWI_TRIM_REGIONS env var', () => {
 // areEidListsEqual Tests
 // ============================================================================
 
+// ============================================================================
+// normalizeRegion Tests
+// ============================================================================
+
+describe('normalizeRegion', () => {
+  it('should map unknown to main', () => {
+    expect(normalizeRegion('unknown')).toBe('main');
+  });
+
+  it('should pass through known regions', () => {
+    expect(normalizeRegion('main')).toBe('main');
+    expect(normalizeRegion('nav')).toBe('nav');
+    expect(normalizeRegion('header')).toBe('header');
+    expect(normalizeRegion('footer')).toBe('footer');
+  });
+
+  it('should pass through custom regions', () => {
+    expect(normalizeRegion('sidebar')).toBe('sidebar');
+  });
+});
+
+// ============================================================================
+// areEidListsEqual Tests
+// ============================================================================
+
 describe('areEidListsEqual', () => {
   it('should return true for identical lists', () => {
     expect(areEidListsEqual(['a', 'b', 'c'], ['a', 'b', 'c'])).toBe(true);
@@ -1024,7 +1050,7 @@ describe('renderStateXml region deduplication', () => {
       ['main', ['main-x', 'main-y']], // different from current
     ]);
 
-    const xml = renderStateXml(response, { previousBaselineRegions: previousRegions });
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
 
     expect(xml).toContain('<region name="nav" unchanged="true" count="3" />');
     expect(xml).toContain('<region name="main">');
@@ -1032,7 +1058,7 @@ describe('renderStateXml region deduplication', () => {
     expect(xml).toContain('id="main-2"');
   });
 
-  it('should render all regions normally when previousBaselineRegions is undefined', () => {
+  it('should render all regions normally when previousResponseRegions is undefined', () => {
     const navItems = ['nav-1', 'nav-2'].map((id) => createActionable(id, 'nav'));
     const response = createBaselineResponse(navItems);
 
@@ -1050,7 +1076,7 @@ describe('renderStateXml region deduplication', () => {
 
     // Previous only has nav, not main
     const previousRegions = new Map([['nav', ['nav-1']]]);
-    const xml = renderStateXml(response, { previousBaselineRegions: previousRegions });
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
 
     expect(xml).toContain('<region name="main">');
     expect(xml).toContain('id="main-1"');
@@ -1061,7 +1087,7 @@ describe('renderStateXml region deduplication', () => {
     const response = createBaselineResponse(items);
 
     const previousRegions = new Map([['main', ['c', 'b', 'a']]]);
-    const xml = renderStateXml(response, { previousBaselineRegions: previousRegions });
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
 
     expect(xml).toContain('<region name="main">');
     expect(xml).not.toContain('unchanged="true"');
@@ -1079,7 +1105,7 @@ describe('renderStateXml region deduplication', () => {
       ['main', ['main-different']], // changed
     ]);
 
-    const xml = renderStateXml(response, { previousBaselineRegions: previousRegions });
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
 
     expect(xml).toContain('<region name="nav" unchanged="true" count="2" />');
     expect(xml).toContain('<region name="footer" unchanged="true" count="1" />');
@@ -1102,7 +1128,7 @@ describe('renderStateXml region deduplication', () => {
 
     const xml = renderStateXml(response, {
       trimRegions: true,
-      previousBaselineRegions: previousRegions,
+      previousResponseRegions: previousRegions,
     });
 
     // Nav should be collapsed (unchanged)
@@ -1115,9 +1141,7 @@ describe('renderStateXml region deduplication', () => {
 
   it('should skip trimming for unchanged regions even when trimRegions is true', () => {
     // 20 nav items all unchanged — should collapse, not trim
-    const navItems = Array.from({ length: 20 }, (_, i) =>
-      createActionable(`nav-${i + 1}`, 'nav')
-    );
+    const navItems = Array.from({ length: 20 }, (_, i) => createActionable(`nav-${i + 1}`, 'nav'));
     const response = createBaselineResponse(navItems);
 
     const previousRegions = new Map([
@@ -1126,7 +1150,7 @@ describe('renderStateXml region deduplication', () => {
 
     const xml = renderStateXml(response, {
       trimRegions: true,
-      previousBaselineRegions: previousRegions,
+      previousResponseRegions: previousRegions,
     });
 
     expect(xml).toContain('<region name="nav" unchanged="true" count="20" />');
@@ -1140,7 +1164,7 @@ describe('renderStateXml region deduplication', () => {
     const previousRegions = new Map([['main', ['a', 'b']]]);
     const xml = renderStateXml(response, {
       trimRegions: false,
-      previousBaselineRegions: previousRegions,
+      previousResponseRegions: previousRegions,
     });
 
     expect(xml).toContain('<region name="main" unchanged="true" count="2" />');
@@ -1183,9 +1207,9 @@ describe('renderStateXml region deduplication', () => {
       tokens: 0,
     };
 
-    // Even though previousBaselineRegions has matching eids, diff mode should NOT dedup
+    // Even though previousResponseRegions has matching eids, diff mode should NOT dedup
     const previousRegions = new Map([['main', ['btn-new']]]);
-    const xml = renderStateXml(response, { previousBaselineRegions: previousRegions });
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
 
     expect(xml).not.toContain('unchanged="true"');
     expect(xml).toContain('<region name="main">');
