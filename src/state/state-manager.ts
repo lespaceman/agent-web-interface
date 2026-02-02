@@ -132,6 +132,7 @@ export class StateManager {
       currentSnapshot: null,
       previousSnapshot: null,
       currentDocId: null,
+      previousBaselineRegions: null,
       config: { ...DEFAULT_CONFIG, ...options.config },
     };
     this.elementRegistry = new ElementRegistry();
@@ -251,6 +252,11 @@ export class StateManager {
     // Decide baseline vs diff and get reason
     const baselineInfo = this.getBaselineInfo(snapshot, isNavigation);
 
+    // Reset dedup state on navigation baselines (new page has different eids)
+    if (baselineInfo.sendBaseline && baselineInfo.reason === 'navigation') {
+      this.context.previousBaselineRegions = null;
+    }
+
     // Generate state handle (with sanitized URL)
     const state = this.generateStateHandle(snapshot, layerResult);
 
@@ -318,8 +324,19 @@ export class StateManager {
       response.observations = snapshot.observations;
     }
 
-    // Return dense XML representation
-    return renderStateXml(response, options);
+    // Extract current region → eid mapping for deduplication
+    const currentRegions = this.extractRegionEidMapping(actionables);
+
+    // Return dense XML representation with deduplication support
+    const xml = renderStateXml(response, {
+      ...options,
+      previousBaselineRegions: this.context.previousBaselineRegions ?? undefined,
+    });
+
+    // Update baseline regions for next response (all responses update the map)
+    this.context.previousBaselineRegions = currentRegions;
+
+    return xml;
   }
 
   /**
@@ -604,6 +621,26 @@ export class StateManager {
     }
 
     return actionables;
+  }
+
+  /**
+   * Extract region → ordered eid list mapping from actionables.
+   * Uses the same region normalization as groupActionablesByRegion in the renderer.
+   */
+  private extractRegionEidMapping(actionables: ActionableInfo[]): Map<string, string[]> {
+    const regions = new Map<string, string[]>();
+
+    for (const item of actionables) {
+      const region = item.ctx.region === 'unknown' ? 'main' : item.ctx.region;
+      let eids = regions.get(region);
+      if (!eids) {
+        eids = [];
+        regions.set(region, eids);
+      }
+      eids.push(item.eid);
+    }
+
+    return regions;
   }
 
   /**

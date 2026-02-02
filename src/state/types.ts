@@ -62,6 +62,8 @@ export interface StateResponseObject {
 export interface RenderOptions {
   /** When true, trim large regions to head+tail elements with a comment marker. */
   trimRegions?: boolean;
+  /** Previous region signatures for deduplication (region name → ordered eid list). */
+  previousBaselineRegions?: Map<string, string[]>;
 }
 
 /**
@@ -385,6 +387,9 @@ export interface StateManagerContext {
 
   /** Document tracking */
   currentDocId: string | null;
+
+  /** Region deduplication: maps region name → ordered eid list from most recent response */
+  previousBaselineRegions: Map<string, string[]> | null;
 
   /** Configuration */
   config: StateManagerConfig;

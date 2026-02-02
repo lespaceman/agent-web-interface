@@ -58,6 +58,17 @@ export function trimRegionElements(
 }
 
 /**
+ * Check if two eid lists are exactly equal (same length, same values, same order).
+ */
+export function areEidListsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
  * Render a StateResponseObject as a dense XML string.
  *
  * @param response - Internal state response object
@@ -138,24 +149,36 @@ export function renderStateXml(response: StateResponseObject, options?: RenderOp
   const shouldTrim = TRIM_ENABLED && options?.trimRegions === true;
 
   for (const [regionName, items] of Object.entries(regions)) {
-    const limits = REGION_TRIM_LIMITS[regionName] ?? DEFAULT_TRIM_LIMITS;
-    const { kept, trimmedCount } = shouldTrim
-      ? trimRegionElements(items, limits)
-      : { kept: items, trimmedCount: 0 };
+    // Dedup check: only in baseline mode (diff mode has filtered actionables)
+    const currentEids = items.map((item) => item.eid);
+    const previousEids = options?.previousBaselineRegions?.get(regionName);
+    const isUnchanged =
+      diff.mode === 'baseline' &&
+      previousEids !== undefined &&
+      areEidListsEqual(currentEids, previousEids);
 
-    lines.push(`  <region name="${regionName}">`);
+    if (isUnchanged) {
+      lines.push(`  <region name="${regionName}" unchanged="true" count="${items.length}" />`);
+    } else {
+      const limits = REGION_TRIM_LIMITS[regionName] ?? DEFAULT_TRIM_LIMITS;
+      const { kept, trimmedCount } = shouldTrim
+        ? trimRegionElements(items, limits)
+        : { kept: items, trimmedCount: 0 };
 
-    for (const item of kept) {
-      lines.push(`    ${renderActionable(item, diff)}`);
+      lines.push(`  <region name="${regionName}">`);
+
+      for (const item of kept) {
+        lines.push(`    ${renderActionable(item, diff)}`);
+      }
+
+      if (trimmedCount > 0) {
+        lines.push(
+          `    <!-- trimmed ${trimmedCount} items. Use find_elements with region=${regionName} to see all -->`
+        );
+      }
+
+      lines.push(`  </region>`);
     }
-
-    if (trimmedCount > 0) {
-      lines.push(
-        `    <!-- trimmed ${trimmedCount} items. Use find_elements with region=${regionName} to see all -->`
-      );
-    }
-
-    lines.push(`  </region>`);
   }
 
   lines.push(`</state>`);
