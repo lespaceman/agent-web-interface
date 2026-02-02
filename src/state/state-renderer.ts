@@ -58,6 +58,26 @@ export function trimRegionElements(
 }
 
 /**
+ * Normalize region name. Maps 'unknown' to 'main' as the default region.
+ * Used by both the renderer grouping and the state-manager's region extraction
+ * to ensure deduplication comparisons use consistent keys.
+ */
+export function normalizeRegion(region: string): string {
+  return region === 'unknown' ? 'main' : region;
+}
+
+/**
+ * Check if two eid lists are exactly equal (same length, same values, same order).
+ */
+export function areEidListsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
  * Render a StateResponseObject as a dense XML string.
  *
  * @param response - Internal state response object
@@ -138,24 +158,38 @@ export function renderStateXml(response: StateResponseObject, options?: RenderOp
   const shouldTrim = TRIM_ENABLED && options?.trimRegions === true;
 
   for (const [regionName, items] of Object.entries(regions)) {
-    const limits = REGION_TRIM_LIMITS[regionName] ?? DEFAULT_TRIM_LIMITS;
-    const { kept, trimmedCount } = shouldTrim
-      ? trimRegionElements(items, limits)
-      : { kept: items, trimmedCount: 0 };
-
-    lines.push(`  <region name="${regionName}">`);
-
-    for (const item of kept) {
-      lines.push(`    ${renderActionable(item, diff)}`);
-    }
-
-    if (trimmedCount > 0) {
-      lines.push(
-        `    <!-- trimmed ${trimmedCount} items. Use find_elements with region=${regionName} to see all -->`
+    // Dedup check: only in baseline mode (diff mode has filtered actionables)
+    const previousEids =
+      diff.mode === 'baseline' ? options?.previousResponseRegions?.get(regionName) : undefined;
+    const isUnchanged =
+      previousEids !== undefined &&
+      areEidListsEqual(
+        items.map((item) => item.eid),
+        previousEids
       );
-    }
 
-    lines.push(`  </region>`);
+    if (isUnchanged) {
+      lines.push(`  <region name="${regionName}" unchanged="true" count="${items.length}" />`);
+    } else {
+      const limits = REGION_TRIM_LIMITS[regionName] ?? DEFAULT_TRIM_LIMITS;
+      const { kept, trimmedCount } = shouldTrim
+        ? trimRegionElements(items, limits)
+        : { kept: items, trimmedCount: 0 };
+
+      lines.push(`  <region name="${regionName}">`);
+
+      for (const item of kept) {
+        lines.push(`    ${renderActionable(item, diff)}`);
+      }
+
+      if (trimmedCount > 0) {
+        lines.push(
+          `    <!-- trimmed ${trimmedCount} items. Use find_elements with region=${regionName} to see all -->`
+        );
+      }
+
+      lines.push(`  </region>`);
+    }
   }
 
   lines.push(`</state>`);
@@ -264,8 +298,7 @@ function mapKindToTag(kind: string): string {
 function groupActionablesByRegion(actionables: ActionableInfo[]): Record<string, ActionableInfo[]> {
   const regions: Record<string, ActionableInfo[]> = {};
   for (const item of actionables) {
-    // Use semantic region, fallback to 'main' if unknown
-    const region = item.ctx.region === 'unknown' ? 'main' : item.ctx.region;
+    const region = normalizeRegion(item.ctx.region);
     if (!regions[region]) regions[region] = [];
     regions[region].push(item);
   }

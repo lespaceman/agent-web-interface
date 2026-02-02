@@ -33,7 +33,7 @@ import { linkObservationsToSnapshot } from '../observation/index.js';
 import { generateLocator } from './locator-generator.js';
 import { ElementRegistry } from './element-registry.js';
 import { validateSnapshotHealth, isErrorHealth } from '../snapshot/snapshot-health.js';
-import { renderStateXml } from './state-renderer.js';
+import { renderStateXml, normalizeRegion } from './state-renderer.js';
 
 // ============================================================================
 // Default Configuration
@@ -132,6 +132,7 @@ export class StateManager {
       currentSnapshot: null,
       previousSnapshot: null,
       currentDocId: null,
+      previousResponseRegions: null,
       config: { ...DEFAULT_CONFIG, ...options.config },
     };
     this.elementRegistry = new ElementRegistry();
@@ -207,6 +208,8 @@ export class StateManager {
       return response;
     } catch (err) {
       // Error recovery: return baseline with error reason
+      // Clear dedup state to prevent stale comparisons after error recovery
+      this.context.previousResponseRegions = null;
       const errorMessage = err instanceof Error ? err.message : String(err);
       return this.createErrorBaseline('error', errorMessage);
     } finally {
@@ -318,8 +321,20 @@ export class StateManager {
       response.observations = snapshot.observations;
     }
 
-    // Return dense XML representation
-    return renderStateXml(response, options);
+    // Extract current region → eid mapping for deduplication
+    // NOTE: This must use the unfiltered actionables (before renderStateXml filters for diff mode)
+    const currentRegions = extractRegionEidMapping(actionables);
+
+    // Return dense XML representation with deduplication support
+    const xml = renderStateXml(response, {
+      ...options,
+      previousResponseRegions: this.context.previousResponseRegions ?? undefined,
+    });
+
+    // Update region map for next response (all responses update the map)
+    this.context.previousResponseRegions = currentRegions;
+
+    return xml;
   }
 
   /**
@@ -718,6 +733,25 @@ function sanitizeHref(href: string): string {
 // ============================================================================
 // Utilities
 // ============================================================================
+
+/**
+ * Extract region → ordered eid list mapping from actionables.
+ */
+function extractRegionEidMapping(actionables: ActionableInfo[]): Map<string, string[]> {
+  const regions = new Map<string, string[]>();
+
+  for (const item of actionables) {
+    const region = normalizeRegion(item.ctx.region);
+    let eids = regions.get(region);
+    if (!eids) {
+      eids = [];
+      regions.set(region, eids);
+    }
+    eids.push(item.eid);
+  }
+
+  return regions;
+}
 
 /**
  * Compute document ID from snapshot.

@@ -6,6 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  areEidListsEqual,
+  normalizeRegion,
   renderObservations,
   renderSingleObservation,
   renderStateXml,
@@ -975,5 +977,242 @@ describe('AWI_TRIM_REGIONS env var', () => {
     expect(xml).toContain(
       '<!-- trimmed 10 items. Use find_elements with region=main to see all -->'
     );
+  });
+});
+
+// ============================================================================
+// areEidListsEqual Tests
+// ============================================================================
+
+// ============================================================================
+// normalizeRegion Tests
+// ============================================================================
+
+describe('normalizeRegion', () => {
+  it('should map unknown to main', () => {
+    expect(normalizeRegion('unknown')).toBe('main');
+  });
+
+  it('should pass through known regions', () => {
+    expect(normalizeRegion('main')).toBe('main');
+    expect(normalizeRegion('nav')).toBe('nav');
+    expect(normalizeRegion('header')).toBe('header');
+    expect(normalizeRegion('footer')).toBe('footer');
+  });
+
+  it('should pass through custom regions', () => {
+    expect(normalizeRegion('sidebar')).toBe('sidebar');
+  });
+});
+
+// ============================================================================
+// areEidListsEqual Tests
+// ============================================================================
+
+describe('areEidListsEqual', () => {
+  it('should return true for identical lists', () => {
+    expect(areEidListsEqual(['a', 'b', 'c'], ['a', 'b', 'c'])).toBe(true);
+  });
+
+  it('should return false for different lengths', () => {
+    expect(areEidListsEqual(['a', 'b'], ['a', 'b', 'c'])).toBe(false);
+  });
+
+  it('should return false for same eids in different order', () => {
+    expect(areEidListsEqual(['a', 'b', 'c'], ['c', 'b', 'a'])).toBe(false);
+  });
+
+  it('should return false for different eids', () => {
+    expect(areEidListsEqual(['a', 'b'], ['a', 'x'])).toBe(false);
+  });
+
+  it('should return true for empty lists', () => {
+    expect(areEidListsEqual([], [])).toBe(true);
+  });
+
+  it('should return true for single-element identical lists', () => {
+    expect(areEidListsEqual(['x'], ['x'])).toBe(true);
+  });
+});
+
+// ============================================================================
+// Region Deduplication Tests
+// ============================================================================
+
+describe('renderStateXml region deduplication', () => {
+  it('should collapse unchanged region to self-closing tag', () => {
+    const navItems = ['nav-1', 'nav-2', 'nav-3'].map((id) => createActionable(id, 'nav'));
+    const mainItems = ['main-1', 'main-2'].map((id) => createActionable(id, 'main'));
+    const response = createBaselineResponse([...navItems, ...mainItems]);
+
+    const previousRegions = new Map([
+      ['nav', ['nav-1', 'nav-2', 'nav-3']],
+      ['main', ['main-x', 'main-y']], // different from current
+    ]);
+
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
+
+    expect(xml).toContain('<region name="nav" unchanged="true" count="3" />');
+    expect(xml).toContain('<region name="main">');
+    expect(xml).toContain('id="main-1"');
+    expect(xml).toContain('id="main-2"');
+  });
+
+  it('should render all regions normally when previousResponseRegions is undefined', () => {
+    const navItems = ['nav-1', 'nav-2'].map((id) => createActionable(id, 'nav'));
+    const response = createBaselineResponse(navItems);
+
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<region name="nav">');
+    expect(xml).toContain('id="nav-1"');
+    expect(xml).toContain('id="nav-2"');
+    expect(xml).not.toContain('unchanged="true"');
+  });
+
+  it('should render region normally when not in previous map', () => {
+    const mainItems = ['main-1'].map((id) => createActionable(id, 'main'));
+    const response = createBaselineResponse(mainItems);
+
+    // Previous only has nav, not main
+    const previousRegions = new Map([['nav', ['nav-1']]]);
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
+
+    expect(xml).toContain('<region name="main">');
+    expect(xml).toContain('id="main-1"');
+  });
+
+  it('should render region normally when eids are in different order', () => {
+    const items = ['a', 'b', 'c'].map((id) => createActionable(id, 'main'));
+    const response = createBaselineResponse(items);
+
+    const previousRegions = new Map([['main', ['c', 'b', 'a']]]);
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
+
+    expect(xml).toContain('<region name="main">');
+    expect(xml).not.toContain('unchanged="true"');
+  });
+
+  it('should collapse multiple unchanged regions independently', () => {
+    const navItems = ['nav-1', 'nav-2'].map((id) => createActionable(id, 'nav'));
+    const footerItems = ['ftr-1'].map((id) => createActionable(id, 'footer'));
+    const mainItems = ['main-1'].map((id) => createActionable(id, 'main'));
+    const response = createBaselineResponse([...navItems, ...footerItems, ...mainItems]);
+
+    const previousRegions = new Map([
+      ['nav', ['nav-1', 'nav-2']],
+      ['footer', ['ftr-1']],
+      ['main', ['main-different']], // changed
+    ]);
+
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
+
+    expect(xml).toContain('<region name="nav" unchanged="true" count="2" />');
+    expect(xml).toContain('<region name="footer" unchanged="true" count="1" />');
+    expect(xml).toContain('<region name="main">');
+    expect(xml).toContain('id="main-1"');
+  });
+
+  it('should apply trimming to changed regions when trimRegions is true', () => {
+    // 20 main items + 3 unchanged nav items
+    const navItems = ['nav-1', 'nav-2', 'nav-3'].map((id) => createActionable(id, 'nav'));
+    const mainItems = Array.from({ length: 20 }, (_, i) =>
+      createActionable(`main-${i + 1}`, 'main')
+    );
+    const response = createBaselineResponse([...navItems, ...mainItems]);
+
+    const previousRegions = new Map([
+      ['nav', ['nav-1', 'nav-2', 'nav-3']], // unchanged
+      ['main', ['main-different']], // changed
+    ]);
+
+    const xml = renderStateXml(response, {
+      trimRegions: true,
+      previousResponseRegions: previousRegions,
+    });
+
+    // Nav should be collapsed (unchanged)
+    expect(xml).toContain('<region name="nav" unchanged="true" count="3" />');
+    // Main should be trimmed (changed, 20 elements with head=5, tail=5)
+    expect(xml).toContain(
+      '<!-- trimmed 10 items. Use find_elements with region=main to see all -->'
+    );
+  });
+
+  it('should skip trimming for unchanged regions even when trimRegions is true', () => {
+    // 20 nav items all unchanged — should collapse, not trim
+    const navItems = Array.from({ length: 20 }, (_, i) => createActionable(`nav-${i + 1}`, 'nav'));
+    const response = createBaselineResponse(navItems);
+
+    const previousRegions = new Map([
+      ['nav', Array.from({ length: 20 }, (_, i) => `nav-${i + 1}`)],
+    ]);
+
+    const xml = renderStateXml(response, {
+      trimRegions: true,
+      previousResponseRegions: previousRegions,
+    });
+
+    expect(xml).toContain('<region name="nav" unchanged="true" count="20" />');
+    expect(xml).not.toContain('<!-- trimmed');
+  });
+
+  it('should work with dedup only (trimRegions false)', () => {
+    const items = ['a', 'b'].map((id) => createActionable(id, 'main'));
+    const response = createBaselineResponse(items);
+
+    const previousRegions = new Map([['main', ['a', 'b']]]);
+    const xml = renderStateXml(response, {
+      trimRegions: false,
+      previousResponseRegions: previousRegions,
+    });
+
+    expect(xml).toContain('<region name="main" unchanged="true" count="2" />');
+  });
+
+  it('should NOT dedup in diff mode even when eids match', () => {
+    const items = [createActionable('btn-new', 'main')];
+
+    const diff: DiffResponse = {
+      mode: 'diff',
+      diff: {
+        actionables: { added: ['btn-new'], removed: [], changed: [] },
+        mutations: { textChanged: [], statusAppeared: [] },
+        isEmpty: false,
+        atoms: [],
+      },
+    };
+
+    const response: StateResponseObject = {
+      state: {
+        sid: 'test-session',
+        step: 2,
+        doc: {
+          url: 'https://example.com/',
+          origin: 'https://example.com',
+          title: 'Test Page',
+          doc_id: 'test-doc',
+          nav_type: 'soft',
+          history_idx: 0,
+        },
+        layer: { active: 'main', stack: ['main'], pointer_lock: false },
+        timing: { ts: '2024-01-01T00:00:00Z', dom_ready: true, network_busy: false },
+        hash: { ui: 'abc123', layer: 'def456' },
+      },
+      diff,
+      actionables: items,
+      counts: { shown: 1, total_in_layer: 1 },
+      limits: { max_actionables: 1000, actionables_capped: false },
+      atoms: { viewport: { w: 1280, h: 720, dpr: 1 }, scroll: { x: 0, y: 0 } },
+      tokens: 0,
+    };
+
+    // Even though previousResponseRegions has matching eids, diff mode should NOT dedup
+    const previousRegions = new Map([['main', ['btn-new']]]);
+    const xml = renderStateXml(response, { previousResponseRegions: previousRegions });
+
+    expect(xml).not.toContain('unchanged="true"');
+    expect(xml).toContain('<region name="main">');
+    expect(xml).toContain('id="btn-new"');
   });
 });

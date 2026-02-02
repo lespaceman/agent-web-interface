@@ -397,4 +397,243 @@ describe('StateManager', () => {
       }
     });
   });
+
+  describe('cross-baseline region deduplication', () => {
+    it('should not dedup on first baseline (no previous regions)', () => {
+      const snapshot = createTestSnapshot({
+        nodes: [
+          {
+            node_id: 'btn-1',
+            backend_node_id: 100,
+            kind: 'button',
+            label: 'Click',
+            where: { region: 'main' },
+            state: { visible: true, enabled: true },
+          },
+        ],
+      });
+
+      const response = stateManager.generateResponse(snapshot);
+
+      expect(response).toContain('<baseline reason="first"');
+      expect(response).toContain('<region name="main">');
+      expect(response).not.toContain('unchanged="true"');
+    });
+
+    it('should dedup unchanged regions across navigation baselines (A→B with same nav)', () => {
+      // Step 1: Navigate to page A — first baseline, establishes region state
+      const snapshotA = createTestSnapshot({
+        url: 'https://example.com/page-a',
+        nodes: [
+          {
+            node_id: 'nav-1',
+            backend_node_id: 100,
+            kind: 'link',
+            label: 'Home',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'nav-2',
+            backend_node_id: 101,
+            kind: 'link',
+            label: 'About',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'main-a',
+            backend_node_id: 200,
+            kind: 'button',
+            label: 'Page A Action',
+            where: { region: 'main' },
+            state: { visible: true, enabled: true },
+          },
+        ],
+      });
+      const r1 = stateManager.generateResponse(snapshotA);
+      expect(r1).toContain('<baseline reason="first"');
+      expect(r1).not.toContain('unchanged="true"');
+
+      // Step 2: Navigate to page B — nav region matches page A, main differs
+      const snapshotB = createTestSnapshot({
+        url: 'https://example.com/page-b',
+        nodes: [
+          {
+            node_id: 'nav-1',
+            backend_node_id: 100,
+            kind: 'link',
+            label: 'Home',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'nav-2',
+            backend_node_id: 101,
+            kind: 'link',
+            label: 'About',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'main-b',
+            backend_node_id: 201,
+            kind: 'button',
+            label: 'Page B Action',
+            where: { region: 'main' },
+            state: { visible: true, enabled: true },
+          },
+        ],
+      });
+      const r2 = stateManager.generateResponse(snapshotB);
+      expect(r2).toContain('<baseline reason="navigation"');
+      // Nav region unchanged from page A → deduped
+      expect(r2).toContain('<region name="nav" unchanged="true"');
+      // Main region changed → rendered normally
+      expect(r2).toContain('<region name="main">');
+    });
+
+    it('should dedup unchanged regions on navigation when eids match', () => {
+      // Step 1: First baseline on page A
+      const snapshotA = createTestSnapshot({
+        url: 'https://example.com/page-a',
+        nodes: [
+          {
+            node_id: 'nav-1',
+            backend_node_id: 100,
+            kind: 'link',
+            label: 'Home',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'main-a',
+            backend_node_id: 200,
+            kind: 'button',
+            label: 'Page A Action',
+            where: { region: 'main' },
+            state: { visible: true, enabled: true },
+          },
+        ],
+      });
+      stateManager.generateResponse(snapshotA);
+
+      // Step 2: Navigate to page B — same nav, different main
+      // Dedup fires for nav because eid comparison matches
+      const snapshotB = createTestSnapshot({
+        url: 'https://example.com/page-b',
+        nodes: [
+          {
+            node_id: 'nav-1',
+            backend_node_id: 100,
+            kind: 'link',
+            label: 'Home',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'main-b',
+            backend_node_id: 201,
+            kind: 'button',
+            label: 'Page B Action',
+            where: { region: 'main' },
+            state: { visible: true, enabled: true },
+          },
+        ],
+      });
+      const r2 = stateManager.generateResponse(snapshotB);
+
+      expect(r2).toContain('<baseline reason="navigation"');
+      // Nav region unchanged → collapsed
+      expect(r2).toContain('<region name="nav" unchanged="true"');
+      // Main region changed → rendered normally
+      expect(r2).toContain('<region name="main">');
+    });
+
+    it('should not dedup when nav region changes across navigations', () => {
+      // Step 1: Navigate to page A
+      const snapshotA = createTestSnapshot({
+        url: 'https://example.com/page-a',
+        nodes: [
+          {
+            node_id: 'nav-1',
+            backend_node_id: 100,
+            kind: 'link',
+            label: 'Home',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'main-a',
+            backend_node_id: 200,
+            kind: 'button',
+            label: 'Action A',
+            where: { region: 'main' },
+            state: { visible: true, enabled: true },
+          },
+        ],
+      });
+      stateManager.generateResponse(snapshotA);
+
+      // Step 2: Navigate to page B — different nav structure
+      const snapshotB = createTestSnapshot({
+        url: 'https://example.com/page-b',
+        nodes: [
+          {
+            node_id: 'nav-1',
+            backend_node_id: 100,
+            kind: 'link',
+            label: 'Home',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'main-b',
+            backend_node_id: 201,
+            kind: 'button',
+            label: 'Action B',
+            where: { region: 'main' },
+            state: { visible: true, enabled: true },
+          },
+        ],
+      });
+      stateManager.generateResponse(snapshotB);
+
+      // Step 3: Navigate to page C — nav has extra item compared to page B
+      const snapshotC = createTestSnapshot({
+        url: 'https://example.com/page-c',
+        nodes: [
+          {
+            node_id: 'nav-1',
+            backend_node_id: 100,
+            kind: 'link',
+            label: 'Home',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'nav-extra',
+            backend_node_id: 102,
+            kind: 'link',
+            label: 'Settings',
+            where: { region: 'nav' },
+            state: { visible: true, enabled: true },
+          },
+          {
+            node_id: 'main-c',
+            backend_node_id: 202,
+            kind: 'button',
+            label: 'Action C',
+            where: { region: 'main' },
+            state: { visible: true, enabled: true },
+          },
+        ],
+      });
+      const r3 = stateManager.generateResponse(snapshotC);
+
+      // Nav region changed (extra item) → should NOT dedup
+      expect(r3).toContain('<region name="nav">');
+      expect(r3).not.toContain('unchanged="true"');
+    });
+  });
 });

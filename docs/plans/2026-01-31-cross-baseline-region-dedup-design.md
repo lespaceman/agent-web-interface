@@ -54,21 +54,21 @@ Add to `StateManagerContext`:
 
 ```ts
 // Map of region name → ordered eid list from the most recent baseline
-previousBaselineRegions: Map<string, string[]> | null;
+previousResponseRegions: Map<string, string[]> | null;
 ```
 
 In `doGenerateResponse()`, after `getBaselineInfo()` determines this is a baseline:
 
 - After `formatActionables()` builds the ActionableInfo[] array, extract region → eid mapping
-- Pass `previousBaselineRegions` into `renderStateXml()` via `RenderOptions`
-- After rendering, update `previousBaselineRegions` with the current baseline's regions
+- Pass `previousResponseRegions` into `renderStateXml()` via `RenderOptions`
+- After rendering, update `previousResponseRegions` with the current baseline's regions
 
 Extend `RenderOptions`:
 
 ```ts
 interface RenderOptions {
   trimRegions?: boolean;
-  previousBaselineRegions?: Map<string, string[]>;
+  previousResponseRegions?: Map<string, string[]>;
 }
 ```
 
@@ -79,7 +79,7 @@ In `renderStateXml()`, inside the region rendering loop:
 ```
 For each region:
   1. Extract current eid list from the region's actionables
-  2. If previousBaselineRegions has this region AND eid lists match exactly:
+  2. If previousResponseRegions has this region AND eid lists match exactly:
      → Render: <region name="nav" unchanged="true" count="73" />
      → Skip trimming entirely
   3. Else:
@@ -101,7 +101,7 @@ function areEidListsEqual(a: string[], b: string[]): boolean {
 
 #### 3. `src/tools/browser-tools.ts` — No changes needed
 
-navigate() and captureSnapshot() already pass `{ trimRegions: true }`. The `previousBaselineRegions` is managed internally by StateManager.
+navigate() and captureSnapshot() already pass `{ trimRegions: true }`. The `previousResponseRegions` is managed internally by StateManager.
 
 ### Call Flow
 
@@ -112,17 +112,17 @@ navigate() / captureSnapshot()
     → formatActionables() → ActionableInfo[] with ctx.region
     → renderStateXml(response, {
         trimRegions: true,
-        previousBaselineRegions: context.previousBaselineRegions
+        previousResponseRegions: context.previousResponseRegions
       })
       → for each region:
           if eid list matches previous → <region ... unchanged="true" count="N" />
           else → apply trimming → render elements
-    → update context.previousBaselineRegions with current regions
+    → update context.previousResponseRegions with current regions
 ```
 
 ## Edge Cases
 
-1. **First baseline** — `previousBaselineRegions` is null. No dedup. All regions render in full.
+1. **First baseline** — `previousResponseRegions` is null. No dedup. All regions render in full.
 2. **Cross-domain navigation** — Different site has different eids. Dedup naturally produces no matches.
 3. **New region appears** — No prior entry in map. Renders in full.
 4. **Region disappears** — Not in current snapshot. Nothing to render.
@@ -137,16 +137,16 @@ navigate() / captureSnapshot()
 - Region with identical eid list to previous → collapsed `<region ... unchanged="true" count="N" />`
 - Region with different eid list → renders normally (with trimming)
 - Region not in previous baseline map → renders normally
-- `previousBaselineRegions` is null (first baseline) → all regions normal
+- `previousResponseRegions` is null (first baseline) → all regions normal
 - Same eids, different order → renders normally
 - Empty region (0 actionables) → not rendered (unchanged behavior)
 - Changed region with many elements → trimming still applies
 
 ### Unit Tests: `state-manager.ts`
 
-- After first baseline, `previousBaselineRegions` is populated
-- After second baseline, `previousBaselineRegions` is updated
-- Diff responses don't modify `previousBaselineRegions`
+- After first baseline, `previousResponseRegions` is populated
+- After second baseline, `previousResponseRegions` is updated
+- All responses (baseline and diff) update `previousResponseRegions` so comparisons reflect the most recent state
 - Correct region name → ordered eid array mapping
 
 ## Expected Token Savings
