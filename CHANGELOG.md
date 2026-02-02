@@ -1,3 +1,15 @@
+## [4.0.1] - 2026-02-02
+
+- Merge pull request #50 from lespaceman/fix/take-screenshot-review-issues
+- style: fix prettier formatting in test files
+- Merge pull request #49 from lespaceman/feat/cross-baseline-region-dedup
+- fix: address review issues in cross-baseline region dedup
+- fix: address critical issues from take_screenshot PR review
+- feat: add cross-baseline region deduplication
+- Merge pull request #48 from lespaceman/feature/take-screenshot
+- style: fix prettier formatting in test files
+- feat: add take_screenshot MCP tool
+
 ## [4.0.0] - 2026-02-01
 
 - Merge pull request #47 from lespaceman/rename/agent-web-interface
