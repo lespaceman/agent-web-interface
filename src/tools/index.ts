@@ -26,6 +26,8 @@ export {
   select,
   hover,
   takeScreenshot,
+  watchNetwork,
+  getNetworkRequests,
 } from './browser-tools.js';
 
 // Server config - lazy browser initialization
@@ -129,6 +131,18 @@ export {
   TakeScreenshotOutputSchema,
   type TakeScreenshotInput,
   type TakeScreenshotOutput,
+  // watch_network
+  WatchNetworkInputSchema,
+  WatchNetworkInputSchemaBase,
+  WatchNetworkOutputSchema,
+  type WatchNetworkInput,
+  type WatchNetworkOutput,
+  // get_network_requests
+  GetNetworkRequestsInputSchema,
+  GetNetworkRequestsInputSchemaBase,
+  GetNetworkRequestsOutputSchema,
+  type GetNetworkRequestsInput,
+  type GetNetworkRequestsOutput,
 } from './tool-schemas.js';
 
 // Tool result types

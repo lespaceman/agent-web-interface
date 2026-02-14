@@ -42,6 +42,8 @@ import {
   getFormUnderstanding,
   getFieldContext,
   takeScreenshot,
+  watchNetwork,
+  getNetworkRequests,
   // Input schemas only (all outputs are XML strings now)
   ListPagesInputSchema,
   ClosePageInputSchema,
@@ -63,6 +65,8 @@ import {
   GetFormUnderstandingInputSchema,
   GetFieldContextInputSchema,
   TakeScreenshotInputSchemaBase,
+  WatchNetworkInputSchemaBase,
+  GetNetworkRequestsInputSchemaBase,
 } from './tools/index.js';
 
 /**
@@ -252,6 +256,32 @@ function initializeServer(): BrowserAutomationServer {
       inputSchema: TakeScreenshotInputSchemaBase.shape,
     },
     withLazyInit(takeScreenshot, 'take_screenshot')
+  );
+
+  // ============================================================================
+  // NETWORK TOOLS
+  // ============================================================================
+
+  server.registerTool(
+    'watch_network',
+    {
+      title: 'Watch Network',
+      description:
+        'Start watching network requests on a page. Specify resource types to filter (defaults to XHR only). Call get_network_requests to retrieve captured requests. If already watching, reconfigures the filter and clears previous data.',
+      inputSchema: WatchNetworkInputSchemaBase.shape,
+    },
+    withLazyInit(watchNetwork, 'watch_network')
+  );
+
+  server.registerTool(
+    'get_network_requests',
+    {
+      title: 'Get Network Requests',
+      description:
+        'Retrieve all network requests captured since the last watch_network or get_network_requests call. Clears the buffer after retrieval so the next call only returns new requests. Requires watch_network to be called first.',
+      inputSchema: GetNetworkRequestsInputSchemaBase.shape,
+    },
+    withLazyInit(getNetworkRequests, 'get_network_requests')
   );
 
   // ============================================================================

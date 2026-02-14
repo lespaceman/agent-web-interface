@@ -16,6 +16,8 @@ import {
   scrollPage as scrollPageByAmount,
 } from '../snapshot/index.js';
 import { observationAccumulator } from '../observation/index.js';
+import { getOrCreateWatcher, getWatcher } from '../network/index.js';
+import { renderNetworkRequestsXml } from '../network/network-renderer.js';
 import { ATTACHMENT_SIGNIFICANCE_THRESHOLD } from '../observation/observation.types.js';
 import type { NodeDetails } from './tool-schemas.js';
 import {
@@ -36,6 +38,8 @@ import {
   SelectInputSchema,
   HoverInputSchema,
   TakeScreenshotInputSchema,
+  WatchNetworkInputSchema,
+  GetNetworkRequestsInputSchema,
 } from './tool-schemas.js';
 import { captureScreenshot, getElementBoundingBox } from '../screenshot/index.js';
 import { cleanupTempFiles } from '../lib/temp-file.js';
@@ -365,6 +369,12 @@ async function executeNavigationAction(
   // Re-inject observation accumulator (new document context after navigation)
   await observationAccumulator.inject(handle.page);
 
+  // Notify network watcher of navigation (if active)
+  const navWatcher = getWatcher(handle.page);
+  if (navWatcher?.isActive()) {
+    navWatcher.markNavigation();
+  }
+
   // Auto-capture snapshot after navigation
   const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
   handle = captureResult.handle;
@@ -461,6 +471,12 @@ export async function navigate(
   getDependencyTracker().clearPage(page_id);
 
   await session.navigateTo(page_id, input.url);
+
+  // Notify network watcher of navigation (if active)
+  const directNavWatcher = getWatcher(handle.page);
+  if (directNavWatcher?.isActive()) {
+    directNavWatcher.markNavigation();
+  }
 
   // Auto-capture snapshot after navigation
   const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
@@ -963,4 +979,54 @@ export async function takeScreenshot(
     clip,
     captureBeyondViewport: input.fullPage ?? false,
   });
+}
+
+// ============================================================================
+// NETWORK WATCHING TOOLS
+// ============================================================================
+
+/**
+ * Start watching network requests on a page.
+ *
+ * Attaches network event listeners filtered by resource type.
+ * If already watching, reconfigures the filter and clears accumulated data.
+ *
+ * @param rawInput - Watch options (will be validated)
+ * @returns Confirmation message
+ */
+export function watchNetwork(rawInput: unknown): import('./tool-schemas.js').WatchNetworkOutput {
+  const input = WatchNetworkInputSchema.parse(rawInput);
+  const session = getSessionManager();
+  const handle = resolveExistingPage(session, input.page_id);
+
+  const watcher = getOrCreateWatcher(handle.page);
+  watcher.attach(handle.page, input.resource_types);
+
+  const types = watcher.getResourceTypes().join(', ');
+  return `Watching network requests on page ${handle.page_id} for: ${types}`;
+}
+
+/**
+ * Retrieve accumulated network requests and clear the buffer.
+ *
+ * Returns all requests captured since the last watch_network or
+ * get_network_requests call, then clears the buffer.
+ *
+ * @param rawInput - Retrieval options (will be validated)
+ * @returns XML string with captured requests
+ */
+export function getNetworkRequests(
+  rawInput: unknown
+): import('./tool-schemas.js').GetNetworkRequestsOutput {
+  const input = GetNetworkRequestsInputSchema.parse(rawInput);
+  const session = getSessionManager();
+  const handle = resolveExistingPage(session, input.page_id);
+
+  const watcher = getWatcher(handle.page);
+  if (!watcher?.isActive()) {
+    return '<error>Network watcher not active on this page. Call watch_network first.</error>';
+  }
+
+  const entries = watcher.getAndClear();
+  return renderNetworkRequestsXml(entries, handle.page_id);
 }

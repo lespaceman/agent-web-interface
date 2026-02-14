@@ -809,3 +809,58 @@ export const TakeScreenshotOutputSchema = z.discriminatedUnion('type', [
 ]);
 
 export type TakeScreenshotOutput = z.infer<typeof TakeScreenshotOutputSchema>;
+
+// ============================================================================
+// watch_network - Start watching network requests
+// ============================================================================
+
+const WatchNetworkInputSchemaBase = z.object({
+  /** Page ID. If omitted, operates on the most recently used page */
+  page_id: z.string().optional().describe('The ID of the page to watch network requests on.'),
+  /** Resource types to capture. Defaults to ["xhr"]. */
+  resource_types: z
+    .array(
+      z.enum([
+        'xhr',
+        'fetch',
+        'document',
+        'stylesheet',
+        'image',
+        'media',
+        'font',
+        'script',
+        'websocket',
+        'manifest',
+        'other',
+      ])
+    )
+    .optional()
+    .describe(
+      'Resource types to watch. Defaults to ["xhr"]. Available: xhr, fetch, document, stylesheet, image, media, font, script, websocket, manifest, other.'
+    ),
+});
+
+export const WatchNetworkInputSchema = WatchNetworkInputSchemaBase;
+export { WatchNetworkInputSchemaBase };
+
+export type WatchNetworkInput = z.infer<typeof WatchNetworkInputSchema>;
+
+export const WatchNetworkOutputSchema = z.string();
+export type WatchNetworkOutput = z.infer<typeof WatchNetworkOutputSchema>;
+
+// ============================================================================
+// get_network_requests - Retrieve accumulated network requests
+// ============================================================================
+
+const GetNetworkRequestsInputSchemaBase = z.object({
+  /** Page ID. If omitted, operates on the most recently used page */
+  page_id: z.string().optional().describe('The ID of the page to retrieve network requests from.'),
+});
+
+export const GetNetworkRequestsInputSchema = GetNetworkRequestsInputSchemaBase;
+export { GetNetworkRequestsInputSchemaBase };
+
+export type GetNetworkRequestsInput = z.infer<typeof GetNetworkRequestsInputSchema>;
+
+export const GetNetworkRequestsOutputSchema = z.string();
+export type GetNetworkRequestsOutput = z.infer<typeof GetNetworkRequestsOutputSchema>;
