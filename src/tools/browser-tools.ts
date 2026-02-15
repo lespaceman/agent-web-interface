@@ -16,8 +16,7 @@ import {
   scrollPage as scrollPageByAmount,
 } from '../snapshot/index.js';
 import { observationAccumulator } from '../observation/index.js';
-import { getOrCreateWatcher, getWatcher } from '../network/index.js';
-import { renderNetworkRequestsXml } from '../network/network-renderer.js';
+import { getOrCreateWatcher, getWatcher, renderNetworkRequestsXml } from '../network/index.js';
 import { ATTACHMENT_SIGNIFICANCE_THRESHOLD } from '../observation/observation.types.js';
 import type { NodeDetails } from './tool-schemas.js';
 import {
