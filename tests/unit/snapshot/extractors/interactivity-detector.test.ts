@@ -69,15 +69,31 @@ describe('Interactivity Detector', () => {
       mockCdp.setResponse('CSS.getComputedStyleForNode', {
         computedStyle: [{ name: 'cursor', value: 'pointer' }],
       });
-      mockCdp.setResponse('DOM.resolveNode', { object: { objectId: 'obj-10' } });
-      mockCdp.setResponse('DOMDebugger.getEventListeners', { listeners: [] });
-      mockCdp.setResponse('Runtime.releaseObject', {});
 
       const ctx = createExtractorContext(mockCdp, { width: 1280, height: 720 });
       const result = await detectInteractivity(ctx, [10], domNodes);
 
       expect(result.has(10)).toBe(true);
       expect(result.get(10)!.has_cursor_pointer).toBe(true);
+    });
+
+    it('should short-circuit and skip listener checks when cursor:pointer detected', async () => {
+      const domNodes = new Map<number, RawDomNode>();
+      domNodes.set(10, makeDomNode(10));
+
+      mockCdp.setResponse('DOM.pushNodesByBackendIdsToFrontend', { nodeIds: [100] });
+      mockCdp.setResponse('CSS.getComputedStyleForNode', {
+        computedStyle: [{ name: 'cursor', value: 'pointer' }],
+      });
+
+      const ctx = createExtractorContext(mockCdp, { width: 1280, height: 720 });
+      await detectInteractivity(ctx, [10], domNodes);
+
+      // DOM.resolveNode should NOT be called since cursor:pointer short-circuits
+      const resolveNodeCalls = mockCdp.sendSpy.mock.calls.filter(
+        (c: unknown[]) => c[0] === 'DOM.resolveNode'
+      );
+      expect(resolveNodeCalls).toHaveLength(0);
     });
   });
 

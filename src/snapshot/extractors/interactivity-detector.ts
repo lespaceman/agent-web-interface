@@ -123,6 +123,12 @@ export async function detectInteractivity(
       // CSS check failed — continue with other signals
     }
 
+    // Short-circuit: skip expensive listener checks if we already have a positive signal
+    if (signals.has_cursor_pointer || signals.has_tabindex) {
+      results.set(backendNodeId, signals);
+      continue;
+    }
+
     // Check event listeners on self
     let objectId: string | undefined;
     try {

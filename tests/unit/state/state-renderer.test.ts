@@ -752,6 +752,26 @@ describe('renderActionable kind attribute', () => {
     expect(xml).not.toContain('kind=');
   });
 
+  it('should not render kind attribute when role is generic', () => {
+    const actionable: ActionableInfo = {
+      eid: 'abc123def456',
+      kind: 'generic',
+      name: 'Div Element',
+      role: 'generic',
+      vis: true,
+      ena: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'div "Div Element"' } },
+      ctx: { layer: 'main', region: 'main' },
+    };
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<elt id="abc123def456">Div Element</elt>');
+    expect(xml).not.toContain('kind=');
+  });
+
   it('should escape XML special characters in kind attribute', () => {
     const actionable: ActionableInfo = {
       eid: 'abc123def456',

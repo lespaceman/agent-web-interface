@@ -622,11 +622,14 @@ export class SnapshotCompiler {
     }
 
     // Collect unknown-classification AX nodes NOT yet in nodesToProcess (Case B)
+    // Cap candidates to bound worst-case CDP call volume on complex pages
+    const MAX_CASE_B_CANDIDATES = 200;
     const alreadyIncluded = new Set(nodesToProcess.map((n) => n.backendNodeId));
     const caseB_candidates: number[] = [];
     if (axResult) {
       for (const [backendNodeId, axNode] of axResult.nodes) {
         if (alreadyIncluded.has(backendNodeId)) continue;
+        if (caseB_candidates.length >= MAX_CASE_B_CANDIDATES) break;
         const classification = classifyAxRole(axNode.role);
         if (classification === 'unknown') {
           caseB_candidates.push(backendNodeId);

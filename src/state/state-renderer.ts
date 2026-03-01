@@ -248,7 +248,7 @@ function renderActionable(item: ActionableInfo, _diff?: StateResponseObject['dif
   const attrs: string[] = [`id="${item.eid}"`];
 
   // Add kind attribute for non-standard tags to give the agent context
-  if (tag === 'elt' && item.role && item.role !== 'none') {
+  if (tag === 'elt' && item.role && item.role !== 'none' && item.role !== 'generic') {
     attrs.push(`kind="${escapeXml(item.role)}"`);
   }
 

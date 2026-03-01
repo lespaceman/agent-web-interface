@@ -395,7 +395,7 @@ export function isInteractiveNode(node: ReadableNode): boolean {
     'tab',
     'menuitem',
   ];
-  return interactiveKinds.includes(node.kind);
+  return interactiveKinds.includes(node.kind) || node.implicitly_interactive === true;
 }
 
 /**
