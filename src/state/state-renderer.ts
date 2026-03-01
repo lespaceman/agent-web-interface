@@ -247,6 +247,11 @@ function renderActionable(item: ActionableInfo, _diff?: StateResponseObject['dif
   const tag = mapKindToTag(item.kind);
   const attrs: string[] = [`id="${item.eid}"`];
 
+  // Add kind attribute for non-standard tags to give the agent context
+  if (tag === 'elt' && item.role && item.role !== 'none') {
+    attrs.push(`kind="${escapeXml(item.role)}"`);
+  }
+
   // State flags (descriptive names with boolean values)
   if (!item.ena) attrs.push(`enabled="false"`);
   if (!item.vis) attrs.push(`visible="false"`);

@@ -659,6 +659,120 @@ describe('renderStateXml mutations', () => {
 });
 
 // ============================================================================
+// renderActionable Kind Attribute Tests
+// ============================================================================
+
+describe('renderActionable kind attribute', () => {
+  /**
+   * Create a baseline response with specific actionables to test rendering.
+   */
+  function createBaselineWithActionables(actionables: ActionableInfo[]): StateResponseObject {
+    return {
+      state: {
+        sid: 'test-session',
+        step: 1,
+        doc: {
+          url: 'https://example.com/',
+          origin: 'https://example.com',
+          title: 'Test Page',
+          doc_id: 'test-doc',
+          nav_type: 'hard',
+          history_idx: 0,
+        },
+        layer: { active: 'main', stack: ['main'], pointer_lock: false },
+        timing: { ts: '2024-01-01T00:00:00Z', dom_ready: true, network_busy: false },
+        hash: { ui: 'abc123', layer: 'def456' },
+      },
+      diff: { mode: 'baseline', reason: 'first' } as BaselineResponse,
+      actionables,
+      counts: { shown: actionables.length, total_in_layer: actionables.length },
+      limits: { max_actionables: 1000, actionables_capped: false },
+      atoms: { viewport: { w: 1280, h: 720, dpr: 1 }, scroll: { x: 0, y: 0 } },
+      tokens: 0,
+    };
+  }
+
+  it('should render kind attribute for non-standard interactive elements', () => {
+    const actionable: ActionableInfo = {
+      eid: 'abc123def456',
+      kind: 'generic',
+      name: 'Product Row',
+      role: 'row',
+      vis: true,
+      ena: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'row "Product Row"' } },
+      ctx: { layer: 'main', region: 'main' },
+    };
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<elt id="abc123def456" kind="row">Product Row</elt>');
+  });
+
+  it('should not render kind attribute for standard tag elements', () => {
+    const actionable: ActionableInfo = {
+      eid: 'abc123def456',
+      kind: 'button',
+      name: 'Submit',
+      role: 'button',
+      vis: true,
+      ena: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'button "Submit"' } },
+      ctx: { layer: 'main', region: 'main' },
+    };
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    // btn tag, not elt, so no kind attribute
+    expect(xml).toContain('<btn id="abc123def456">Submit</btn>');
+    expect(xml).not.toContain('kind=');
+  });
+
+  it('should not render kind attribute when role is none', () => {
+    const actionable: ActionableInfo = {
+      eid: 'abc123def456',
+      kind: 'generic',
+      name: 'Div Element',
+      role: 'none',
+      vis: true,
+      ena: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'div "Div Element"' } },
+      ctx: { layer: 'main', region: 'main' },
+    };
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('<elt id="abc123def456">Div Element</elt>');
+    expect(xml).not.toContain('kind=');
+  });
+
+  it('should escape XML special characters in kind attribute', () => {
+    const actionable: ActionableInfo = {
+      eid: 'abc123def456',
+      kind: 'generic',
+      name: 'Test',
+      role: 'cell<>',
+      vis: true,
+      ena: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'cell "Test"' } },
+      ctx: { layer: 'main', region: 'main' },
+    };
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('kind="cell&lt;&gt;"');
+  });
+});
+
+// ============================================================================
 // Region Trimming Tests
 // ============================================================================
 
