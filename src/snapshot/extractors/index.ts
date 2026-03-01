@@ -18,6 +18,7 @@ export type {
   DomExtractionResult,
   AxExtractionResult,
   LayoutExtractionResult,
+  InteractivitySignals,
 } from './types.js';
 
 export {
@@ -61,3 +62,6 @@ export {
   sanitizeUrl,
   type AttributeExtractionOptions,
 } from './attribute-extractor.js';
+
+// Interactivity Detector
+export { detectInteractivity } from './interactivity-detector.js';

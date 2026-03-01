@@ -128,6 +128,9 @@ export interface ReadableNode {
 
   /** Additional attributes for specific node types */
   attributes?: NodeAttributes;
+
+  /** True if element has implicit interactivity signals (click listeners, cursor:pointer, tabindex) */
+  implicitly_interactive?: boolean;
 }
 
 /**
@@ -392,7 +395,7 @@ export function isInteractiveNode(node: ReadableNode): boolean {
     'tab',
     'menuitem',
   ];
-  return interactiveKinds.includes(node.kind);
+  return interactiveKinds.includes(node.kind) || node.implicitly_interactive === true;
 }
 
 /**
