@@ -1,3 +1,8 @@
+## [4.1.1] - 2026-03-01
+
+- Merge pull request #52 from lespaceman/fix/portal-overlay-snapshot
+- fix: portal-rendered overlay content missing from snapshots
+
 ## [4.0.1] - 2026-02-02
 
 - Merge pull request #50 from lespaceman/fix/take-screenshot-review-issues
