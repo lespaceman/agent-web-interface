@@ -125,11 +125,11 @@ describe('Interactivity Detector', () => {
         computedStyle: [{ name: 'cursor', value: 'default' }],
       });
       mockCdp.setResponse('DOM.resolveNode', (params) => {
-        const bid = (params!).backendNodeId as number;
+        const bid = params!.backendNodeId as number;
         return { object: { objectId: `obj-${bid}` } };
       });
       mockCdp.setResponse('DOMDebugger.getEventListeners', (params) => {
-        const objId = (params!).objectId as string;
+        const objId = params!.objectId as string;
         if (objId === 'obj-5') {
           return {
             listeners: [

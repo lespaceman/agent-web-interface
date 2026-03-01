@@ -126,10 +126,9 @@ export async function detectInteractivity(
     // Check event listeners on self
     let objectId: string | undefined;
     try {
-      const resolveResult = await cdp.send<{ object: { objectId?: string } }>(
-        'DOM.resolveNode',
-        { backendNodeId }
-      );
+      const resolveResult = await cdp.send<{ object: { objectId?: string } }>('DOM.resolveNode', {
+        backendNodeId,
+      });
       objectId = resolveResult.object.objectId;
 
       if (objectId) {
@@ -208,10 +207,9 @@ async function checkAncestorListeners(
     // Check parent's event listeners
     let objectId: string | undefined;
     try {
-      const resolveResult = await cdp.send<{ object: { objectId?: string } }>(
-        'DOM.resolveNode',
-        { backendNodeId: parentId }
-      );
+      const resolveResult = await cdp.send<{ object: { objectId?: string } }>('DOM.resolveNode', {
+        backendNodeId: parentId,
+      });
       objectId = resolveResult.object.objectId;
 
       if (objectId) {

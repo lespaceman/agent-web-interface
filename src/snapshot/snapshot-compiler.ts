@@ -597,8 +597,18 @@ export class SnapshotCompiler {
     // Also check unincluded AX nodes with unknown classification for interactivity
     const nonInteractiveIds: number[] = [];
     const interactiveKindSet = new Set([
-      'button', 'link', 'input', 'textarea', 'select', 'combobox',
-      'checkbox', 'radio', 'switch', 'slider', 'tab', 'menuitem',
+      'button',
+      'link',
+      'input',
+      'textarea',
+      'select',
+      'combobox',
+      'checkbox',
+      'radio',
+      'switch',
+      'slider',
+      'tab',
+      'menuitem',
     ]);
 
     // Collect non-interactive nodes already in nodesToProcess (Case A)
