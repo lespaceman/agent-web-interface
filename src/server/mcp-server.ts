@@ -5,6 +5,7 @@
  * Tool registrations will be added as the new semantic snapshot system is built.
  */
 
+import { EventEmitter } from 'events';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { ZodRawShape } from 'zod';
@@ -26,11 +27,22 @@ export interface ServerConfig {
  *
  * Minimal shell - tool handlers will be registered by the new semantic snapshot system.
  */
-export class BrowserAutomationServer implements McpNotificationSender {
+export interface SessionStartEvent {
+  clientInfo: { name: string; version: string } | undefined;
+}
+
+export interface BrowserAutomationServerEvents {
+  'session:start': [event: SessionStartEvent];
+  'session:end': [];
+}
+
+export class BrowserAutomationServer extends EventEmitter implements McpNotificationSender {
   private server: McpServer;
   private transport: StdioServerTransport;
 
   constructor(private readonly config: ServerConfig) {
+    super();
+
     // Create MCP server instance
     // Note: Tools capability is auto-registered when tools are added via .tool()
     // But logging capability must be declared explicitly for setRequestHandler to work
@@ -54,6 +66,9 @@ export class BrowserAutomationServer implements McpNotificationSender {
 
     // Register a minimal ping tool (required for tools/list to work)
     this.registerPingTool();
+
+    // Wire up MCP lifecycle hooks
+    this.registerLifecycleHooks();
 
     // Wire up logging service to MCP server
     const logger = getLogger();
@@ -193,6 +208,25 @@ export class BrowserAutomationServer implements McpNotificationSender {
       logger.info(`Log level set to: ${level}`);
       return {};
     });
+  }
+
+  /**
+   * Wire up MCP protocol lifecycle hooks.
+   * Emits 'session:start' after MCP handshake and 'session:end' on connection close.
+   */
+  private registerLifecycleHooks(): void {
+    const logger = getLogger();
+
+    this.server.server.oninitialized = () => {
+      const clientInfo = this.server.server.getClientVersion();
+      logger.info('MCP session initialized', { clientInfo });
+      this.emit('session:start', { clientInfo });
+    };
+
+    this.server.server.onclose = () => {
+      logger.info('MCP session closed');
+      this.emit('session:end');
+    };
   }
 
   /**
