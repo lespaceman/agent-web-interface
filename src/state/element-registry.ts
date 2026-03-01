@@ -66,8 +66,8 @@ export class ElementRegistry {
 
     // Process all interactive nodes
     for (const node of snapshot.nodes) {
-      // Only track interactive elements
-      if (!isInteractiveKind(node.kind)) continue;
+      // Track interactive elements and implicitly interactive elements
+      if (!isInteractiveKind(node.kind) && !node.implicitly_interactive) continue;
 
       // Compute eid (with collision resolution)
       const baseEid = computeEid(node, activeLayer);

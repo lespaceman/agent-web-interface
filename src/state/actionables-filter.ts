@@ -60,7 +60,7 @@ export function selectActionables(
   // Filter to candidates
   const candidates = snapshot.nodes.filter((node) => {
     // Must be interactive
-    if (!isInteractiveKind(node.kind)) {
+    if (!isInteractiveKind(node.kind) && !node.implicitly_interactive) {
       return false;
     }
 
