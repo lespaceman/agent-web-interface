@@ -1,6 +1,6 @@
 {
   "name": "agent-web-interface",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "description": "MCP server for AI-powered browser automation with semantic page snapshots",
   "type": "module",
   "main": "dist/src/index.js",
