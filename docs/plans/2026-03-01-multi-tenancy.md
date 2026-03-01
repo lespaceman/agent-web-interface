@@ -13,6 +13,7 @@
 ## Context: Current Architecture
 
 ### What exists today (single-tenant)
+
 - **One `SessionManager` singleton** per process (`src/server/server-config.ts:47-50`)
 - **One `BrowserContext`** — all pages share cookies/storage (`src/browser/session-manager.ts:266`)
 - **Per-page state** — `StateManager` (keyed by `page_id` in `execute-action.ts:37`), `ElementRegistry` (`element-registry.ts:232`), `SnapshotStore` (`browser-tools.ts:79`)
@@ -21,10 +22,12 @@
 - **No MCP lifecycle hooks** — `oninitialized` and `onclose` are unused
 
 ### What exists but is unused
+
 - **`SessionStore`** (`src/server/session-store.ts`) — TTL-based tenant session tracking with auto-cleanup. Has tests at `tests/unit/server/session-store.test.ts`. Never wired up.
 - **Stale branch** `origin/backup/multi-tenant-worker-manager` — 5,400 lines: `WorkerManager`, `LeaseManager`, `HealthMonitor`, `PortAllocator`, `ChromeWorkerProcess`, error classes, full test suite. Designed for env-var tenancy (`TENANT_ID`), not MCP-session-scoped. `LeaseManager`, `HealthMonitor`, `PortAllocator`, error types are directly reusable.
 
 ### MCP SDK lifecycle hooks available
+
 ```typescript
 // After MCP handshake completes (called once per MCP connection)
 this.server.server.oninitialized = () => {
@@ -39,12 +42,15 @@ this.server.server.onclose = () => {
 ```
 
 ### The stale session problem
+
 Agent loses page access because:
+
 1. MCP server = child process of agent host → host exits → browser dies
 2. No reconnect mechanism → new agent run = fresh process = fresh browser
 3. `shutdown()` kills browser instead of detaching
 
 ### Solution: Tie browser to MCP session, not tool calls
+
 ```
 Claude Code starts → spawns MCP server → oninitialized fires → create browser session
   Agent run 1: tool calls (browser persists)
@@ -58,6 +64,7 @@ Claude Code exits → stdin closes → onclose fires → detach browser (don't k
 ## Task 1: Add MCP Lifecycle Hooks to BrowserAutomationServer
 
 **Files:**
+
 - Modify: `src/server/mcp-server.ts`
 - Test: `tests/unit/server/mcp-server-lifecycle.test.ts`
 
@@ -167,6 +174,7 @@ Expected: FAIL — `serverInstance.on is not a function` and `oninitialized` is 
 **Step 3: Implement lifecycle hooks in BrowserAutomationServer**
 
 Modify `src/server/mcp-server.ts`:
+
 - Add `EventEmitter` to `BrowserAutomationServer`
 - In constructor, after creating McpServer, wire up:
   ```typescript
@@ -201,6 +209,7 @@ feat: add MCP lifecycle hooks (oninitialized, onclose) to BrowserAutomationServe
 ## Task 2: Create SessionRegistry — Session-Scoped State Container
 
 **Files:**
+
 - Create: `src/session/session-registry.ts`
 - Create: `src/session/session-registry.types.ts`
 - Test: `tests/unit/session/session-registry.test.ts`
@@ -314,6 +323,7 @@ Expected: FAIL — module not found
 **Step 3: Implement SessionRegistry**
 
 Create `src/session/session-registry.types.ts`:
+
 ```typescript
 export interface SessionEntry {
   sessionId: string;
@@ -327,6 +337,7 @@ export interface SessionEntry {
 ```
 
 Create `src/session/session-registry.ts`:
+
 ```typescript
 import { randomUUID } from 'crypto';
 import type { SessionEntry } from './session-registry.types.js';
@@ -357,8 +368,7 @@ export class SessionRegistry {
     if (this.sessions.size === 0) return undefined;
     if (this.sessions.size > 1) {
       throw new Error(
-        `Multiple sessions active (${this.sessions.size}). ` +
-        `Provide an explicit session_id.`
+        `Multiple sessions active (${this.sessions.size}). ` + `Provide an explicit session_id.`
       );
     }
     return this.sessions.values().next().value;
@@ -407,6 +417,7 @@ feat: add SessionRegistry for session-scoped state tracking
 ## Task 3: Wire SessionRegistry into MCP Lifecycle
 
 **Files:**
+
 - Modify: `src/index.ts`
 - Modify: `src/server/mcp-server.ts`
 - Test: `tests/unit/server/session-lifecycle-integration.test.ts`
@@ -450,6 +461,7 @@ Expected: PASS
 **Step 3: Wire into index.ts**
 
 In `src/index.ts`, after `initializeServer()`:
+
 - Create a global `SessionRegistry` instance
 - Listen for `session:start` from `BrowserAutomationServer` → `registry.createSession(clientInfo)`
 - Listen for `session:end` → mark session dormant (don't immediately destroy — browser should persist for reconnect)
@@ -458,6 +470,7 @@ In `src/index.ts`, after `initializeServer()`:
 **Step 4: Modify shutdown handler**
 
 In `src/index.ts`, the SIGINT/SIGTERM handler currently calls `session.shutdown()`. Change to:
+
 - If browser was launched by us: save storage state, then close
 - If browser was connected externally: just disconnect (already the behavior for `isExternalBrowser`)
 - Log session info for debugging
@@ -478,6 +491,7 @@ feat: wire SessionRegistry into MCP lifecycle (oninitialized/onclose)
 ## Task 4: Session-Scoped Tool Routing
 
 **Files:**
+
 - Modify: `src/tools/browser-tools.ts`
 - Modify: `src/tools/execute-action.ts`
 - Test: `tests/unit/tools/session-routing.test.ts`
@@ -531,10 +545,13 @@ In `src/tools/tool-schemas.ts`, add `session_id: z.string().optional()` to input
 **Step 4: Update `resolveExistingPage` in browser-tools.ts**
 
 Change the page resolution flow from:
+
 ```
 page_id → SessionManager.resolvePage(page_id)
 ```
+
 To:
+
 ```
 session_id? → SessionRegistry.getSession(session_id) or getDefaultSession()
   → session's SessionManager → resolvePage(page_id)
@@ -556,6 +573,7 @@ feat: add session_id to tool schemas and session-scoped page routing
 ## Task 5: Per-Session BrowserContext Isolation
 
 **Files:**
+
 - Modify: `src/browser/session-manager.ts`
 - Modify: `src/session/session-registry.ts`
 - Test: `tests/unit/browser/session-context-isolation.test.ts`
@@ -575,9 +593,7 @@ describe('Per-session BrowserContext isolation', () => {
     // Mock browser.createBrowserContext to return new contexts
     const ctx1 = { newPage: vi.fn(), close: vi.fn(), pages: vi.fn().mockResolvedValue([]) };
     const ctx2 = { newPage: vi.fn(), close: vi.fn(), pages: vi.fn().mockResolvedValue([]) };
-    browser.createBrowserContext = vi.fn()
-      .mockResolvedValueOnce(ctx1)
-      .mockResolvedValueOnce(ctx2);
+    browser.createBrowserContext = vi.fn().mockResolvedValueOnce(ctx1).mockResolvedValueOnce(ctx2);
 
     // Verify different contexts created
     expect(ctx1).not.toBe(ctx2);
@@ -593,6 +609,7 @@ Expected: Behavior to define once we know exact API
 **Step 3: Implement context-per-session**
 
 In `SessionManager`, add method:
+
 ```typescript
 async createIsolatedContext(): Promise<BrowserContext> {
   if (!this.browser) throw BrowserSessionError.notRunning();
@@ -622,6 +639,7 @@ feat: per-session BrowserContext isolation for cookie/storage separation
 ## Task 6: Detach-on-Close Instead of Kill
 
 **Files:**
+
 - Modify: `src/browser/session-manager.ts`
 - Modify: `src/index.ts`
 - Test: `tests/unit/browser/session-manager-detach.test.ts`
@@ -649,6 +667,7 @@ describe('SessionManager detach behavior', () => {
 **Step 2: Run test, then implement**
 
 Add `detach()` method to `SessionManager`:
+
 ```typescript
 async detach(): Promise<void> {
   // Close CDP sessions but don't close browser
@@ -677,6 +696,7 @@ feat: add detach() to SessionManager — browser survives MCP server exit
 ## Task 7: Port Reusable Worker Components from Stale Branch
 
 **Files:**
+
 - Create: `src/worker/types.ts` (from stale branch)
 - Create: `src/worker/errors/worker.error.ts` (from stale branch)
 - Create: `src/worker/errors/index.ts` (from stale branch)
@@ -727,6 +747,7 @@ feat: port LeaseManager, HealthMonitor, PortAllocator from stale multi-tenant br
 ## Task 8: WorkerManager for Process-Level Isolation
 
 **Files:**
+
 - Create: `src/worker/chrome-worker-process.ts` (adapted from stale branch)
 - Create: `src/worker/worker-manager.ts` (adapted from stale branch)
 - Create: `src/worker/index.ts`
@@ -763,6 +784,7 @@ feat: add WorkerManager for process-level Chrome isolation per session
 ## Task 9: Integration — Connect SessionRegistry to WorkerManager
 
 **Files:**
+
 - Modify: `src/index.ts`
 - Modify: `src/session/session-registry.ts`
 - Create: `src/session/session-worker-binding.ts`
@@ -799,6 +821,7 @@ Thin adapter that routes session lifecycle to either WorkerManager or BrowserCon
 **Step 3: Wire into index.ts**
 
 In the `session:start` handler:
+
 - Read `ISOLATION_MODE` from env/config
 - Create session via SessionRegistry
 - If process mode: acquire worker, connect SessionManager to its CDP endpoint
@@ -820,6 +843,7 @@ feat: SessionWorkerBinding — route session lifecycle to context or process iso
 ## Task 10: Add `list_sessions` Tool
 
 **Files:**
+
 - Modify: `src/tools/browser-tools.ts`
 - Modify: `src/index.ts`
 - Test: `tests/unit/tools/list-sessions.test.ts`
@@ -863,6 +887,7 @@ feat: add list_sessions tool for session visibility
 ## Task 11: Final Integration Test & Cleanup
 
 **Files:**
+
 - Modify: `PLAN.md` → delete (no longer needed)
 - Run: full test suite
 
@@ -885,18 +910,18 @@ chore: cleanup — remove old PLAN.md, remove dead session-store code
 
 ## Implementation Order Summary
 
-| Task | What | Depends On |
-|------|------|-----------|
-| 1 | MCP lifecycle hooks | — |
-| 2 | SessionRegistry | — |
-| 3 | Wire registry to lifecycle | 1, 2 |
-| 4 | Session-scoped tool routing | 2, 3 |
-| 5 | Per-session BrowserContext | 2, 3 |
-| 6 | Detach-on-close | 1 |
-| 7 | Port worker components | — |
-| 8 | WorkerManager (process isolation) | 7 |
-| 9 | Integration binding | 5, 8 |
-| 10 | list_sessions tool | 2 |
-| 11 | Final cleanup | all |
+| Task | What                              | Depends On |
+| ---- | --------------------------------- | ---------- |
+| 1    | MCP lifecycle hooks               | —          |
+| 2    | SessionRegistry                   | —          |
+| 3    | Wire registry to lifecycle        | 1, 2       |
+| 4    | Session-scoped tool routing       | 2, 3       |
+| 5    | Per-session BrowserContext        | 2, 3       |
+| 6    | Detach-on-close                   | 1          |
+| 7    | Port worker components            | —          |
+| 8    | WorkerManager (process isolation) | 7          |
+| 9    | Integration binding               | 5, 8       |
+| 10   | list_sessions tool                | 2          |
+| 11   | Final cleanup                     | all        |
 
 Tasks 1, 2, 6, 7 can be parallelized. Tasks 3-5 are sequential. Tasks 8-9 are for process isolation mode only.
