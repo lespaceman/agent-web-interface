@@ -44,6 +44,8 @@ import {
   type LayoutExtractionResult,
   type ExtractorContext,
 } from './extractors/index.js';
+import { detectInteractivity } from './extractors/interactivity-detector.js';
+import type { InteractivitySignals } from './extractors/types.js';
 import { getTextContent } from '../lib/text-utils.js';
 
 /**
@@ -591,6 +593,87 @@ export class SnapshotCompiler {
       });
     }
 
+    // Phase 2.5: Detect implicit interactivity on non-interactive nodes
+    // Also check unincluded AX nodes with unknown classification for interactivity
+    const nonInteractiveIds: number[] = [];
+    const interactiveKindSet = new Set([
+      'button', 'link', 'input', 'textarea', 'select', 'combobox',
+      'checkbox', 'radio', 'switch', 'slider', 'tab', 'menuitem',
+    ]);
+
+    // Collect non-interactive nodes already in nodesToProcess (Case A)
+    for (const nodeData of nodesToProcess) {
+      const kind = nodeData.axNode?.role
+        ? (mapRoleToKind(nodeData.axNode.role) ?? 'generic')
+        : 'generic';
+      if (!interactiveKindSet.has(kind)) {
+        nonInteractiveIds.push(nodeData.backendNodeId);
+      }
+    }
+
+    // Collect unknown-classification AX nodes NOT yet in nodesToProcess (Case B)
+    const alreadyIncluded = new Set(nodesToProcess.map((n) => n.backendNodeId));
+    const caseB_candidates: number[] = [];
+    if (axResult) {
+      for (const [backendNodeId, axNode] of axResult.nodes) {
+        if (alreadyIncluded.has(backendNodeId)) continue;
+        const classification = classifyAxRole(axNode.role);
+        if (classification === 'unknown') {
+          caseB_candidates.push(backendNodeId);
+        }
+      }
+    }
+
+    // Run interactivity detection on both sets
+    let interactivityMap = new Map<number, InteractivitySignals>();
+    const allCandidates = [...nonInteractiveIds, ...caseB_candidates];
+    if (allCandidates.length > 0 && domResult) {
+      try {
+        interactivityMap = await detectInteractivity(ctx, allCandidates, domResult.nodes);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        warnings.push(`Interactivity detection failed: ${message}`);
+      }
+    }
+
+    // Merge interactivity signals into existing nodes (Case A)
+    for (const nodeData of nodesToProcess) {
+      const signals = interactivityMap.get(nodeData.backendNodeId);
+      if (signals) {
+        nodeData.interactivity = signals;
+      }
+    }
+
+    // Add newly discovered interactive nodes (Case B)
+    for (const backendNodeId of caseB_candidates) {
+      const signals = interactivityMap.get(backendNodeId);
+      if (signals) {
+        const domNode = domResult?.nodes.get(backendNodeId);
+        const axNode = axResult?.nodes.get(backendNodeId);
+        nodesToProcess.push({
+          backendNodeId,
+          domNode,
+          axNode,
+          interactivity: signals,
+        });
+      }
+    }
+
+    // Re-sort if we added Case B nodes (they need to be in DOM order)
+    if (caseB_candidates.some((id) => interactivityMap.has(id))) {
+      if (domOrderAvailable && domOrderIndex) {
+        const orderMap = domOrderIndex;
+        nodesToProcess.sort((a, b) => {
+          const orderA = orderMap.get(a.backendNodeId);
+          const orderB = orderMap.get(b.backendNodeId);
+          if (orderA === undefined && orderB === undefined) return 0;
+          if (orderA === undefined) return 1;
+          if (orderB === undefined) return -1;
+          return orderA - orderB;
+        });
+      }
+    }
+
     // Limit nodes (now respects DOM order)
     const limitedNodes = nodesToProcess.slice(0, this.options.max_nodes);
 
@@ -816,6 +899,14 @@ export class SnapshotCompiler {
 
     if (attributes && Object.keys(attributes).length > 0) {
       node.attributes = attributes;
+    }
+
+    // Set implicitly_interactive flag
+    if (nodeData.interactivity) {
+      const { has_click_listener, has_cursor_pointer, has_tabindex } = nodeData.interactivity;
+      if (has_click_listener || has_cursor_pointer || has_tabindex) {
+        node.implicitly_interactive = true;
+      }
     }
 
     return node;
