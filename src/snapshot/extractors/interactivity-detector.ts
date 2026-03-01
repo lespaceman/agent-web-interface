@@ -112,7 +112,7 @@ export async function detectInteractivity(
     // Check cursor:pointer
     try {
       const styleResult = await cdp.send<{
-        computedStyle: Array<{ name: string; value: string }>;
+        computedStyle: { name: string; value: string }[];
       }>('CSS.getComputedStyleForNode', { nodeId });
 
       const cursorProp = styleResult.computedStyle.find((p) => p.name === 'cursor');
