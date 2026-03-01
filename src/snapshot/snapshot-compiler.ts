@@ -643,21 +643,22 @@ export class SnapshotCompiler {
 
     // Phase 5: Build BaseSnapshot
     const duration = Date.now() - startTime;
-    const interactiveCount = nodes.filter((n) =>
-      [
-        'button',
-        'link',
-        'input',
-        'textarea',
-        'select',
-        'combobox',
-        'checkbox',
-        'radio',
-        'switch',
-        'slider',
-        'tab',
-        'menuitem',
-      ].includes(n.kind)
+    const interactiveCount = nodes.filter(
+      (n) =>
+        [
+          'button',
+          'link',
+          'input',
+          'textarea',
+          'select',
+          'combobox',
+          'checkbox',
+          'radio',
+          'switch',
+          'slider',
+          'tab',
+          'menuitem',
+        ].includes(n.kind) || n.implicitly_interactive
     ).length;
 
     const meta: SnapshotMeta = {

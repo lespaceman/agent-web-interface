@@ -151,6 +151,23 @@ export interface RawNodeData {
 
   /** Backend node ID (primary key for correlation) */
   backendNodeId: number;
+
+  /** Implicit interactivity signals (click listeners, cursor:pointer, tabindex) */
+  interactivity?: InteractivitySignals;
+}
+
+/**
+ * Implicit interactivity detection result for a node.
+ */
+export interface InteractivitySignals {
+  /** Element has click/mousedown/pointerdown event listener */
+  has_click_listener: boolean;
+  /** Element has CSS cursor: pointer */
+  has_cursor_pointer: boolean;
+  /** Element has tabindex >= 0 */
+  has_tabindex: boolean;
+  /** Where the click listener was found */
+  listener_source: 'self' | 'ancestor' | 'none';
 }
 
 // ============================================================================

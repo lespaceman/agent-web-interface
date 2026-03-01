@@ -14,6 +14,8 @@ import {
   type RawAxNode,
   type NodeLayoutInfo,
   type ExtractorContext,
+  type InteractivitySignals,
+  type RawNodeData,
 } from '../../../../src/snapshot/extractors/types.js';
 import { createMockCdpClient } from '../../../mocks/cdp-client.mock.js';
 
@@ -187,6 +189,26 @@ describe('Extractor Types', () => {
     it('should reject null or undefined', () => {
       expect(isValidNodeLayoutInfo(null as unknown as NodeLayoutInfo)).toBe(false);
       expect(isValidNodeLayoutInfo(undefined as unknown as NodeLayoutInfo)).toBe(false);
+    });
+  });
+
+  describe('InteractivitySignals', () => {
+    it('should be assignable to RawNodeData.interactivity', () => {
+      const signals: InteractivitySignals = {
+        has_click_listener: true,
+        has_cursor_pointer: false,
+        has_tabindex: false,
+        listener_source: 'self',
+      };
+
+      const nodeData: RawNodeData = {
+        backendNodeId: 42,
+        interactivity: signals,
+      };
+
+      expect(nodeData.interactivity).toBeDefined();
+      expect(nodeData.interactivity!.has_click_listener).toBe(true);
+      expect(nodeData.interactivity!.listener_source).toBe('self');
     });
   });
 
