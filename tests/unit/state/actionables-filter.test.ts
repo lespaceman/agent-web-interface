@@ -118,4 +118,122 @@ describe('selectActionables', () => {
       expect(result.length).toBe(0);
     });
   });
+
+  describe('layer filtering', () => {
+    it('should include all visible elements when activeLayer is popover', () => {
+      const snapshot = createTestSnapshot([
+        {
+          kind: 'button',
+          label: 'Main Submit',
+          where: { region: 'main' },
+          layout: {
+            bbox: { x: 0, y: 0, w: 100, h: 40 },
+            display: 'block',
+            screen_zone: 'top-center' as const,
+          },
+          state: { visible: true, enabled: true },
+        },
+        {
+          kind: 'menuitem',
+          label: 'Popover Option 1',
+          where: { region: 'main' },
+          layout: {
+            bbox: { x: 0, y: 50, w: 100, h: 40 },
+            display: 'block',
+            screen_zone: 'top-center' as const,
+            zIndex: 100,
+          },
+          state: { visible: true, enabled: true },
+        },
+        {
+          kind: 'menuitem',
+          label: 'Popover Option 2',
+          where: { region: 'main' },
+          layout: {
+            bbox: { x: 0, y: 100, w: 100, h: 40 },
+            display: 'block',
+            screen_zone: 'top-center' as const,
+            zIndex: 100,
+          },
+          state: { visible: true, enabled: true },
+        },
+      ]);
+
+      const result = selectActionables(snapshot, 'popover', 100);
+
+      // Both main content and popover elements should be included
+      expect(result.length).toBe(3);
+      expect(result.some((n) => n.label === 'Main Submit')).toBe(true);
+      expect(result.some((n) => n.label === 'Popover Option 1')).toBe(true);
+      expect(result.some((n) => n.label === 'Popover Option 2')).toBe(true);
+    });
+
+    it('should only include modal elements when activeLayer is modal', () => {
+      const snapshot = createTestSnapshot([
+        {
+          kind: 'button',
+          label: 'Main Submit',
+          where: { region: 'main' },
+          layout: {
+            bbox: { x: 0, y: 0, w: 100, h: 40 },
+            display: 'block',
+            screen_zone: 'top-center' as const,
+          },
+          state: { visible: true, enabled: true },
+        },
+        {
+          kind: 'button',
+          label: 'Dialog Confirm',
+          where: { region: 'dialog' },
+          layout: {
+            bbox: { x: 0, y: 50, w: 100, h: 40 },
+            display: 'block',
+            screen_zone: 'top-center' as const,
+          },
+          state: { visible: true, enabled: true },
+        },
+      ]);
+
+      const result = selectActionables(snapshot, 'modal', 100);
+
+      // Only dialog button should be included (modal blocks main content)
+      expect(result.length).toBe(1);
+      expect(result[0].label).toBe('Dialog Confirm');
+    });
+
+    it('should include all visible elements when activeLayer is drawer', () => {
+      const snapshot = createTestSnapshot([
+        {
+          kind: 'link',
+          label: 'Main Nav Link',
+          where: { region: 'main' },
+          layout: {
+            bbox: { x: 0, y: 0, w: 100, h: 40 },
+            display: 'block',
+            screen_zone: 'top-center' as const,
+          },
+          state: { visible: true, enabled: true },
+        },
+        {
+          kind: 'button',
+          label: 'Drawer Action',
+          where: { region: 'main' },
+          layout: {
+            bbox: { x: 0, y: 50, w: 100, h: 40 },
+            display: 'block',
+            screen_zone: 'top-center' as const,
+            zIndex: 50,
+          },
+          state: { visible: true, enabled: true },
+        },
+      ]);
+
+      const result = selectActionables(snapshot, 'drawer', 100);
+
+      // Both main and drawer elements should be included
+      expect(result.length).toBe(2);
+      expect(result.some((n) => n.label === 'Main Nav Link')).toBe(true);
+      expect(result.some((n) => n.label === 'Drawer Action')).toBe(true);
+    });
+  });
 });

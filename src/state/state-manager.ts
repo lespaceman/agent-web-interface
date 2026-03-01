@@ -28,6 +28,7 @@ import { computeEid, resolveEidCollision } from './element-identity.js';
 import { detectLayers } from './layer-detector.js';
 import { computeDiff } from './diff-engine.js';
 import { selectActionables, isInteractiveKind } from './actionables-filter.js';
+import { getNodeLayer, INCLUSIVE_OVERLAY_LAYERS } from './node-layer.js';
 import { extractAtoms } from './atoms-extractor.js';
 import { linkObservationsToSnapshot } from '../observation/index.js';
 import { generateLocator } from './locator-generator.js';
@@ -282,8 +283,12 @@ export class StateManager {
     );
 
     // Count total actionables in active layer
+    const skipLayerFilter = INCLUSIVE_OVERLAY_LAYERS.has(layerResult.active);
     const totalInLayer = snapshot.nodes.filter(
-      (n) => isInteractiveKind(n.kind) && n.state?.visible && getNodeLayer(n) === layerResult.active
+      (n) =>
+        isInteractiveKind(n.kind) &&
+        n.state?.visible &&
+        (skipLayerFilter || getNodeLayer(n, layerResult.active) === layerResult.active)
     ).length;
 
     const counts = {
@@ -427,6 +432,7 @@ export class StateManager {
     context: ScoringContext
   ): ReadableNode[] {
     const maxCount = this.context.config.maxActionables;
+    const skipLayerFilter = INCLUSIVE_OVERLAY_LAYERS.has(activeLayer);
 
     // Find focused element first
     const focusedNode = snapshot.nodes.find(
@@ -434,7 +440,7 @@ export class StateManager {
         n.state?.focused &&
         isInteractiveKind(n.kind) &&
         n.state?.visible &&
-        getNodeLayer(n) === activeLayer
+        (skipLayerFilter || getNodeLayer(n, activeLayer) === activeLayer)
     );
 
     // Find modal close/cancel affordances (high priority in modal layer)
@@ -442,7 +448,7 @@ export class StateManager {
     if (activeLayer === 'modal') {
       for (const node of snapshot.nodes) {
         if (!isInteractiveKind(node.kind) || !node.state?.visible) continue;
-        if (getNodeLayer(node) !== activeLayer) continue;
+        if (getNodeLayer(node, activeLayer) !== activeLayer) continue;
 
         const label = node.label.toLowerCase();
         const isCloseAffordance =
@@ -582,7 +588,7 @@ export class StateManager {
         ref,
         loc,
         ctx: {
-          layer: getNodeLayer(node),
+          layer: getNodeLayer(node, activeLayer),
           region: node.where.region ?? 'unknown',
         },
       };
@@ -786,9 +792,4 @@ function computeLayerHash(stack: string[]): string {
 
 function hash(input: string): string {
   return createHash('sha256').update(input).digest('hex').substring(0, 12);
-}
-
-function getNodeLayer(node: ReadableNode): string {
-  const region = node.where.region ?? 'unknown';
-  return region === 'dialog' ? 'modal' : 'main';
 }

@@ -7,6 +7,7 @@
 
 import type { BaseSnapshot, ReadableNode, NodeKind } from '../snapshot/snapshot.types.js';
 import type { ScoringContext } from './types.js';
+import { getNodeLayer, INCLUSIVE_OVERLAY_LAYERS } from './node-layer.js';
 
 // Interactive element kinds
 const INTERACTIVE_KINDS: NodeKind[] = [
@@ -57,6 +58,8 @@ export function selectActionables(
   maxCount: number,
   context?: ScoringContext
 ): ReadableNode[] {
+  const skipLayerFilter = INCLUSIVE_OVERLAY_LAYERS.has(activeLayer);
+
   // Filter to candidates
   const candidates = snapshot.nodes.filter((node) => {
     // Must be interactive
@@ -69,10 +72,12 @@ export function selectActionables(
       return false;
     }
 
-    // Must be in active layer
-    const nodeLayer = getNodeLayer(node);
-    if (nodeLayer !== activeLayer) {
-      return false;
+    // Must be in active layer (skip for inclusive overlays like popover/drawer)
+    if (!skipLayerFilter) {
+      const nodeLayer = getNodeLayer(node, activeLayer);
+      if (nodeLayer !== activeLayer) {
+        return false;
+      }
     }
 
     return true;
@@ -171,34 +176,4 @@ export function scoreActionable(node: ReadableNode, context?: ScoringContext): n
 
   // Cap at 1.0
   return Math.min(score, 1.0);
-}
-
-// ============================================================================
-// Layer Determination
-// ============================================================================
-
-/**
- * Determine which layer a node belongs to.
- * Simplified: use region as proxy.
- *
- * Modal elements are in 'dialog' region.
- * Everything else is in 'main'.
- *
- * TODO: Make this more sophisticated by checking node ancestry
- * and matching against detected layer root EIDs.
- *
- * @param node - Node to check
- * @returns Layer name
- */
-function getNodeLayer(node: ReadableNode): string {
-  const region = node.where.region ?? 'unknown';
-
-  // Dialog region maps to modal layer
-  if (region === 'dialog') {
-    return 'modal';
-  }
-
-  // Everything else maps to main layer
-  // TODO: Add drawer and popover detection based on ancestry
-  return 'main';
 }
