@@ -39,5 +39,8 @@ logs/
 # OS files
 Thumbs.db
 
+# Worktrees
+.worktrees/
+
 # Local symlink
 agent-web-interface
