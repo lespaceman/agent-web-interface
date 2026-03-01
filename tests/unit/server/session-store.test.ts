@@ -250,4 +250,41 @@ describe('SessionStore', () => {
       expect(store.sessionCount()).toBe(2);
     });
   });
+
+  describe('createSession with clientInfo', () => {
+    it('should store clientInfo when provided', () => {
+      const clientInfo = { name: 'claude-code', version: '1.0' };
+      const session_id = store.createSession('tenant-1', clientInfo);
+      const session = store.getSession(session_id);
+
+      expect(session?.client_info).toEqual(clientInfo);
+    });
+
+    it('should leave clientInfo undefined when not provided', () => {
+      const session_id = store.createSession('tenant-1');
+      const session = store.getSession(session_id);
+
+      expect(session?.client_info).toBeUndefined();
+    });
+  });
+
+  describe('getDefaultSession', () => {
+    it('should return undefined when no sessions exist', () => {
+      expect(store.getDefaultSession()).toBeUndefined();
+    });
+
+    it('should return the only session when one exists', () => {
+      const session_id = store.createSession('tenant-1');
+      const session = store.getDefaultSession();
+
+      expect(session?.session_id).toBe(session_id);
+    });
+
+    it('should throw when multiple sessions exist', () => {
+      store.createSession('tenant-1');
+      store.createSession('tenant-2');
+
+      expect(() => store.getDefaultSession()).toThrow(/multiple sessions/i);
+    });
+  });
 });

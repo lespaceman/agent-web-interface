@@ -30,6 +30,11 @@ export interface SessionStoreOptions {
 /**
  * Represents a tenant session
  */
+export interface ClientInfo {
+  name: string;
+  version: string;
+}
+
 export interface TenantSession {
   /** Unique session identifier */
   session_id: string;
@@ -48,6 +53,9 @@ export interface TenantSession {
 
   /** When the session expires (null = never) */
   expires_at: Date | null;
+
+  /** MCP client info from initialization handshake */
+  client_info?: ClientInfo;
 }
 
 /**
@@ -75,7 +83,7 @@ export class SessionStore {
    * @returns The new session_id
    * @throws Error if max sessions limit reached
    */
-  createSession(tenant_id: string): string {
+  createSession(tenant_id: string, clientInfo?: ClientInfo): string {
     // Check max sessions limit
     if (this.sessions.size >= this.maxSessions) {
       throw new Error(`Maximum sessions limit reached: ${this.maxSessions}`);
@@ -91,6 +99,7 @@ export class SessionStore {
       created_at: now,
       last_accessed_at: now,
       expires_at: this.ttlMs > 0 ? new Date(now.getTime() + this.ttlMs) : null,
+      client_info: clientInfo,
     };
 
     this.sessions.set(session_id, session);
@@ -118,6 +127,21 @@ export class SessionStore {
     // Touch session to refresh TTL
     this.touchSession(session);
     return session;
+  }
+
+  /**
+   * Get the default session when only one exists.
+   * Returns undefined when no sessions exist.
+   * Throws when multiple sessions exist (caller must provide explicit session_id).
+   */
+  getDefaultSession(): TenantSession | undefined {
+    if (this.sessions.size === 0) return undefined;
+    if (this.sessions.size > 1) {
+      throw new Error(
+        `Multiple sessions active (${this.sessions.size}). Provide an explicit session_id.`
+      );
+    }
+    return this.sessions.values().next().value;
   }
 
   /**
