@@ -687,8 +687,8 @@ export class SnapshotCompiler {
       }
     }
 
-    // Limit nodes (now respects DOM order)
-    const limitedNodes = nodesToProcess.slice(0, this.options.max_nodes);
+    // Limit nodes (now respects DOM order and preserves overlay content)
+    const limitedNodes = sliceWithOverlayPriority(nodesToProcess, this.options.max_nodes);
 
     // Phase 3: Layout extraction (batched)
     let layoutResult: LayoutExtractionResult | undefined;
@@ -1063,6 +1063,63 @@ export class SnapshotCompiler {
       return true; // Keep the node
     });
   }
+}
+
+/**
+ * Slice nodes to max_nodes budget while preserving high z-index overlay content.
+ *
+ * Portal-rendered content (dropdowns, popovers, modals) appears at the end of
+ * DOM order. On heavy pages, a naive slice truncates it.
+ *
+ * Strategy:
+ * 1. Partition nodes into overlay (z-index > threshold) and main
+ * 2. Take all overlay nodes (up to 30% of budget)
+ * 3. Fill remaining budget with main nodes (DOM order)
+ * 4. Re-sort by original DOM order
+ */
+export function sliceWithOverlayPriority(nodes: RawNodeData[], maxNodes: number): RawNodeData[] {
+  if (nodes.length <= maxNodes) {
+    return nodes;
+  }
+
+  const OVERLAY_Z_THRESHOLD = 100;
+  const MAX_OVERLAY_RATIO = 0.3;
+
+  const overlayNodes: RawNodeData[] = [];
+  const mainNodes: RawNodeData[] = [];
+
+  for (const node of nodes) {
+    const zIndex = node.layout?.zIndex;
+    if (zIndex !== undefined && zIndex > OVERLAY_Z_THRESHOLD) {
+      overlayNodes.push(node);
+    } else {
+      mainNodes.push(node);
+    }
+  }
+
+  // No overlay content → simple slice
+  if (overlayNodes.length === 0) {
+    return nodes.slice(0, maxNodes);
+  }
+
+  // Reserve budget for overlay (capped at 30% of total)
+  const maxOverlay = Math.min(overlayNodes.length, Math.floor(maxNodes * MAX_OVERLAY_RATIO));
+  const overlaySlice = overlayNodes.slice(0, maxOverlay);
+
+  // Fill remaining budget with main content
+  const mainBudget = maxNodes - overlaySlice.length;
+  const mainSlice = mainNodes.slice(0, mainBudget);
+
+  // Merge and re-sort by original DOM order
+  const merged = [...mainSlice, ...overlaySlice];
+  const indexMap = new Map(nodes.map((n, i) => [n.backendNodeId, i]));
+  merged.sort((a, b) => {
+    const ia = indexMap.get(a.backendNodeId) ?? Infinity;
+    const ib = indexMap.get(b.backendNodeId) ?? Infinity;
+    return ia - ib;
+  });
+
+  return merged;
 }
 
 /**

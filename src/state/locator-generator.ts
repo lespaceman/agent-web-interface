@@ -9,6 +9,7 @@
 
 import type { ReadableNode } from '../snapshot/snapshot.types.js';
 import type { LocatorInfo } from './types.js';
+import { getNodeLayer } from './node-layer.js';
 
 // ============================================================================
 // Layer Scope Configuration
@@ -67,17 +68,6 @@ export function generateLocator(node: ReadableNode, layer?: string): LocatorInfo
     preferred: { ax: axLocator },
     fallback: cssLocator ? { css: cssLocator } : undefined,
   };
-}
-
-/**
- * Determine which layer a node belongs to from its region.
- *
- * @param node - Node to check
- * @returns Layer name
- */
-function getNodeLayer(node: ReadableNode): string {
-  const region = node.where.region ?? 'unknown';
-  return region === 'dialog' ? 'modal' : 'main';
 }
 
 // ============================================================================
