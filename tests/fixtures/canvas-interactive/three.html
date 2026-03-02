@@ -8,12 +8,6 @@
     body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
     h2 { margin: 0 0 4px; }
     p { color: #666; margin: 0 0 16px; font-size: 14px; }
-    .controls { margin-bottom: 12px; display: flex; gap: 8px; }
-    .controls button {
-      padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px;
-      background: #fff; cursor: pointer; font-size: 13px;
-    }
-    .controls button:hover { background: #eee; }
     #three-container { border: 1px solid #ccc; display: inline-block; }
     #three-container canvas { display: block; }
     #status { margin-top: 8px; font-size: 13px; color: #444; font-family: monospace; }
@@ -21,14 +15,7 @@
 </head>
 <body>
   <h2>Three.js Interactive Canvas</h2>
-  <p>Shapes: green-cube, red-sphere. Click to select. Drag to rotate the scene. Buttons to transform selected object.</p>
-  <div class="controls">
-    <button id="btn-rotate">Rotate +45&deg;</button>
-    <button id="btn-scale-up">Scale Up 1.2x</button>
-    <button id="btn-scale-down">Scale Down 0.8x</button>
-    <button id="btn-move-right">Move Right</button>
-    <button id="btn-reset">Reset All</button>
-  </div>
+  <p>Click to select. Drag to move (on XZ plane). Shift+drag to rotate. Scroll wheel to scale. Right-drag to orbit camera.</p>
   <div id="three-container" aria-label="Three.js drawing area"></div>
   <div id="status">Ready</div>
   <script>
@@ -56,6 +43,15 @@
     dirLight.position.set(5, 5, 5);
     scene.add(dirLight);
 
+    // Ground plane for reference
+    const planeGeom = new THREE.PlaneGeometry(10, 10);
+    const planeMat = new THREE.MeshPhongMaterial({ color: 0xeeeeee });
+    const ground = new THREE.Mesh(planeGeom, planeMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.76;
+    ground.name = 'ground';
+    scene.add(ground);
+
     // Green cube
     const cubeGeom = new THREE.BoxGeometry(1.5, 1.5, 1.5);
     const cubeMat = new THREE.MeshPhongMaterial({ color: 0x27ae60 });
@@ -72,9 +68,7 @@
     sphere.name = 'red-sphere';
     scene.add(sphere);
 
-    // Initial state for reset
-    const initCube = { pos: cube.position.clone(), rot: cube.rotation.clone(), scale: cube.scale.clone() };
-    const initSphere = { pos: sphere.position.clone(), rot: sphere.rotation.clone(), scale: sphere.scale.clone() };
+    const selectables = [cube, sphere];
 
     let selected = null;
     const raycaster = new THREE.Raycaster();
@@ -82,78 +76,87 @@
     const status = document.getElementById('status');
     function updateStatus(msg) { status.textContent = msg; }
 
-    // Click to select
-    renderer.domElement.addEventListener('click', (e) => {
+    // Interaction state
+    let isDragging = false;
+    let isOrbiting = false;
+    let isRotatingObj = false;
+    let prevMouse = { x: 0, y: 0 };
+    let cameraAngle = { theta: 0, phi: Math.PI / 6 };
+
+    renderer.domElement.addEventListener('mousedown', (e) => {
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects([cube, sphere]);
+      const intersects = raycaster.intersectObjects(selectables);
+
+      if (e.button === 2 || e.ctrlKey) {
+        // Right-click or ctrl+click for orbit
+        isOrbiting = true;
+        prevMouse = { x: e.clientX, y: e.clientY };
+        return;
+      }
+
       if (intersects.length > 0) {
         selected = intersects[0].object;
-        updateStatus(`Selected ${selected.name}`);
+        prevMouse = { x: e.clientX, y: e.clientY };
+        if (e.shiftKey) {
+          isRotatingObj = true;
+          updateStatus(`Rotating ${selected.name}...`);
+        } else {
+          isDragging = true;
+          updateStatus(`Selected ${selected.name}`);
+        }
       } else {
         selected = null;
         updateStatus('Deselected');
       }
     });
 
-    // Simple drag to orbit camera
-    let isDragging = false;
-    let prevMouse = { x: 0, y: 0 };
-    let cameraAngle = { theta: 0, phi: Math.PI / 6 };
-
-    renderer.domElement.addEventListener('mousedown', (e) => {
-      if (e.button === 2 || e.ctrlKey) { // right-click or ctrl+click for orbit
-        isDragging = true;
-        prevMouse = { x: e.clientX, y: e.clientY };
-      }
-    });
     renderer.domElement.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
       const dx = e.clientX - prevMouse.x;
       const dy = e.clientY - prevMouse.y;
-      cameraAngle.theta -= dx * 0.01;
-      cameraAngle.phi = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraAngle.phi - dy * 0.01));
-      const r = 6;
-      camera.position.x = r * Math.sin(cameraAngle.theta) * Math.cos(cameraAngle.phi);
-      camera.position.y = r * Math.sin(cameraAngle.phi) + 2;
-      camera.position.z = r * Math.cos(cameraAngle.theta) * Math.cos(cameraAngle.phi);
-      camera.lookAt(0, 0, 0);
-      prevMouse = { x: e.clientX, y: e.clientY };
-    });
-    renderer.domElement.addEventListener('mouseup', () => { isDragging = false; });
 
-    document.getElementById('btn-rotate').addEventListener('click', () => {
-      if (!selected) { updateStatus('Click an object first'); return; }
-      selected.rotation.y += Math.PI / 4;
-      updateStatus(`Rotated ${selected.name} Y to ${Math.round(selected.rotation.y * 180 / Math.PI)}°`);
+      if (isOrbiting) {
+        cameraAngle.theta -= dx * 0.01;
+        cameraAngle.phi = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraAngle.phi - dy * 0.01));
+        const r = 6;
+        camera.position.x = r * Math.sin(cameraAngle.theta) * Math.cos(cameraAngle.phi);
+        camera.position.y = r * Math.sin(cameraAngle.phi) + 2;
+        camera.position.z = r * Math.cos(cameraAngle.theta) * Math.cos(cameraAngle.phi);
+        camera.lookAt(0, 0, 0);
+        prevMouse = { x: e.clientX, y: e.clientY };
+      } else if (isRotatingObj && selected) {
+        selected.rotation.y += dx * 0.02;
+        selected.rotation.x += dy * 0.02;
+        prevMouse = { x: e.clientX, y: e.clientY };
+        updateStatus(`Rotating ${selected.name}: Y=${Math.round(selected.rotation.y * 180 / Math.PI)}° X=${Math.round(selected.rotation.x * 180 / Math.PI)}°`);
+      } else if (isDragging && selected) {
+        // Move on XZ plane
+        selected.position.x += dx * 0.01;
+        selected.position.z -= dy * 0.01;
+        prevMouse = { x: e.clientX, y: e.clientY };
+        updateStatus(`Moving ${selected.name}: (${selected.position.x.toFixed(1)}, ${selected.position.z.toFixed(1)})`);
+      }
     });
 
-    document.getElementById('btn-scale-up').addEventListener('click', () => {
-      if (!selected) { updateStatus('Click an object first'); return; }
-      selected.scale.multiplyScalar(1.2);
+    renderer.domElement.addEventListener('mouseup', () => {
+      isDragging = false;
+      isOrbiting = false;
+      isRotatingObj = false;
+    });
+
+    // Scroll wheel to scale selected object
+    renderer.domElement.addEventListener('wheel', (e) => {
+      if (!selected) return;
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      selected.scale.multiplyScalar(factor);
       updateStatus(`Scaled ${selected.name} to ${selected.scale.x.toFixed(2)}x`);
     });
 
-    document.getElementById('btn-scale-down').addEventListener('click', () => {
-      if (!selected) { updateStatus('Click an object first'); return; }
-      selected.scale.multiplyScalar(0.8);
-      updateStatus(`Scaled ${selected.name} to ${selected.scale.x.toFixed(2)}x`);
-    });
-
-    document.getElementById('btn-move-right').addEventListener('click', () => {
-      if (!selected) { updateStatus('Click an object first'); return; }
-      selected.position.x += 0.5;
-      updateStatus(`Moved ${selected.name} to x=${selected.position.x.toFixed(1)}`);
-    });
-
-    document.getElementById('btn-reset').addEventListener('click', () => {
-      cube.position.copy(initCube.pos); cube.rotation.copy(initCube.rot); cube.scale.copy(initCube.scale);
-      sphere.position.copy(initSphere.pos); sphere.rotation.copy(initSphere.rot); sphere.scale.copy(initSphere.scale);
-      selected = null;
-      updateStatus('Reset to initial state');
-    });
+    // Prevent context menu on right-click
+    renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // Animation loop
     function animate() {

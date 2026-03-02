@@ -7,12 +7,6 @@
     body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
     h2 { margin: 0 0 4px; }
     p { color: #666; margin: 0 0 16px; font-size: 14px; }
-    .controls { margin-bottom: 12px; display: flex; gap: 8px; }
-    .controls button {
-      padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px;
-      background: #fff; cursor: pointer; font-size: 13px;
-    }
-    .controls button:hover { background: #eee; }
     canvas { border: 1px solid #ccc; background: #fff; cursor: grab; }
     canvas.dragging { cursor: grabbing; }
     #status { margin-top: 8px; font-size: 13px; color: #444; font-family: monospace; }
@@ -20,13 +14,7 @@
 </head>
 <body>
   <h2>Raw Canvas (No Library)</h2>
-  <p>Shapes: gray-rect, brown-circle. Drag to move. Buttons for rotate/scale. No library — pure Canvas 2D API.</p>
-  <div class="controls">
-    <button id="btn-rotate">Rotate Selected +45&deg;</button>
-    <button id="btn-scale-up">Scale Up 1.2x</button>
-    <button id="btn-scale-down">Scale Down 0.8x</button>
-    <button id="btn-reset">Reset All</button>
-  </div>
+  <p>Drag to move. Shift+drag to rotate. Scroll wheel to scale. Pure Canvas 2D API.</p>
   <canvas id="canvas" width="800" height="600" aria-label="Raw drawing area"></canvas>
   <div id="status">Ready</div>
   <script>
@@ -49,12 +37,12 @@
       }
     ];
 
-    // Initial state for reset
-    const initState = JSON.parse(JSON.stringify(shapes));
-
     let selected = null;
     let dragging = false;
+    let rotating = false;
     let dragOffset = { x: 0, y: 0 };
+    let startAngle = 0;
+    let startRotation = 0;
 
     function draw() {
       ctx.clearRect(0, 0, 800, 600);
@@ -109,6 +97,11 @@
       return null;
     }
 
+    function getCenter(s) {
+      if (s.type === 'rect') return { x: s.x + s.w / 2, y: s.y + s.h / 2 };
+      return { x: s.x, y: s.y };
+    }
+
     canvas.addEventListener('mousedown', (e) => {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
@@ -116,16 +109,25 @@
       const hit = hitTest(mx, my);
       if (hit) {
         selected = hit;
-        dragging = true;
-        canvas.classList.add('dragging');
-        if (hit.type === 'rect') {
-          dragOffset.x = mx - hit.x;
-          dragOffset.y = my - hit.y;
+        if (e.shiftKey) {
+          // Shift+drag to rotate
+          rotating = true;
+          const c = getCenter(hit);
+          startAngle = Math.atan2(my - c.y, mx - c.x);
+          startRotation = hit.rotation;
+          updateStatus(`Rotating ${hit.name}...`);
         } else {
-          dragOffset.x = mx - hit.x;
-          dragOffset.y = my - hit.y;
+          dragging = true;
+          canvas.classList.add('dragging');
+          if (hit.type === 'rect') {
+            dragOffset.x = mx - hit.x;
+            dragOffset.y = my - hit.y;
+          } else {
+            dragOffset.x = mx - hit.x;
+            dragOffset.y = my - hit.y;
+          }
+          updateStatus(`Selected ${hit.name}`);
         }
-        updateStatus(`Selected ${hit.name}`);
       } else {
         selected = null;
         updateStatus('Deselected');
@@ -134,54 +136,45 @@
     });
 
     canvas.addEventListener('mousemove', (e) => {
-      if (!dragging || !selected) return;
+      if (!selected) return;
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      if (selected.type === 'rect') {
-        selected.x = mx - dragOffset.x;
-        selected.y = my - dragOffset.y;
-      } else {
-        selected.x = mx - dragOffset.x;
-        selected.y = my - dragOffset.y;
+
+      if (rotating) {
+        const c = getCenter(selected);
+        const currentAngle = Math.atan2(my - c.y, mx - c.x);
+        const delta = (currentAngle - startAngle) * 180 / Math.PI;
+        selected.rotation = startRotation + delta;
+        draw();
+        updateStatus(`Rotating ${selected.name}: ${Math.round(selected.rotation)}°`);
+      } else if (dragging) {
+        if (selected.type === 'rect') {
+          selected.x = mx - dragOffset.x;
+          selected.y = my - dragOffset.y;
+        } else {
+          selected.x = mx - dragOffset.x;
+          selected.y = my - dragOffset.y;
+        }
+        draw();
+        updateStatus(`Moving ${selected.name}: (${Math.round(selected.x)}, ${Math.round(selected.y)})`);
       }
-      draw();
-      updateStatus(`Moving ${selected.name}: (${Math.round(selected.x)}, ${Math.round(selected.y)})`);
     });
 
     canvas.addEventListener('mouseup', () => {
       dragging = false;
+      rotating = false;
       canvas.classList.remove('dragging');
     });
 
-    document.getElementById('btn-rotate').addEventListener('click', () => {
-      if (!selected) { updateStatus('Click a shape first'); return; }
-      selected.rotation += 45;
-      draw();
-      updateStatus(`Rotated ${selected.name} to ${selected.rotation}°`);
-    });
-
-    document.getElementById('btn-scale-up').addEventListener('click', () => {
-      if (!selected) { updateStatus('Click a shape first'); return; }
-      selected.scale *= 1.2;
+    // Scroll wheel to scale
+    canvas.addEventListener('wheel', (e) => {
+      if (!selected) return;
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      selected.scale *= factor;
       draw();
       updateStatus(`Scaled ${selected.name} to ${selected.scale.toFixed(2)}x`);
-    });
-
-    document.getElementById('btn-scale-down').addEventListener('click', () => {
-      if (!selected) { updateStatus('Click a shape first'); return; }
-      selected.scale *= 0.8;
-      draw();
-      updateStatus(`Scaled ${selected.name} to ${selected.scale.toFixed(2)}x`);
-    });
-
-    document.getElementById('btn-reset').addEventListener('click', () => {
-      for (let i = 0; i < shapes.length; i++) {
-        Object.assign(shapes[i], initState[i]);
-      }
-      selected = null;
-      draw();
-      updateStatus('Reset to initial positions');
     });
 
     draw();

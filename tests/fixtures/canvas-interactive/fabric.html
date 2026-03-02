@@ -7,12 +7,6 @@
     body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
     h2 { margin: 0 0 4px; }
     p { color: #666; margin: 0 0 16px; font-size: 14px; }
-    .controls { margin-bottom: 12px; display: flex; gap: 8px; }
-    .controls button {
-      padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px;
-      background: #fff; cursor: pointer; font-size: 13px;
-    }
-    .controls button:hover { background: #eee; }
     .canvas-container { border: 1px solid #ccc; }
     #canvas { background: #fff; }
     #status { margin-top: 8px; font-size: 13px; color: #444; font-family: monospace; }
@@ -20,14 +14,7 @@
 </head>
 <body>
   <h2>Fabric.js Interactive Canvas</h2>
-  <p>Shapes: red-rect, blue-circle. Drag to move, use corner handles to rotate/scale.</p>
-  <div class="controls">
-    <button id="btn-rotate">Rotate Selected +45&deg;</button>
-    <button id="btn-scale-up">Scale Up 1.2x</button>
-    <button id="btn-scale-down">Scale Down 0.8x</button>
-    <button id="btn-skew-x">Skew X +10&deg;</button>
-    <button id="btn-reset">Reset All</button>
-  </div>
+  <p>Click to select. Drag to move. Corner handles to scale. Top handle to rotate. Scroll wheel to scale.</p>
   <canvas id="canvas" width="800" height="600" aria-label="Fabric drawing area"></canvas>
   <div id="status">Ready</div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
@@ -67,44 +54,17 @@
       updateStatus(`Scaling ${o.name}: ${o.scaleX.toFixed(2)}x, ${o.scaleY.toFixed(2)}x`);
     });
 
-    document.getElementById('btn-rotate').addEventListener('click', () => {
+    // Scroll wheel to scale selected object
+    canvas.on('mouse:wheel', (opt) => {
       const obj = canvas.getActiveObject();
-      if (!obj) { updateStatus('Select an object first'); return; }
-      obj.rotate((obj.angle || 0) + 45);
-      canvas.renderAll();
-      updateStatus(`Rotated ${obj.name} to ${Math.round(obj.angle)}°`);
-    });
-
-    document.getElementById('btn-scale-up').addEventListener('click', () => {
-      const obj = canvas.getActiveObject();
-      if (!obj) { updateStatus('Select an object first'); return; }
-      obj.scale((obj.scaleX || 1) * 1.2);
+      if (!obj) return;
+      opt.e.preventDefault();
+      opt.e.stopPropagation();
+      const delta = opt.e.deltaY;
+      const factor = delta > 0 ? 0.9 : 1.1;
+      obj.scale((obj.scaleX || 1) * factor);
       canvas.renderAll();
       updateStatus(`Scaled ${obj.name} to ${obj.scaleX.toFixed(2)}x`);
-    });
-
-    document.getElementById('btn-scale-down').addEventListener('click', () => {
-      const obj = canvas.getActiveObject();
-      if (!obj) { updateStatus('Select an object first'); return; }
-      obj.scale((obj.scaleX || 1) * 0.8);
-      canvas.renderAll();
-      updateStatus(`Scaled ${obj.name} to ${obj.scaleX.toFixed(2)}x`);
-    });
-
-    document.getElementById('btn-skew-x').addEventListener('click', () => {
-      const obj = canvas.getActiveObject();
-      if (!obj) { updateStatus('Select an object first'); return; }
-      obj.set('skewX', (obj.skewX || 0) + 10);
-      canvas.renderAll();
-      updateStatus(`Skewed ${obj.name} X to ${obj.skewX}°`);
-    });
-
-    document.getElementById('btn-reset').addEventListener('click', () => {
-      rect.set({ left: 100, top: 100, angle: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 });
-      circle.set({ left: 400, top: 250, angle: 0, scaleX: 1, scaleY: 1, skewX: 0, skewY: 0 });
-      canvas.discardActiveObject();
-      canvas.renderAll();
-      updateStatus('Reset to initial positions');
     });
   </script>
 </body>

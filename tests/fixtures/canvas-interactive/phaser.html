@@ -8,30 +8,21 @@
     body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
     h2 { margin: 0 0 4px; }
     p { color: #666; margin: 0 0 16px; font-size: 14px; }
-    .controls { margin-bottom: 12px; display: flex; gap: 8px; }
-    .controls button {
-      padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px;
-      background: #fff; cursor: pointer; font-size: 13px;
-    }
-    .controls button:hover { background: #eee; }
     #phaser-container { border: 1px solid #ccc; display: inline-block; }
     #status { margin-top: 8px; font-size: 13px; color: #444; font-family: monospace; }
   </style>
 </head>
 <body>
   <h2>Phaser Interactive Canvas</h2>
-  <p>Shapes: violet-rect, lime-circle. Drag to move. Buttons for rotate/scale/skew.</p>
-  <div class="controls">
-    <button id="btn-rotate">Rotate +45&deg;</button>
-    <button id="btn-scale-up">Scale Up 1.2x</button>
-    <button id="btn-scale-down">Scale Down 0.8x</button>
-    <button id="btn-reset">Reset All</button>
-  </div>
+  <p>Drag to move. Shift+drag to rotate. Scroll wheel to scale.</p>
   <div id="phaser-container" aria-label="Phaser drawing area"></div>
   <div id="status">Ready</div>
   <script>
     let selectedObj = null;
     let phaserRect, phaserCircle;
+    let isRotating = false;
+    let rotateStart = { x: 0, y: 0 };
+    let startAngle = 0;
     const statusEl = document.getElementById('status');
     function updateStatus(msg) { statusEl.textContent = msg; }
 
@@ -65,17 +56,40 @@
           phaserCircle.setInteractive({ draggable: true });
           phaserCircle.name = 'lime-circle';
 
-          // Drag events
+          // Drag events (only when not rotating)
           this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+            if (isRotating) return;
             gameObject.x = dragX;
             gameObject.y = dragY;
             updateStatus(`Moving ${gameObject.name}: (${Math.round(dragX)}, ${Math.round(dragY)})`);
           });
 
-          // Click to select
+          // Click to select + shift+drag to rotate
           this.input.on('gameobjectdown', (pointer, gameObject) => {
             selectedObj = gameObject;
-            updateStatus(`Selected ${gameObject.name}`);
+            if (pointer.event.shiftKey) {
+              isRotating = true;
+              rotateStart = { x: pointer.x, y: pointer.y };
+              startAngle = gameObject.angle;
+              updateStatus(`Rotating ${gameObject.name}...`);
+            } else {
+              updateStatus(`Selected ${gameObject.name}`);
+            }
+          });
+
+          this.input.on('pointermove', (pointer) => {
+            if (!isRotating || !selectedObj) return;
+            const cx = selectedObj.x;
+            const cy = selectedObj.y;
+            const startA = Math.atan2(rotateStart.y - cy, rotateStart.x - cx);
+            const currentA = Math.atan2(pointer.y - cy, pointer.x - cx);
+            const delta = (currentA - startA) * 180 / Math.PI;
+            selectedObj.angle = startAngle + delta;
+            updateStatus(`Rotating ${selectedObj.name}: ${Math.round(selectedObj.angle)}°`);
+          });
+
+          this.input.on('pointerup', () => {
+            isRotating = false;
           });
 
           // Click background to deselect
@@ -106,37 +120,13 @@
       if (canvas) canvas.setAttribute('aria-label', 'Phaser drawing area');
     }, 500);
 
-    document.getElementById('btn-rotate').addEventListener('click', () => {
-      if (!selectedObj) { updateStatus('Click a shape first'); return; }
-      selectedObj.angle += 45;
-      updateStatus(`Rotated ${selectedObj.name} to ${selectedObj.angle}°`);
-    });
-
-    document.getElementById('btn-scale-up').addEventListener('click', () => {
-      if (!selectedObj) { updateStatus('Click a shape first'); return; }
-      selectedObj.setScale(selectedObj.scaleX * 1.2, selectedObj.scaleY * 1.2);
+    // Scroll wheel to scale selected object
+    document.getElementById('phaser-container').addEventListener('wheel', (e) => {
+      if (!selectedObj) return;
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      selectedObj.setScale(selectedObj.scaleX * factor, selectedObj.scaleY * factor);
       updateStatus(`Scaled ${selectedObj.name} to ${selectedObj.scaleX.toFixed(2)}x`);
-    });
-
-    document.getElementById('btn-scale-down').addEventListener('click', () => {
-      if (!selectedObj) { updateStatus('Click a shape first'); return; }
-      selectedObj.setScale(selectedObj.scaleX * 0.8, selectedObj.scaleY * 0.8);
-      updateStatus(`Scaled ${selectedObj.name} to ${selectedObj.scaleX.toFixed(2)}x`);
-    });
-
-    document.getElementById('btn-reset').addEventListener('click', () => {
-      if (phaserRect) {
-        phaserRect.setPosition(200, 200);
-        phaserRect.setAngle(0);
-        phaserRect.setScale(1);
-      }
-      if (phaserCircle) {
-        phaserCircle.setPosition(550, 380);
-        phaserCircle.setAngle(0);
-        phaserCircle.setScale(1);
-      }
-      selectedObj = null;
-      updateStatus('Reset to initial positions');
     });
   </script>
 </body>
