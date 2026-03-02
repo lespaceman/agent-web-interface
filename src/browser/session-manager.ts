@@ -273,6 +273,8 @@ export class SessionManager {
   private readonly stateChangeListeners = new Set<(event: ConnectionStateChangeEvent) => void>();
   /** Browser disconnect handler reference for cleanup */
   private browserDisconnectHandler: (() => void) | null = null;
+  /** Last known WebSocket endpoint, saved during detach() for potential reconnection */
+  private _lastWsEndpoint: string | undefined;
 
   constructor() {
     this.registry = new PageRegistry();
@@ -283,6 +285,14 @@ export class SessionManager {
    */
   get connectionState(): ConnectionState {
     return this._connectionState;
+  }
+
+  /**
+   * Get the last known WebSocket endpoint URL.
+   * Saved during detach() for potential reconnection to the same browser.
+   */
+  get lastWsEndpoint(): string | undefined {
+    return this._lastWsEndpoint;
   }
 
   /**
@@ -884,6 +894,61 @@ export class SessionManager {
 
     this.transitionTo('idle');
     this.logger.info('Browser session shutdown complete');
+  }
+
+  /**
+   * Detach from the browser without closing it.
+   *
+   * The browser process continues running after detach, allowing it to
+   * survive MCP server exit. The WebSocket endpoint is saved for potential
+   * reconnection via connect({ browserWSEndpoint }).
+   *
+   * This is a no-op if the browser is not connected.
+   */
+  async detach(): Promise<void> {
+    if (!this.browser || this._connectionState === 'disconnecting') {
+      return;
+    }
+
+    this.transitionTo('disconnecting');
+    this.logger.info('Detaching from browser (browser will keep running)');
+
+    // Remove browser disconnect listener to prevent duplicate handling
+    this.removeBrowserListeners();
+
+    // Save the WebSocket endpoint before disconnecting (for potential reconnection)
+    try {
+      if (typeof (this.browser as unknown as { wsEndpoint: () => string }).wsEndpoint === 'function') {
+        this._lastWsEndpoint = (this.browser as unknown as { wsEndpoint: () => string }).wsEndpoint();
+      }
+    } catch {
+      // wsEndpoint may not be available (e.g., pipe transport)
+      this.logger.debug('Could not retrieve wsEndpoint during detach');
+    }
+
+    // Close/detach all CDP sessions (best-effort)
+    const pages = this.registry.list();
+    for (const page of pages) {
+      try {
+        await page.cdp.close();
+      } catch (err) {
+        this.logger.debug('CDP session close failed during detach', {
+          page_id: page.page_id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // Disconnect from browser without closing it
+    void this.browser.disconnect();
+
+    // Clean up internal state
+    this.browser = null;
+    this.context = null;
+    this.registry.clear();
+
+    this.transitionTo('idle');
+    this.logger.info('Detached from browser successfully');
   }
 
   /**
