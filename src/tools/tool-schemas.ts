@@ -405,23 +405,10 @@ export type ClickOutcome = z.infer<typeof ClickOutcomeSchema>;
 // ============================================================================
 
 // ============================================================================
-// Shared session_id field for multi-tenant routing
-// ============================================================================
-
-const sessionIdField = {
-  session_id: z
-    .string()
-    .optional()
-    .describe('Session ID. Required when multiple sessions are active.'),
-} as const;
-
-// ============================================================================
 // list_pages - List all open browser pages
 // ============================================================================
 
-export const ListPagesInputSchema = z.object({
-  ...sessionIdField,
-});
+export const ListPagesInputSchema = z.object({});
 
 /** Returns XML result string */
 export const ListPagesOutputSchema = z.string();
@@ -436,7 +423,6 @@ export type ListPagesOutput = z.infer<typeof ListPagesOutputSchema>;
 export const ClosePageInputSchema = z.object({
   /** Page ID to close */
   page_id: z.string(),
-  ...sessionIdField,
 });
 
 /** Returns XML result string */
@@ -449,9 +435,7 @@ export type ClosePageOutput = z.infer<typeof ClosePageOutputSchema>;
 // close_session - Close the entire browser session
 // ============================================================================
 
-export const CloseSessionInputSchema = z.object({
-  ...sessionIdField,
-});
+export const CloseSessionInputSchema = z.object({});
 
 /** Returns XML result string */
 export const CloseSessionOutputSchema = z.string();
@@ -468,7 +452,6 @@ export const NavigateInputSchema = z.object({
   url: z.string().url(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 
 /** Returns XML state response string directly */
@@ -484,7 +467,6 @@ export type NavigateOutput = z.infer<typeof NavigateOutputSchema>;
 export const GoBackInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 
 /** Returns XML state response string directly */
@@ -500,7 +482,6 @@ export type GoBackOutput = z.infer<typeof GoBackOutputSchema>;
 export const GoForwardInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 
 /** Returns XML state response string directly */
@@ -516,7 +497,6 @@ export type GoForwardOutput = z.infer<typeof GoForwardOutputSchema>;
 export const ReloadInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 
 /** Returns XML state response string directly */
@@ -532,7 +512,6 @@ export type ReloadOutput = z.infer<typeof ReloadOutputSchema>;
 export const CaptureSnapshotInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 
 /** Returns XML state response string directly */
@@ -548,7 +527,7 @@ export type CaptureSnapshotOutput = z.infer<typeof CaptureSnapshotOutputSchema>;
 export const FindElementsInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page to search within.'),
-  ...sessionIdField,
+
   /** Filter by element type. */
   kind: z
     .enum(['button', 'link', 'radio', 'checkbox', 'textbox', 'combobox', 'image', 'heading'])
@@ -595,7 +574,6 @@ export const GetNodeDetailsInputSchema = z.object({
   eid: z.string(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 
 /** Returns XML result string */
@@ -617,7 +595,6 @@ const ScrollElementIntoViewInputSchemaBase = z.object({
     ),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 export const ScrollElementIntoViewInputSchema = ScrollElementIntoViewInputSchemaBase;
 export { ScrollElementIntoViewInputSchemaBase };
@@ -639,7 +616,6 @@ export const ScrollPageInputSchema = z.object({
   amount: z.number().default(500),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 
 /** Returns XML state response string directly */
@@ -681,7 +657,6 @@ const ClickInputSchemaBase = z.object({
     .describe(
       'Element ID from find_elements results or the page snapshot. Every interactive element has a unique eid.'
     ),
-  ...sessionIdField,
 });
 export const ClickInputSchema = ClickInputSchemaBase;
 // Re-export base for .shape access
@@ -710,7 +685,6 @@ const TypeInputSchemaBase = z.object({
     ),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 export const TypeInputSchema = TypeInputSchemaBase;
 export { TypeInputSchemaBase };
@@ -729,7 +703,6 @@ export const PressInputSchema = z.object({
   modifiers: z.array(z.enum(['Control', 'Shift', 'Alt', 'Meta'])).optional(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 
 /** Returns XML state response string directly */
@@ -752,7 +725,6 @@ const SelectInputSchemaBase = z.object({
     ),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 export const SelectInputSchema = SelectInputSchemaBase;
 export { SelectInputSchemaBase };
@@ -769,7 +741,6 @@ const HoverInputSchemaBase = z.object({
   eid: z.string().describe('Element ID from find_elements results or the page snapshot.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  ...sessionIdField,
 });
 export const HoverInputSchema = HoverInputSchemaBase;
 export { HoverInputSchemaBase };
@@ -788,7 +759,7 @@ export type HoverOutput = z.infer<typeof HoverOutputSchema>;
 const TakeScreenshotInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page to screenshot.'),
-  ...sessionIdField,
+
   /** Element ID to capture (requires prior snapshot). Cannot combine with fullPage. */
   eid: z
     .string()
