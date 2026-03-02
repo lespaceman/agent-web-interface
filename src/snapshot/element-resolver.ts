@@ -7,37 +7,30 @@
 
 import type { CdpClient } from '../cdp/cdp-client.interface.js';
 
+// ============================================================================
+// Element Box Model Helpers
+// ============================================================================
+
 /**
- * Click an element using CDP's backendNodeId directly.
+ * Scroll element into view and get its content quad from CDP.
+ * Shared primitive used by click, drag, and other coordinate-based operations.
  *
- * This bypasses Playwright's locator system to avoid strict mode violations
- * when multiple elements match the same selector. The backendNodeId is
- * guaranteed unique per DOM element within a CDP session.
- *
- * @param cdp - CDP client instance
- * @param backendNodeId - CDP backend node ID (stable within session)
- * @throws Error if element not found, not visible, or click fails
- *
- * @example
- * ```typescript
- * // Click using the unique backendNodeId from snapshot
- * await clickByBackendNodeId(cdp, node.backend_node_id);
- * ```
+ * @returns Content quad as 8-element array [x1,y1, x2,y2, x3,y3, x4,y4]
  */
-export async function clickByBackendNodeId(cdp: CdpClient, backendNodeId: number): Promise<void> {
-  // 1. Scroll element into view (ensures element is visible and clickable)
+async function scrollAndGetContentQuad(
+  cdp: CdpClient,
+  backendNodeId: number
+): Promise<number[]> {
   try {
     await cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Failed to scroll element into view (backendNodeId: ${backendNodeId}). ` +
-        `The element may have been removed from the DOM. ` +
-        `Try capturing a fresh snapshot. Original error: ${message}`
+        `The element may have been removed from the DOM. Original error: ${message}`
     );
   }
 
-  // 2. Get element bounding box to calculate click coordinates
   let model;
   try {
     const result = await cdp.send('DOM.getBoxModel', { backendNodeId });
@@ -50,7 +43,6 @@ export async function clickByBackendNodeId(cdp: CdpClient, backendNodeId: number
     );
   }
 
-  // Validate we have a content box to click
   if (!model?.content || model.content.length < 8) {
     throw new Error(
       `Element has no clickable area (backendNodeId: ${backendNodeId}). ` +
@@ -58,37 +50,75 @@ export async function clickByBackendNodeId(cdp: CdpClient, backendNodeId: number
     );
   }
 
-  // The content quad is an array of 8 numbers: [x1,y1, x2,y2, x3,y3, x4,y4]
-  // representing the four corners of the content box in viewport coordinates.
-  // We click at the center of the content box.
-  const [x1, y1, x2, , , y3] = model.content;
-  const centerX = x1 + (x2 - x1) / 2;
-  const centerY = y1 + (y3 - y1) / 2;
+  return model.content;
+}
 
-  // Validate coordinates are reasonable (not negative or extremely large)
-  if (centerX < 0 || centerY < 0 || !Number.isFinite(centerX) || !Number.isFinite(centerY)) {
+/**
+ * Get the top-left viewport coordinates of an element.
+ * Scrolls element into view first.
+ */
+export async function getElementTopLeft(
+  cdp: CdpClient,
+  backendNodeId: number
+): Promise<{ x: number; y: number }> {
+  const content = await scrollAndGetContentQuad(cdp, backendNodeId);
+  return { x: content[0], y: content[1] };
+}
+
+// ============================================================================
+// Click Operations
+// ============================================================================
+
+/**
+ * Click an element at its center using CDP's backendNodeId.
+ *
+ * Bypasses Playwright's locator system to avoid strict mode violations
+ * when multiple elements match the same selector.
+ */
+export async function clickByBackendNodeId(cdp: CdpClient, backendNodeId: number): Promise<void> {
+  const { x, y } = await getElementCenter(cdp, backendNodeId);
+  await clickAtCoordinates(cdp, x, y);
+}
+
+/**
+ * Click at absolute viewport coordinates using CDP.
+ */
+export async function clickAtCoordinates(cdp: CdpClient, x: number, y: number): Promise<void> {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
     throw new Error(
-      `Invalid click coordinates (x: ${centerX}, y: ${centerY}) for backendNodeId: ${backendNodeId}. ` +
-        `The element may be positioned off-screen.`
+      `Invalid click coordinates (x: ${x}, y: ${y}). Coordinates must be non-negative finite numbers.`
     );
   }
 
-  // 3. Click at the element's center using CDP Input domain
   await cdp.send('Input.dispatchMouseEvent', {
     type: 'mousePressed',
-    x: centerX,
-    y: centerY,
+    x,
+    y,
     button: 'left',
     clickCount: 1,
   });
 
   await cdp.send('Input.dispatchMouseEvent', {
     type: 'mouseReleased',
-    x: centerX,
-    y: centerY,
+    x,
+    y,
     button: 'left',
     clickCount: 1,
   });
+}
+
+/**
+ * Click at an offset relative to an element's top-left corner.
+ * Scrolls element into view, computes absolute coordinates, then clicks.
+ */
+export async function clickAtElementOffset(
+  cdp: CdpClient,
+  backendNodeId: number,
+  offsetX: number,
+  offsetY: number
+): Promise<void> {
+  const { x, y } = await getElementTopLeft(cdp, backendNodeId);
+  await clickAtCoordinates(cdp, x + offsetX, y + offsetY);
 }
 
 // ============================================================================
@@ -172,38 +202,8 @@ async function getElementCenter(
   cdp: CdpClient,
   backendNodeId: number
 ): Promise<{ x: number; y: number }> {
-  // Scroll into view
-  try {
-    await cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Failed to scroll element into view (backendNodeId: ${backendNodeId}). ` +
-        `The element may have been removed from the DOM. Original error: ${message}`
-    );
-  }
-
-  // Get bounding box
-  let model;
-  try {
-    const result = await cdp.send('DOM.getBoxModel', { backendNodeId });
-    model = result.model;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Failed to get element bounding box (backendNodeId: ${backendNodeId}). ` +
-        `The element may be hidden or have no layout. Original error: ${message}`
-    );
-  }
-
-  if (!model?.content || model.content.length < 8) {
-    throw new Error(
-      `Element has no clickable area (backendNodeId: ${backendNodeId}). ` +
-        `The element may be zero-sized or not rendered.`
-    );
-  }
-
-  const [x1, y1, x2, , , y3] = model.content;
+  const content = await scrollAndGetContentQuad(cdp, backendNodeId);
+  const [x1, y1, x2, , , y3] = content;
   const x = x1 + (x2 - x1) / 2;
   const y = y1 + (y3 - y1) / 2;
 
@@ -455,5 +455,78 @@ export async function scrollPage(
 
   await cdp.send('Runtime.evaluate', {
     expression: `window.scrollBy(0, ${scrollY})`,
+  });
+}
+
+// ============================================================================
+// Drag Between Coordinates
+// ============================================================================
+
+/**
+ * Drag from one point to another using CDP mouse events.
+ *
+ * Dispatches mousePressed at source, interpolates mouseMoved events
+ * from source to target, then mouseReleased at target.
+ *
+ * @param cdp - CDP client instance
+ * @param sourceX - Start X coordinate
+ * @param sourceY - Start Y coordinate
+ * @param targetX - End X coordinate
+ * @param targetY - End Y coordinate
+ * @param steps - Number of intermediate mouseMoved events (default: 10)
+ * @throws Error if coordinates are invalid
+ */
+export async function dragBetweenCoordinates(
+  cdp: CdpClient,
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  steps = 10
+): Promise<void> {
+  // Validate all coordinates
+  for (const [name, val] of [
+    ['sourceX', sourceX],
+    ['sourceY', sourceY],
+    ['targetX', targetX],
+    ['targetY', targetY],
+  ] as const) {
+    if (!Number.isFinite(val) || val < 0) {
+      throw new Error(
+        `Invalid drag coordinate ${name}: ${val}. Coordinates must be non-negative finite numbers.`
+      );
+    }
+  }
+
+  // Mouse down at source
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: sourceX,
+    y: sourceY,
+    button: 'left',
+    clickCount: 1,
+  });
+
+  // Interpolate mouse moves from source to target
+  for (let i = 1; i <= steps; i++) {
+    const ratio = i / steps;
+    const x = sourceX + (targetX - sourceX) * ratio;
+    const y = sourceY + (targetY - sourceY) * ratio;
+
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x,
+      y,
+      button: 'left',
+    });
+  }
+
+  // Mouse up at target
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: targetX,
+    y: targetY,
+    button: 'left',
+    clickCount: 1,
   });
 }

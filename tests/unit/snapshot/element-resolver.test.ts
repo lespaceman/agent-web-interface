@@ -5,6 +5,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   clickByBackendNodeId,
+  clickAtCoordinates,
+  clickAtElementOffset,
+  dragBetweenCoordinates,
   typeByBackendNodeId,
   pressKey,
   selectOption,
@@ -116,7 +119,7 @@ describe('ElementResolver', () => {
         });
 
       await expect(clickByBackendNodeId(mockCdp as unknown as CdpClient, 12345)).rejects.toThrow(
-        /Invalid click coordinates.*off-screen/
+        /Invalid coordinates.*off-screen/
       );
     });
   });
@@ -469,6 +472,219 @@ describe('ElementResolver', () => {
 
       // Should have exactly 4 CDP calls
       expect(mockCdp.send).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe('clickAtCoordinates()', () => {
+    let mockCdp: { send: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      mockCdp = {
+        send: vi.fn().mockResolvedValue(undefined),
+      };
+    });
+
+    it('should dispatch mousePressed and mouseReleased at given coordinates', async () => {
+      await clickAtCoordinates(mockCdp as unknown as CdpClient, 100, 200);
+
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mousePressed',
+          x: 100,
+          y: 200,
+          button: 'left',
+          clickCount: 1,
+        })
+      );
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mouseReleased',
+          x: 100,
+          y: 200,
+          button: 'left',
+          clickCount: 1,
+        })
+      );
+      expect(mockCdp.send).toHaveBeenCalledTimes(2);
+    });
+
+    it('should reject negative X coordinate', async () => {
+      await expect(
+        clickAtCoordinates(mockCdp as unknown as CdpClient, -1, 200)
+      ).rejects.toThrow('Invalid click coordinates');
+    });
+
+    it('should reject negative Y coordinate', async () => {
+      await expect(
+        clickAtCoordinates(mockCdp as unknown as CdpClient, 100, -5)
+      ).rejects.toThrow('Invalid click coordinates');
+    });
+
+    it('should reject NaN coordinates', async () => {
+      await expect(
+        clickAtCoordinates(mockCdp as unknown as CdpClient, NaN, 200)
+      ).rejects.toThrow('Invalid click coordinates');
+    });
+  });
+
+  describe('clickAtElementOffset()', () => {
+    let mockCdp: { send: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      mockCdp = {
+        send: vi.fn(),
+      };
+    });
+
+    it('should compute absolute coords from box model + offset', async () => {
+      mockCdp.send
+        .mockResolvedValueOnce(undefined) // scrollIntoViewIfNeeded
+        .mockResolvedValueOnce({
+          model: {
+            content: [100, 200, 300, 200, 300, 400, 100, 400],
+          },
+        }) // getBoxModel
+        .mockResolvedValueOnce(undefined) // mousePressed
+        .mockResolvedValueOnce(undefined); // mouseReleased
+
+      await clickAtElementOffset(mockCdp as unknown as CdpClient, 12345, 10, 20);
+
+      expect(mockCdp.send).toHaveBeenCalledWith('DOM.scrollIntoViewIfNeeded', {
+        backendNodeId: 12345,
+      });
+
+      // Absolute coords: element top-left (100, 200) + offset (10, 20) = (110, 220)
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mousePressed',
+          x: 110,
+          y: 220,
+        })
+      );
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mouseReleased',
+          x: 110,
+          y: 220,
+        })
+      );
+    });
+
+    it('should throw if element has no box model', async () => {
+      mockCdp.send
+        .mockResolvedValueOnce(undefined) // scrollIntoViewIfNeeded
+        .mockResolvedValueOnce({ model: { content: [] } }); // getBoxModel with empty content
+
+      await expect(
+        clickAtElementOffset(mockCdp as unknown as CdpClient, 12345, 10, 20)
+      ).rejects.toThrow('no clickable area');
+    });
+  });
+
+  describe('dragBetweenCoordinates()', () => {
+    let mockCdp: { send: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      mockCdp = {
+        send: vi.fn().mockResolvedValue(undefined),
+      };
+    });
+
+    it('should dispatch mousePressed, N mouseMoved, and mouseReleased', async () => {
+      const steps = 5;
+      await dragBetweenCoordinates(
+        mockCdp as unknown as CdpClient,
+        100,
+        200,
+        200,
+        400,
+        steps
+      );
+
+      const calls = mockCdp.send.mock.calls;
+
+      // First call: mousePressed at source
+      expect(calls[0]).toEqual([
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mousePressed',
+          x: 100,
+          y: 200,
+          button: 'left',
+        }),
+      ]);
+
+      // Middle calls: mouseMoved (steps count)
+      for (let i = 1; i <= steps; i++) {
+        expect(calls[i]).toEqual([
+          'Input.dispatchMouseEvent',
+          expect.objectContaining({
+            type: 'mouseMoved',
+            button: 'left',
+          }),
+        ]);
+      }
+
+      // Last call: mouseReleased at target
+      expect(calls[steps + 1]).toEqual([
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mouseReleased',
+          x: 200,
+          y: 400,
+          button: 'left',
+        }),
+      ]);
+
+      // Total: 1 pressed + steps moved + 1 released
+      expect(mockCdp.send).toHaveBeenCalledTimes(1 + steps + 1);
+    });
+
+    it('should correctly interpolate intermediate points', async () => {
+      await dragBetweenCoordinates(
+        mockCdp as unknown as CdpClient,
+        0,
+        0,
+        100,
+        200,
+        2
+      );
+
+      const calls = mockCdp.send.mock.calls;
+
+      // Step 1/2: midpoint (50, 100)
+      expect(calls[1][1]).toEqual(
+        expect.objectContaining({
+          type: 'mouseMoved',
+          x: 50,
+          y: 100,
+        })
+      );
+
+      // Step 2/2: endpoint (100, 200)
+      expect(calls[2][1]).toEqual(
+        expect.objectContaining({
+          type: 'mouseMoved',
+          x: 100,
+          y: 200,
+        })
+      );
+    });
+
+    it('should reject negative coordinates', async () => {
+      await expect(
+        dragBetweenCoordinates(mockCdp as unknown as CdpClient, -1, 0, 100, 100)
+      ).rejects.toThrow('Invalid drag coordinate');
+    });
+
+    it('should reject NaN coordinates', async () => {
+      await expect(
+        dragBetweenCoordinates(mockCdp as unknown as CdpClient, 0, 0, NaN, 100)
+      ).rejects.toThrow('Invalid drag coordinate');
     });
   });
 });

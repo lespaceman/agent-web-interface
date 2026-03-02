@@ -393,6 +393,7 @@ function mapRoleToKind(role: string | undefined): NodeKind | undefined {
     image: 'image',
     img: 'image',
     figure: 'image',
+    canvas: 'canvas',
     table: 'table',
     grid: 'table',
     treegrid: 'table',
@@ -570,7 +571,7 @@ export class SnapshotCompiler {
       // Fallback: Use DOM-only for interactive tags and essential structural elements
       for (const [backendNodeId, domNode] of domResult.nodes) {
         const tagName = domNode.nodeName.toUpperCase();
-        if (['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG'].includes(tagName)) {
+        if (['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG', 'CANVAS'].includes(tagName)) {
           nodesToProcess.push({
             backendNodeId,
             domNode,
@@ -646,6 +647,33 @@ export class SnapshotCompiler {
       }
     }
 
+    // Phase 2.2: Synthesize canvas nodes from DOM.
+    // Canvas elements are classified as generic/ignored by the AX tree,
+    // so we inject them from the DOM so AI agents can discover and interact with them.
+    if (domResult) {
+      const alreadyInCanvas = new Set(nodesToProcess.map((n) => n.backendNodeId));
+
+      for (const [backendNodeId, domNode] of domResult.nodes) {
+        if (domNode.nodeName.toUpperCase() !== 'CANVAS') continue;
+        if (alreadyInCanvas.has(backendNodeId)) continue;
+
+        const syntheticAx: RawAxNode = {
+          nodeId: `synthetic-canvas-${backendNodeId}`,
+          backendDOMNodeId: backendNodeId,
+          role: 'canvas',
+          name: domNode.attributes?.['aria-label'] ?? '',
+          properties: [],
+        };
+
+        nodesToProcess.push({
+          backendNodeId,
+          domNode,
+          axNode: syntheticAx,
+        });
+        alreadyInCanvas.add(backendNodeId);
+      }
+    }
+
     // Sort by DOM order if available (before max_nodes slicing)
     if (domOrderAvailable && domOrderIndex) {
       const orderMap = domOrderIndex; // Capture for closure to avoid reassignment issues
@@ -676,6 +704,7 @@ export class SnapshotCompiler {
       'slider',
       'tab',
       'menuitem',
+      'canvas',
     ]);
 
     // Collect non-interactive nodes already in nodesToProcess (Case A)
@@ -827,6 +856,7 @@ export class SnapshotCompiler {
           'slider',
           'tab',
           'menuitem',
+          'canvas',
         ].includes(n.kind) || n.implicitly_interactive
     ).length;
 
@@ -1025,6 +1055,7 @@ export class SnapshotCompiler {
       DIALOG: 'dialog',
       NAV: 'navigation',
       OPTION: 'menuitem',
+      CANVAS: 'canvas',
     };
     return tagMap[tag];
   }
@@ -1055,6 +1086,7 @@ export class SnapshotCompiler {
       'slider',
       'tab',
       'menuitem',
+      'canvas',
     ]);
     const interactiveBackendIds = new Set(
       nodes.filter((n) => interactiveKinds.has(n.kind)).map((n) => n.backend_node_id)

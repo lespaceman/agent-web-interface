@@ -45,8 +45,7 @@ export function getSessionBinding(): SessionWorkerBinding {
   return sessionBinding;
 }
 import {
-  initializeTools,
-  initializeFormTools,
+  initializeToolContext,
   // Tool handlers
   listPages,
   closePage,
@@ -65,9 +64,11 @@ import {
   press,
   select,
   hover,
+  drag,
   getFormUnderstanding,
   getFieldContext,
   takeScreenshot,
+  inspectCanvas,
   // Input schemas only (all outputs are XML strings now)
   ListPagesInputSchema,
   ClosePageInputSchema,
@@ -86,9 +87,11 @@ import {
   PressInputSchema,
   SelectInputSchemaBase,
   HoverInputSchemaBase,
+  DragInputSchemaBase,
   GetFormUnderstandingInputSchema,
   GetFieldContextInputSchema,
   TakeScreenshotInputSchemaBase,
+  InspectCanvasInputSchemaBase,
 } from './tools/index.js';
 
 /**
@@ -179,8 +182,7 @@ function initializeServer(): BrowserAutomationServer {
 
   // Initialize session manager and tools
   const session = getSessionManager();
-  initializeTools(session);
-  initializeFormTools(session);
+  initializeToolContext(session);
 
   // ============================================================================
   // SESSION TOOLS
@@ -285,7 +287,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Find Elements',
       description:
-        'Search for interactive elements OR read page text content. Filter by `kind` (button, link, textbox), `label` (case-insensitive substring match), or `region` (header, main, footer). To READ page content, ensure `include_readable: true` (default) which includes paragraphs and headings.',
+        'Search for interactive elements OR read page text content. Filter by `kind` (button, link, textbox, canvas), `label` (case-insensitive substring match), or `region` (header, main, footer). To READ page content, ensure `include_readable: true` (default) which includes paragraphs and headings.',
       inputSchema: FindElementsInputSchema.shape,
     },
     withLazyInit(findElements, 'find_elements')
@@ -344,7 +346,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Click Element',
       description:
-        'Click an element. Use for buttons, links, checkboxes, or any clickable element. Returns updated page snapshot reflecting any changes from the click.',
+        'Click an element or at viewport coordinates. Use for buttons, links, checkboxes, or any clickable element. Returns updated page snapshot reflecting any changes from the click. Supports three modes: (1) eid only - clicks element center, (2) eid + x/y - clicks at offset relative to element top-left, (3) x/y only - clicks at absolute viewport coordinates (useful for canvas elements).',
       inputSchema: ClickInputSchemaBase.shape,
     },
     withLazyInit(click, 'click')
@@ -392,6 +394,32 @@ function initializeServer(): BrowserAutomationServer {
       inputSchema: HoverInputSchemaBase.shape,
     },
     withLazyInit(hover, 'hover')
+  );
+
+  server.registerTool(
+    'drag',
+    {
+      title: 'Drag',
+      description:
+        'Drag from one point to another. Specify source and target coordinates. If `eid` is provided, coordinates are relative to the element\'s top-left corner. Otherwise, coordinates are absolute viewport positions. Useful for canvas drawing, slider manipulation, and drag-and-drop operations.',
+      inputSchema: DragInputSchemaBase.shape,
+    },
+    withLazyInit(drag, 'drag')
+  );
+
+  // ============================================================================
+  // CANVAS INSPECTION TOOLS
+  // ============================================================================
+
+  server.registerTool(
+    'inspect_canvas',
+    {
+      title: 'Inspect Canvas',
+      description:
+        'Analyze a canvas element: auto-detect the rendering library (Fabric.js, Konva, PixiJS, Phaser, Three.js, EaselJS), query its scene graph for objects with positions/sizes, and return an annotated screenshot with coordinate grid overlay and object bounding boxes. Use find_elements with kind=canvas first to discover canvas elements, then inspect_canvas to understand their contents before interacting via click/drag.',
+      inputSchema: InspectCanvasInputSchemaBase.shape,
+    },
+    withLazyInit(inspectCanvas, 'inspect_canvas')
   );
 
   // ============================================================================

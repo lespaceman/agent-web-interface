@@ -6,7 +6,11 @@
  */
 
 import { z } from 'zod';
-import { getSnapshotStore } from './browser-tools.js';
+import {
+  getSessionManager,
+  getSnapshotStore,
+  resolveExistingPage,
+} from './tool-context.js';
 import {
   detectForms,
   getDependencyTracker,
@@ -20,49 +24,13 @@ import {
 } from '../form/index.js';
 import { escapeXml } from '../lib/text-utils.js';
 import type { SessionManager } from '../browser/session-manager.js';
-import type { PageHandle } from '../browser/page-registry.js';
-
-// Module-level reference to session manager (set via initializeFormTools)
-let sessionManager: SessionManager | null = null;
 
 /**
  * Initialize form tools with a session manager instance.
- * Must be called before using any form tool handlers.
- *
- * @param manager - SessionManager instance
+ * @deprecated Use initializeToolContext() instead. Kept for backward compatibility.
  */
-export function initializeFormTools(manager: SessionManager): void {
-  sessionManager = manager;
-}
-
-/**
- * Get the session manager, throwing if not initialized.
- */
-function getSessionManager(): SessionManager {
-  if (!sessionManager) {
-    throw new Error('Form tools not initialized. Call initializeFormTools() first.');
-  }
-  return sessionManager;
-}
-
-/**
- * Resolve page_id to a PageHandle, throwing if not found.
- *
- * @param session - SessionManager instance
- * @param page_id - Optional page identifier
- * @returns PageHandle for the resolved page
- * @throws Error if no page available
- */
-function resolvePage(session: SessionManager, page_id: string | undefined): PageHandle {
-  const handle = session.resolvePage(page_id);
-  if (!handle) {
-    const message = page_id
-      ? `Page not found: ${page_id}`
-      : 'No page available. Use navigate first.';
-    throw new Error(message);
-  }
-  session.touchPage(handle.page_id);
-  return handle;
+export function initializeFormTools(_manager: SessionManager): void {
+  // No-op: tool context is now initialized centrally via initializeToolContext()
 }
 
 // ============================================================================
@@ -407,7 +375,7 @@ export async function getFormUnderstanding(rawInput: unknown): Promise<string> {
   const snapshotStore = getSnapshotStore();
 
   // Resolve page with CDP client for runtime value reading
-  const handle = resolvePage(session, input.page_id);
+  const handle = resolveExistingPage(session, input.page_id);
   const pageId = handle.page_id;
 
   // Get snapshot for the page
@@ -507,7 +475,7 @@ export function getFieldContext(rawInput: unknown): string {
   const snapshotStore = getSnapshotStore();
 
   // Resolve page
-  const handle = resolvePage(session, input.page_id);
+  const handle = resolveExistingPage(session, input.page_id);
   const pageId = handle.page_id;
 
   // Get snapshot for the page

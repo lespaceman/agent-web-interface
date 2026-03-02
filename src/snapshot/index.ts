@@ -40,6 +40,10 @@ export {
 // Element resolver - CDP input functions
 export {
   clickByBackendNodeId,
+  clickAtCoordinates,
+  clickAtElementOffset,
+  getElementTopLeft,
+  dragBetweenCoordinates,
   typeByBackendNodeId,
   pressKey,
   selectOption,

@@ -23,6 +23,7 @@ const INTERACTIVE_KINDS: NodeKind[] = [
   'slider',
   'tab',
   'menuitem',
+  'canvas',
 ];
 
 /**

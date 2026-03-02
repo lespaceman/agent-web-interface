@@ -15,7 +15,7 @@ import {
   type McpNotificationSender,
 } from '../shared/services/logging.service.js';
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { isImageResult, isFileResult } from '../tools/tool-result.types.js';
+import { isCompositeResult, isImageResult, isFileResult } from '../tools/tool-result.types.js';
 
 export interface ServerConfig {
   name: string;
@@ -116,6 +116,34 @@ export class BrowserAutomationServer extends EventEmitter implements McpNotifica
           const result = await handler(input);
           const executionTime = Date.now() - startTime;
           logger.debug(`Tool ${name} completed in ${executionTime}ms`);
+
+          // Composite result - return as multi-content (text + image)
+          if (isCompositeResult(result)) {
+            if (isImageResult(result.image)) {
+              return {
+                content: [
+                  { type: 'text' as const, text: result.text },
+                  {
+                    type: 'image' as const,
+                    data: result.image.data,
+                    mimeType: result.image.mimeType,
+                  },
+                ],
+              };
+            } else {
+              // FileResult fallback - return text + file path
+              const sizeMB = (result.image.sizeBytes / 1024 / 1024).toFixed(2);
+              return {
+                content: [
+                  { type: 'text' as const, text: result.text },
+                  {
+                    type: 'text' as const,
+                    text: `Screenshot saved to: ${result.image.path} (${sizeMB} MB, ${result.image.mimeType})`,
+                  },
+                ],
+              };
+            }
+          }
 
           // Image result - return as MCP ImageContent (inline base64)
           if (isImageResult(result)) {

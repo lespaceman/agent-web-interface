@@ -6,8 +6,11 @@
 
 import type { SessionManager } from '../browser/session-manager.js';
 import {
-  SnapshotStore,
   clickByBackendNodeId,
+  clickAtCoordinates,
+  clickAtElementOffset,
+  getElementTopLeft,
+  dragBetweenCoordinates,
   typeByBackendNodeId,
   pressKey,
   selectOption,
@@ -36,6 +39,7 @@ import {
   SelectInputSchema,
   HoverInputSchema,
   TakeScreenshotInputSchema,
+  DragInputSchema,
 } from './tool-schemas.js';
 import { captureScreenshot, getElementBoundingBox } from '../screenshot/index.js';
 import { cleanupTempFiles } from '../lib/temp-file.js';
@@ -60,7 +64,6 @@ import {
   clearAllStateManagers,
 } from './execute-action.js';
 import type { PageHandle } from '../browser/page-registry.js';
-import { createHealthyRuntime, createRecoveredCdpRuntime } from '../state/health.types.js';
 import type { RuntimeHealth } from '../state/health.types.js';
 import {
   buildClosePageResponse,
@@ -70,99 +73,30 @@ import {
   buildGetElementDetailsResponse,
   type FindElementsMatch,
 } from './response-builder.js';
-import { ElementNotFoundError, StaleElementError, SnapshotRequiredError } from './errors.js';
-import type { ReadableNode } from '../snapshot/snapshot.types.js';
 import { getDependencyTracker } from '../form/index.js';
+import {
+  initializeToolContext,
+  getSessionManager,
+  getSnapshotStore,
+  resolveExistingPage,
+  ensureCdpSession,
+  requireSnapshot,
+  resolveElementByEid,
+} from './tool-context.js';
 
-// Module-level state
-let sessionManager: SessionManager | null = null;
-const snapshotStore = new SnapshotStore();
+// Re-export for backward compatibility (external consumers import from browser-tools)
+export { getSnapshotStore } from './tool-context.js';
 
 /**
  * Initialize tools with a session manager instance.
  * Must be called before using any tool handlers.
- *
- * @param manager - SessionManager instance
  */
 export function initializeTools(manager: SessionManager): void {
-  sessionManager = manager;
+  initializeToolContext(manager);
 }
 
-/**
- * Get the session manager, throwing if not initialized.
- */
-function getSessionManager(): SessionManager {
-  if (!sessionManager) {
-    throw new Error('Tools not initialized. Call initializeTools() first.');
-  }
-  return sessionManager;
-}
-
-/**
- * Get the snapshot store.
- */
-export function getSnapshotStore(): SnapshotStore {
-  return snapshotStore;
-}
-
-/**
- * Resolve page_id to a PageHandle, throwing if not found.
- * Also touches the page to mark it as MRU.
- *
- * @param session - SessionManager instance
- * @param page_id - Optional page identifier
- * @returns PageHandle for the resolved page
- * @throws Error if no page available
- */
-function resolveExistingPage(session: SessionManager, page_id: string | undefined): PageHandle {
-  const handle = session.resolvePage(page_id);
-  if (!handle) {
-    if (page_id) {
-      throw new Error(`Page not found: ${page_id}`);
-    } else {
-      throw new Error('No page available. Navigate to a URL first.');
-    }
-  }
-  session.touchPage(handle.page_id);
-  return handle;
-}
-
-/**
- * Ensure CDP session is healthy, attempting repair if needed.
- *
- * Call this before any CDP operation to auto-repair dead sessions.
- *
- * @param session - SessionManager instance
- * @param handle - Current page handle
- * @returns Updated handle (may be same or new if recovered) and recovery status
- */
-async function ensureCdpSession(
-  session: SessionManager,
-  handle: PageHandle
-): Promise<{ handle: PageHandle; recovered: boolean; runtime_health: RuntimeHealth }> {
-  // Fast path: CDP is active and responds to a lightweight probe
-  if (handle.cdp.isActive()) {
-    try {
-      await handle.cdp.send('Page.getFrameTree', undefined);
-      return { handle, recovered: false, runtime_health: createHealthyRuntime() };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[RECOVERY] CDP probe failed for ${handle.page_id}: ${message}. Attempting rebind`
-      );
-    }
-  }
-
-  // Slow path: CDP needs repair
-  console.warn(`[RECOVERY] CDP session dead for ${handle.page_id}, attempting rebind`);
-
-  const newHandle = await session.rebindCdpSession(handle.page_id);
-  return {
-    handle: newHandle,
-    recovered: true,
-    runtime_health: createRecoveredCdpRuntime('HEALTHY'),
-  };
-}
+// Convenience alias for module-internal use
+const snapshotStore = getSnapshotStore();
 
 /**
  * Build runtime health details from a capture attempt.
@@ -265,56 +199,6 @@ async function prepareActionContext(pageId: string | undefined): Promise<ActionC
   const captureSnapshot = createActionCapture(session, handleRef, resolvedPageId);
 
   return { handleRef, pageId: resolvedPageId, captureSnapshot, session };
-}
-
-/**
- * Resolve element by eid for action tools.
- * Looks up element in registry and finds corresponding node in snapshot.
- * Includes proactive staleness detection before CDP interaction.
- *
- * @param pageId - Page ID for registry lookup
- * @param eid - Element ID to resolve
- * @param snapshot - Current snapshot to search
- * @returns Resolved node from snapshot
- * @throws {ElementNotFoundError} If eid not found in registry
- * @throws {StaleElementError} If eid reference is stale or element not in current snapshot
- */
-function resolveElementByEid(pageId: string, eid: string, snapshot: BaseSnapshot): ReadableNode {
-  const stateManager = getStateManager(pageId);
-  const registry = stateManager.getElementRegistry();
-  const elementRef = registry.getByEid(eid);
-
-  if (!elementRef) {
-    throw new ElementNotFoundError(eid);
-  }
-
-  // Proactive staleness check - detect stale elements before CDP interaction
-  // This catches elements that haven't been seen in recent snapshots
-  if (registry.isStale(eid)) {
-    throw new StaleElementError(eid);
-  }
-
-  const node = snapshot.nodes.find((n) => n.backend_node_id === elementRef.ref.backend_node_id);
-  if (!node) {
-    throw new StaleElementError(eid);
-  }
-
-  return node;
-}
-
-/**
- * Require snapshot for action, throwing consistent error if missing.
- *
- * @param pageId - Page ID to look up snapshot
- * @returns Snapshot for the page
- * @throws {SnapshotRequiredError} If no snapshot exists
- */
-function requireSnapshot(pageId: string): BaseSnapshot {
-  const snap = snapshotStore.getByPageId(pageId);
-  if (!snap) {
-    throw new SnapshotRequiredError(pageId);
-  }
-  return snap;
 }
 
 /**
@@ -549,6 +433,25 @@ export async function captureSnapshot(
 }
 
 /**
+ * Map schema kind values to internal NodeKind values.
+ *
+ * The find_elements schema uses user-friendly names that don't always match
+ * internal NodeKind values. For example, 'textbox' in the schema maps to
+ * both 'input' and 'textarea' internally.
+ *
+ * @param schemaKind - Kind value from the find_elements schema
+ * @returns Matching NodeKind value(s)
+ */
+export function mapSchemaKindToNodeKind(schemaKind: string): NodeKind | NodeKind[] {
+  switch (schemaKind) {
+    case 'textbox':
+      return ['input', 'textarea'];
+    default:
+      return schemaKind as NodeKind;
+  }
+}
+
+/**
  * Find elements by semantic criteria.
  *
  * @param rawInput - Query filters (will be validated)
@@ -572,7 +475,7 @@ export function findElements(rawInput: unknown): import('./tool-schemas.js').Fin
   };
 
   if (input.kind) {
-    request.kind = input.kind as NodeKind | NodeKind[];
+    request.kind = mapSchemaKindToNodeKind(input.kind);
   }
   if (input.label) {
     request.label = { text: input.label, mode: 'contains', caseSensitive: false };
@@ -771,33 +674,63 @@ export async function scrollPage(
 }
 
 /**
- * Click an element.
+ * Click an element or at viewport coordinates.
+ *
+ * Three modes:
+ * 1. eid only → click element center (existing behavior)
+ * 2. eid + x/y → click at offset relative to element top-left
+ * 3. x/y only → click at absolute viewport coordinates
  *
  * @param rawInput - Click options (will be validated)
  * @returns Click result with navigation-aware outcome
  */
 export async function click(rawInput: unknown): Promise<import('./tool-schemas.js').ClickOutput> {
   const input = ClickInputSchema.parse(rawInput);
+  const hasEid = input.eid !== undefined;
+  const hasCoords = input.x !== undefined && input.y !== undefined;
+
+  if (!hasEid && !hasCoords) {
+    throw new Error('Either eid or both x and y coordinates must be provided.');
+  }
+
+  if ((input.x !== undefined) !== (input.y !== undefined)) {
+    throw new Error('Both x and y coordinates must be provided together.');
+  }
+
   const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
 
-  const snap = requireSnapshot(pageId);
-  const node = resolveElementByEid(pageId, input.eid, snap);
+  let result: { snapshot: BaseSnapshot; state_response: string };
 
-  // Execute action with navigation-aware outcome detection
-  const result = await executeActionWithOutcome(
-    handleRef.current,
-    node,
-    async (backendNodeId) => {
-      await clickByBackendNodeId(handleRef.current.cdp, backendNodeId);
-    },
-    snapshotStore,
-    captureSnapshot
-  );
+  if (hasEid) {
+    // Mode 1 & 2: element-based click (center or offset)
+    const snap = requireSnapshot(pageId);
+    const node = resolveElementByEid(pageId, input.eid!, snap);
 
-  // Store snapshot for future queries
+    result = await executeActionWithOutcome(
+      handleRef.current,
+      node,
+      async (backendNodeId) => {
+        if (hasCoords) {
+          await clickAtElementOffset(handleRef.current.cdp, backendNodeId, input.x!, input.y!);
+        } else {
+          await clickByBackendNodeId(handleRef.current.cdp, backendNodeId);
+        }
+      },
+      snapshotStore,
+      captureSnapshot
+    );
+  } else {
+    // Mode 3: x/y only → absolute viewport click
+    result = await executeAction(
+      handleRef.current,
+      async () => {
+        await clickAtCoordinates(handleRef.current.cdp, input.x!, input.y!);
+      },
+      captureSnapshot
+    );
+  }
+
   snapshotStore.store(pageId, result.snapshot);
-
-  // Return XML state response directly
   return result.state_response;
 }
 
@@ -923,6 +856,47 @@ export async function hover(rawInput: unknown): Promise<import('./tool-schemas.j
 }
 
 /**
+ * Drag from one point to another.
+ *
+ * If eid is provided, coordinates are relative to the element's top-left corner.
+ * Otherwise, coordinates are absolute viewport coordinates.
+ *
+ * @param rawInput - Drag options (will be validated)
+ * @returns Drag result with updated snapshot
+ */
+export async function drag(rawInput: unknown): Promise<import('./tool-schemas.js').DragOutput> {
+  const input = DragInputSchema.parse(rawInput);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+
+  let sourceX = input.source_x;
+  let sourceY = input.source_y;
+  let targetX = input.target_x;
+  let targetY = input.target_y;
+
+  if (input.eid) {
+    const snap = requireSnapshot(pageId);
+    const node = resolveElementByEid(pageId, input.eid, snap);
+
+    const { x, y } = await getElementTopLeft(handleRef.current.cdp, node.backend_node_id);
+    sourceX = x + input.source_x;
+    sourceY = y + input.source_y;
+    targetX = x + input.target_x;
+    targetY = y + input.target_y;
+  }
+
+  const result = await executeAction(
+    handleRef.current,
+    async () => {
+      await dragBetweenCoordinates(handleRef.current.cdp, sourceX, sourceY, targetX, targetY);
+    },
+    captureSnapshot
+  );
+
+  snapshotStore.store(pageId, result.snapshot);
+  return result.state_response;
+}
+
+/**
  * Take a screenshot of the page or a specific element.
  *
  * Observation tool - does not mutate page state.
@@ -964,3 +938,5 @@ export async function takeScreenshot(
     captureBeyondViewport: input.fullPage ?? false,
   });
 }
+
+// Canvas inspection: see canvas-tools.ts

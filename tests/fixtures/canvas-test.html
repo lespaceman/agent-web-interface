@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canvas Test Fixture</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <style>
+    body { margin: 20px; font-family: sans-serif; }
+    h1 { margin-bottom: 10px; }
+    #canvas-container { border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Canvas Test Page</h1>
+  <canvas id="test-canvas" width="600" height="400"></canvas>
+
+  <script>
+    const canvas = new fabric.Canvas('test-canvas');
+
+    // Red rectangle at known position
+    const rect = new fabric.Rect({
+      left: 50,
+      top: 50,
+      width: 100,
+      height: 80,
+      fill: 'red',
+      name: 'red-rect',
+    });
+
+    // Blue circle at known position
+    const circle = new fabric.Circle({
+      left: 250,
+      top: 100,
+      radius: 40,
+      fill: 'blue',
+      name: 'blue-circle',
+    });
+
+    // Green text at known position
+    const text = new fabric.Text('Hello Canvas', {
+      left: 100,
+      top: 250,
+      fontSize: 24,
+      fill: 'green',
+      name: 'green-text',
+    });
+
+    canvas.add(rect, circle, text);
+    canvas.renderAll();
+
+    // Expose canvas globally for evaluate_javascript access
+    window.fabricCanvas = canvas;
+  </script>
+</body>
+</html>

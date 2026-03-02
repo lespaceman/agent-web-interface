@@ -4,7 +4,11 @@
  * Browser automation tools exposed via MCP protocol.
  */
 
-export { initializeTools, getSnapshotStore } from './browser-tools.js';
+// Shared tool context
+export { initializeToolContext, getSnapshotStore } from './tool-context.js';
+
+// Legacy exports for backward compatibility
+export { initializeTools } from './browser-tools.js';
 
 // Tool handlers - Simplified API
 export {
@@ -25,7 +29,9 @@ export {
   press,
   select,
   hover,
+  drag,
   takeScreenshot,
+  mapSchemaKindToNodeKind,
 } from './browser-tools.js';
 
 // Server config - lazy browser initialization
@@ -123,20 +129,32 @@ export {
   HoverOutputSchema,
   type HoverInput,
   type HoverOutput,
+  // drag
+  DragInputSchema,
+  DragInputSchemaBase,
+  DragOutputSchema,
+  type DragInput,
+  type DragOutput,
   // take_screenshot
   TakeScreenshotInputSchema,
   TakeScreenshotInputSchemaBase,
   TakeScreenshotOutputSchema,
   type TakeScreenshotInput,
   type TakeScreenshotOutput,
+  // inspect_canvas
+  InspectCanvasInputSchema,
+  InspectCanvasInputSchemaBase,
+  type InspectCanvasInput,
 } from './tool-schemas.js';
 
 // Tool result types
 export {
   isImageResult,
   isFileResult,
+  isCompositeResult,
   type ImageResult,
   type FileResult,
+  type CompositeResult,
   type ToolResult,
 } from './tool-result.types.js';
 
@@ -150,3 +168,10 @@ export {
   type GetFormUnderstandingInput,
   type GetFieldContextInput,
 } from './form-tools.js';
+
+// Canvas tools
+export {
+  inspectCanvas,
+  type CanvasMetadata,
+  type CanvasObject,
+} from './canvas-tools.js';

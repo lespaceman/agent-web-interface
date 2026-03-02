@@ -159,6 +159,7 @@ export type NodeKind =
   | 'listitem'
   | 'image'
   | 'media'
+  | 'canvas'
   | 'table'
   // Structural
   | 'form'
@@ -394,6 +395,7 @@ export function isInteractiveNode(node: ReadableNode): boolean {
     'slider',
     'tab',
     'menuitem',
+    'canvas',
   ];
   return interactiveKinds.includes(node.kind) || node.implicitly_interactive === true;
 }

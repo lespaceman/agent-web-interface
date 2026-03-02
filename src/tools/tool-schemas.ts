@@ -530,10 +530,10 @@ export const FindElementsInputSchema = z.object({
 
   /** Filter by element type. */
   kind: z
-    .enum(['button', 'link', 'radio', 'checkbox', 'textbox', 'combobox', 'image', 'heading'])
+    .enum(['button', 'link', 'radio', 'checkbox', 'textbox', 'combobox', 'image', 'heading', 'canvas'])
     .optional()
     .describe(
-      "Filter by element type: 'button' for clickable buttons, 'link' for hyperlinks, 'textbox' for input fields, 'checkbox'/'radio' for toggles, 'combobox' for dropdowns, 'heading' for section titles, 'image' for images."
+      "Filter by element type: 'button' for clickable buttons, 'link' for hyperlinks, 'textbox' for input fields, 'checkbox'/'radio' for toggles, 'combobox' for dropdowns, 'heading' for section titles, 'image' for images, 'canvas' for canvas elements."
     ),
   /** Search text to match against element labels. */
   label: z
@@ -646,7 +646,7 @@ export const SupportedKeys = [
   'PageDown',
 ] as const;
 
-// click - Click an element (no agent_version)
+// click - Click an element or coordinates (no agent_version)
 // Raw schema for .shape access (tool registration)
 const ClickInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
@@ -654,8 +654,23 @@ const ClickInputSchemaBase = z.object({
   /** Stable element ID from find_elements or snapshot */
   eid: z
     .string()
+    .optional()
     .describe(
       'Element ID from find_elements results or the page snapshot. Every interactive element has a unique eid.'
+    ),
+  /** X coordinate. If eid is also provided, relative to element top-left. Otherwise absolute viewport coordinate. */
+  x: z
+    .number()
+    .optional()
+    .describe(
+      'X coordinate for the click. When used with eid, relative to the element top-left corner. When used without eid, absolute viewport coordinate.'
+    ),
+  /** Y coordinate. If eid is also provided, relative to element top-left. Otherwise absolute viewport coordinate. */
+  y: z
+    .number()
+    .optional()
+    .describe(
+      'Y coordinate for the click. When used with eid, relative to the element top-left corner. When used without eid, absolute viewport coordinate.'
     ),
 });
 export const ClickInputSchema = ClickInputSchemaBase;
@@ -811,3 +826,76 @@ export const TakeScreenshotOutputSchema = z.discriminatedUnion('type', [
 ]);
 
 export type TakeScreenshotOutput = z.infer<typeof TakeScreenshotOutputSchema>;
+
+// ============================================================================
+// drag - Drag from one point to another
+// ============================================================================
+
+const DragInputSchemaBase = z.object({
+  /** Source X coordinate */
+  source_x: z.number().describe('X coordinate of the drag start point.'),
+  /** Source Y coordinate */
+  source_y: z.number().describe('Y coordinate of the drag start point.'),
+  /** Target X coordinate */
+  target_x: z.number().describe('X coordinate of the drag end point.'),
+  /** Target Y coordinate */
+  target_y: z.number().describe('Y coordinate of the drag end point.'),
+  /** Optional element ID. When provided, all coordinates are relative to element top-left. */
+  eid: z
+    .string()
+    .optional()
+    .describe(
+      'Optional element ID. When provided, coordinates are relative to the element top-left corner.'
+    ),
+  /** Page ID. If omitted, operates on the most recently used page */
+  page_id: z.string().optional().describe('The ID of the page.'),
+});
+export const DragInputSchema = DragInputSchemaBase;
+export { DragInputSchemaBase };
+
+/** Returns XML state response string directly */
+export const DragOutputSchema = z.string();
+
+export type DragInput = z.infer<typeof DragInputSchema>;
+export type DragOutput = z.infer<typeof DragOutputSchema>;
+
+// ============================================================================
+// inspect_canvas - Inspect canvas element for objects and coordinates
+// ============================================================================
+
+const InspectCanvasInputSchemaBase = z.object({
+  /** Stable element ID of the canvas element */
+  eid: z.string().describe('Element ID of the canvas element from find_elements results.'),
+  /** Grid line spacing in pixels (default: 50) */
+  grid_spacing: z
+    .number()
+    .int()
+    .min(10)
+    .max(500)
+    .default(50)
+    .optional()
+    .describe('Grid line spacing in pixels (default: 50). Smaller values give finer coordinate resolution.'),
+  /** Image format (default: png) */
+  format: z
+    .enum(['png', 'jpeg'])
+    .optional()
+    .default('png')
+    .describe("Image format: 'png' (lossless, default) or 'jpeg' (lossy with quality control)."),
+  /** JPEG quality 0-100 (ignored for PNG) */
+  quality: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe('JPEG quality 0-100. Only applies when format is jpeg.'),
+  /** Page ID. If omitted, operates on the most recently used page */
+  page_id: z
+    .string()
+    .optional()
+    .describe('Page ID. If omitted, operates on the most recently used page.'),
+});
+export const InspectCanvasInputSchema = InspectCanvasInputSchemaBase;
+export { InspectCanvasInputSchemaBase };
+
+export type InspectCanvasInput = z.infer<typeof InspectCanvasInputSchema>;

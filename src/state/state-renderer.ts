@@ -292,6 +292,8 @@ function mapKindToTag(kind: string): string {
       return 'img';
     case 'heading':
       return 'h';
+    case 'canvas':
+      return 'canvas';
     default:
       return 'elt';
   }
