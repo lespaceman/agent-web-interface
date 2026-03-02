@@ -355,3 +355,14 @@ export function getLogger(): LoggingService {
 export function setLogger(logger: LoggingService): void {
   globalLogger = logger;
 }
+
+/**
+ * Create a named logger instance.
+ *
+ * Returns a Logger backed by the global LoggingService singleton,
+ * suitable for use in modules that need a scoped logger name.
+ * The loggerName parameter is reserved for future per-module filtering.
+ */
+export function createLogger(_loggerName: string): Logger {
+  return getLogger();
+}
