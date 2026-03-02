@@ -952,6 +952,22 @@ export class SessionManager {
   }
 
   /**
+   * Create an isolated BrowserContext for per-session cookie/storage isolation.
+   *
+   * Each isolated context has its own cookie jar and storage, ensuring
+   * that different tenant sessions cannot access each other's data.
+   *
+   * @returns A new isolated BrowserContext
+   * @throws Error if browser is not connected
+   */
+  async createIsolatedContext(): Promise<BrowserContext> {
+    if (!this.browser?.connected) {
+      throw new Error('Browser not connected');
+    }
+    return await this.browser.createBrowserContext();
+  }
+
+  /**
    * Check if browser is running
    *
    * @returns true if browser is active
