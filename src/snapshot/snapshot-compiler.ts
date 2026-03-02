@@ -579,6 +579,73 @@ export class SnapshotCompiler {
       }
     }
 
+    // Phase 2.1: Synthesize option nodes from <select> children.
+    // Chrome's AX tree often marks <option> nodes as ignored when the select
+    // is collapsed, and their bounding boxes are zero (OS-rendered).
+    // We inject them from the DOM so AI agents can discover available options.
+    if (domResult) {
+      const alreadyInSet = new Set(nodesToProcess.map((n) => n.backendNodeId));
+
+      for (const nodeData of [...nodesToProcess]) {
+        const domNode = nodeData.domNode;
+        if (domNode?.nodeName.toUpperCase() !== 'SELECT') continue;
+
+        const collectOptions = (parentId: number) => {
+          const parent = domResult.nodes.get(parentId);
+          if (!parent?.childNodeIds) return;
+
+          for (const childId of parent.childNodeIds) {
+            const child = domResult.nodes.get(childId);
+            if (!child) continue;
+
+            const childTag = child.nodeName.toUpperCase();
+
+            if (childTag === 'OPTGROUP') {
+              // Recurse into optgroup to find nested options
+              collectOptions(childId);
+            } else if (childTag === 'OPTION' && !alreadyInSet.has(childId)) {
+              // Extract text content from option's child text nodes
+              const optionText = getTextContent(childId, domResult.nodes);
+
+              // Build synthetic AX node so label resolution and state extraction work
+              const syntheticAx: RawAxNode = {
+                nodeId: `synthetic-opt-${childId}`,
+                backendDOMNodeId: childId,
+                role: 'option',
+                name: optionText ?? '',
+                properties: [],
+              };
+
+              // Transfer selected attribute to AX property
+              if (child.attributes?.selected !== undefined) {
+                syntheticAx.properties!.push({
+                  name: 'selected',
+                  value: { type: 'boolean', value: true },
+                });
+              }
+
+              // Transfer disabled attribute to AX property
+              if (child.attributes?.disabled !== undefined) {
+                syntheticAx.properties!.push({
+                  name: 'disabled',
+                  value: { type: 'boolean', value: true },
+                });
+              }
+
+              nodesToProcess.push({
+                backendNodeId: childId,
+                domNode: child,
+                axNode: syntheticAx,
+              });
+              alreadyInSet.add(childId);
+            }
+          }
+        };
+
+        collectOptions(domNode.backendNodeId);
+      }
+    }
+
     // Sort by DOM order if available (before max_nodes slicing)
     if (domOrderAvailable && domOrderIndex) {
       const orderMap = domOrderIndex; // Capture for closure to avoid reassignment issues
@@ -725,7 +792,13 @@ export class SnapshotCompiler {
       }
 
       // Filter by visibility (unless include_hidden)
-      if (this.options.include_hidden || node.state?.visible !== false) {
+      // Option nodes bypass the visibility filter because their bounding boxes
+      // are always zero (OS-rendered dropdown content, not CSS-rendered).
+      const isOptionNode = nodeData.domNode?.nodeName?.toUpperCase() === 'OPTION';
+      if (isOptionNode && node.state?.visible === false) {
+        node.state.visible = true;
+      }
+      if (this.options.include_hidden || node.state?.visible !== false || isOptionNode) {
         transformedNodes.push(node);
       }
     }
@@ -951,6 +1024,7 @@ export class SnapshotCompiler {
       FORM: 'form',
       DIALOG: 'dialog',
       NAV: 'navigation',
+      OPTION: 'menuitem',
     };
     return tagMap[tag];
   }
