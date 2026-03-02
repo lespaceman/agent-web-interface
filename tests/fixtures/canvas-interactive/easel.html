@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EaselJS Interactive Canvas</title>
+  <script src="https://code.createjs.com/1.0.0/createjs.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
+    h2 { margin: 0 0 4px; }
+    p { color: #666; margin: 0 0 16px; font-size: 14px; }
+    .controls { margin-bottom: 12px; display: flex; gap: 8px; }
+    .controls button {
+      padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px;
+      background: #fff; cursor: pointer; font-size: 13px;
+    }
+    .controls button:hover { background: #eee; }
+    canvas { border: 1px solid #ccc; background: #fff; }
+    #status { margin-top: 8px; font-size: 13px; color: #444; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h2>EaselJS Interactive Canvas</h2>
+  <p>Shapes: teal-rect, magenta-circle. Drag to move. Buttons for rotate/scale/skew.</p>
+  <div class="controls">
+    <button id="btn-rotate">Rotate +45&deg;</button>
+    <button id="btn-scale-up">Scale Up 1.2x</button>
+    <button id="btn-scale-down">Scale Down 0.8x</button>
+    <button id="btn-skew-x">Skew X +10&deg;</button>
+    <button id="btn-reset">Reset All</button>
+  </div>
+  <canvas id="canvas" width="800" height="600" aria-label="EaselJS drawing area"></canvas>
+  <div id="status">Ready</div>
+  <script>
+    const stage = new createjs.Stage('canvas');
+    createjs.Touch.enable(stage);
+    stage.enableMouseOver(20);
+
+    // Expose for detection
+    window.easelStage = stage;
+
+    let selected = null;
+    const status = document.getElementById('status');
+    function updateStatus(msg) { status.textContent = msg; }
+
+    function makeDraggable(shape) {
+      shape.cursor = 'pointer';
+      shape.on('mousedown', function(evt) {
+        this.offset = { x: this.x - evt.stageX, y: this.y - evt.stageY };
+        selected = this;
+        updateStatus(`Selected ${this.name}`);
+      });
+      shape.on('pressmove', function(evt) {
+        this.x = evt.stageX + this.offset.x;
+        this.y = evt.stageY + this.offset.y;
+        stage.update();
+        updateStatus(`Moving ${this.name}: (${Math.round(this.x)}, ${Math.round(this.y)})`);
+      });
+    }
+
+    // Teal rectangle
+    const rect = new createjs.Shape();
+    rect.graphics.beginFill('#008080').drawRect(-75, -50, 150, 100);
+    rect.x = 175; rect.y = 150;
+    rect.name = 'teal-rect';
+    makeDraggable(rect);
+    stage.addChild(rect);
+
+    // Magenta circle
+    const circle = new createjs.Shape();
+    circle.graphics.beginFill('#ff00ff').drawCircle(0, 0, 70);
+    circle.x = 500; circle.y = 350;
+    circle.name = 'magenta-circle';
+    makeDraggable(circle);
+    stage.addChild(circle);
+
+    stage.update();
+
+    // Store initial state
+    const initRect = { x: 175, y: 150, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0 };
+    const initCircle = { x: 500, y: 350, rotation: 0, scaleX: 1, scaleY: 1, skewX: 0 };
+
+    document.getElementById('btn-rotate').addEventListener('click', () => {
+      if (!selected) { updateStatus('Click a shape first'); return; }
+      selected.rotation += 45;
+      stage.update();
+      updateStatus(`Rotated ${selected.name} to ${selected.rotation}°`);
+    });
+
+    document.getElementById('btn-scale-up').addEventListener('click', () => {
+      if (!selected) { updateStatus('Click a shape first'); return; }
+      selected.scaleX *= 1.2;
+      selected.scaleY *= 1.2;
+      stage.update();
+      updateStatus(`Scaled ${selected.name} to ${selected.scaleX.toFixed(2)}x`);
+    });
+
+    document.getElementById('btn-scale-down').addEventListener('click', () => {
+      if (!selected) { updateStatus('Click a shape first'); return; }
+      selected.scaleX *= 0.8;
+      selected.scaleY *= 0.8;
+      stage.update();
+      updateStatus(`Scaled ${selected.name} to ${selected.scaleX.toFixed(2)}x`);
+    });
+
+    document.getElementById('btn-skew-x').addEventListener('click', () => {
+      if (!selected) { updateStatus('Click a shape first'); return; }
+      selected.skewX += 10;
+      stage.update();
+      updateStatus(`Skewed ${selected.name} X to ${selected.skewX}°`);
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      Object.assign(rect, initRect);
+      Object.assign(circle, initCircle);
+      selected = null;
+      stage.update();
+      updateStatus('Reset to initial positions');
+    });
+  </script>
+</body>
+</html>

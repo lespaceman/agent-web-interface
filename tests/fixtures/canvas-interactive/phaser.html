@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Phaser Interactive Canvas</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
+    h2 { margin: 0 0 4px; }
+    p { color: #666; margin: 0 0 16px; font-size: 14px; }
+    .controls { margin-bottom: 12px; display: flex; gap: 8px; }
+    .controls button {
+      padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px;
+      background: #fff; cursor: pointer; font-size: 13px;
+    }
+    .controls button:hover { background: #eee; }
+    #phaser-container { border: 1px solid #ccc; display: inline-block; }
+    #status { margin-top: 8px; font-size: 13px; color: #444; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h2>Phaser Interactive Canvas</h2>
+  <p>Shapes: violet-rect, lime-circle. Drag to move. Buttons for rotate/scale/skew.</p>
+  <div class="controls">
+    <button id="btn-rotate">Rotate +45&deg;</button>
+    <button id="btn-scale-up">Scale Up 1.2x</button>
+    <button id="btn-scale-down">Scale Down 0.8x</button>
+    <button id="btn-reset">Reset All</button>
+  </div>
+  <div id="phaser-container" aria-label="Phaser drawing area"></div>
+  <div id="status">Ready</div>
+  <script>
+    let selectedObj = null;
+    let phaserRect, phaserCircle;
+    const statusEl = document.getElementById('status');
+    function updateStatus(msg) { statusEl.textContent = msg; }
+
+    const config = {
+      type: Phaser.CANVAS,
+      width: 800,
+      height: 600,
+      parent: 'phaser-container',
+      backgroundColor: '#ffffff',
+      scene: {
+        create: function() {
+          // Violet rectangle (using graphics texture)
+          const rectGfx = this.add.graphics();
+          rectGfx.fillStyle(0x8b5cf6, 1);
+          rectGfx.fillRect(0, 0, 150, 100);
+          rectGfx.generateTexture('violet-rect-tex', 150, 100);
+          rectGfx.destroy();
+
+          phaserRect = this.add.image(200, 200, 'violet-rect-tex');
+          phaserRect.setInteractive({ draggable: true });
+          phaserRect.name = 'violet-rect';
+
+          // Lime circle (using graphics texture)
+          const circleGfx = this.add.graphics();
+          circleGfx.fillStyle(0x84cc16, 1);
+          circleGfx.fillCircle(70, 70, 70);
+          circleGfx.generateTexture('lime-circle-tex', 140, 140);
+          circleGfx.destroy();
+
+          phaserCircle = this.add.image(550, 380, 'lime-circle-tex');
+          phaserCircle.setInteractive({ draggable: true });
+          phaserCircle.name = 'lime-circle';
+
+          // Drag events
+          this.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+            gameObject.x = dragX;
+            gameObject.y = dragY;
+            updateStatus(`Moving ${gameObject.name}: (${Math.round(dragX)}, ${Math.round(dragY)})`);
+          });
+
+          // Click to select
+          this.input.on('gameobjectdown', (pointer, gameObject) => {
+            selectedObj = gameObject;
+            updateStatus(`Selected ${gameObject.name}`);
+          });
+
+          // Click background to deselect
+          this.input.on('pointerdown', (pointer) => {
+            const hitObjects = this.input.hitTestPointer(pointer);
+            if (hitObjects.length === 0) {
+              selectedObj = null;
+              updateStatus('Deselected');
+            }
+          });
+
+          // Enable drag for both
+          this.input.setDraggable(phaserRect);
+          this.input.setDraggable(phaserCircle);
+
+          // Expose scene for potential detection
+          window.phaserScene = this;
+          updateStatus('Ready - click a shape to select, drag to move');
+        }
+      }
+    };
+
+    window.game = new Phaser.Game(config);
+
+    // Set aria-label on the generated canvas after creation
+    setTimeout(() => {
+      const canvas = document.querySelector('#phaser-container canvas');
+      if (canvas) canvas.setAttribute('aria-label', 'Phaser drawing area');
+    }, 500);
+
+    document.getElementById('btn-rotate').addEventListener('click', () => {
+      if (!selectedObj) { updateStatus('Click a shape first'); return; }
+      selectedObj.angle += 45;
+      updateStatus(`Rotated ${selectedObj.name} to ${selectedObj.angle}°`);
+    });
+
+    document.getElementById('btn-scale-up').addEventListener('click', () => {
+      if (!selectedObj) { updateStatus('Click a shape first'); return; }
+      selectedObj.setScale(selectedObj.scaleX * 1.2, selectedObj.scaleY * 1.2);
+      updateStatus(`Scaled ${selectedObj.name} to ${selectedObj.scaleX.toFixed(2)}x`);
+    });
+
+    document.getElementById('btn-scale-down').addEventListener('click', () => {
+      if (!selectedObj) { updateStatus('Click a shape first'); return; }
+      selectedObj.setScale(selectedObj.scaleX * 0.8, selectedObj.scaleY * 0.8);
+      updateStatus(`Scaled ${selectedObj.name} to ${selectedObj.scaleX.toFixed(2)}x`);
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      if (phaserRect) {
+        phaserRect.setPosition(200, 200);
+        phaserRect.setAngle(0);
+        phaserRect.setScale(1);
+      }
+      if (phaserCircle) {
+        phaserCircle.setPosition(550, 380);
+        phaserCircle.setAngle(0);
+        phaserCircle.setScale(1);
+      }
+      selectedObj = null;
+      updateStatus('Reset to initial positions');
+    });
+  </script>
+</body>
+</html>

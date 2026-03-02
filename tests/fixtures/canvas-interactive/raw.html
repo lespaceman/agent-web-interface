@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Raw Canvas Interactive</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
+    h2 { margin: 0 0 4px; }
+    p { color: #666; margin: 0 0 16px; font-size: 14px; }
+    .controls { margin-bottom: 12px; display: flex; gap: 8px; }
+    .controls button {
+      padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px;
+      background: #fff; cursor: pointer; font-size: 13px;
+    }
+    .controls button:hover { background: #eee; }
+    canvas { border: 1px solid #ccc; background: #fff; cursor: grab; }
+    canvas.dragging { cursor: grabbing; }
+    #status { margin-top: 8px; font-size: 13px; color: #444; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h2>Raw Canvas (No Library)</h2>
+  <p>Shapes: gray-rect, brown-circle. Drag to move. Buttons for rotate/scale. No library — pure Canvas 2D API.</p>
+  <div class="controls">
+    <button id="btn-rotate">Rotate Selected +45&deg;</button>
+    <button id="btn-scale-up">Scale Up 1.2x</button>
+    <button id="btn-scale-down">Scale Down 0.8x</button>
+    <button id="btn-reset">Reset All</button>
+  </div>
+  <canvas id="canvas" width="800" height="600" aria-label="Raw drawing area"></canvas>
+  <div id="status">Ready</div>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    function updateStatus(msg) { status.textContent = msg; }
+
+    // Shape definitions
+    const shapes = [
+      {
+        name: 'gray-rect', type: 'rect',
+        x: 150, y: 120, w: 150, h: 100,
+        color: '#888888', rotation: 0, scale: 1
+      },
+      {
+        name: 'brown-circle', type: 'circle',
+        x: 500, y: 350, r: 70,
+        color: '#8B4513', rotation: 0, scale: 1
+      }
+    ];
+
+    // Initial state for reset
+    const initState = JSON.parse(JSON.stringify(shapes));
+
+    let selected = null;
+    let dragging = false;
+    let dragOffset = { x: 0, y: 0 };
+
+    function draw() {
+      ctx.clearRect(0, 0, 800, 600);
+      for (const s of shapes) {
+        ctx.save();
+        if (s.type === 'rect') {
+          const cx = s.x + s.w / 2;
+          const cy = s.y + s.h / 2;
+          ctx.translate(cx, cy);
+          ctx.rotate(s.rotation * Math.PI / 180);
+          ctx.scale(s.scale, s.scale);
+          ctx.fillStyle = s.color;
+          ctx.fillRect(-s.w / 2, -s.h / 2, s.w, s.h);
+          // Selection outline
+          if (selected === s) {
+            ctx.strokeStyle = '#007bff';
+            ctx.lineWidth = 2 / s.scale;
+            ctx.strokeRect(-s.w / 2, -s.h / 2, s.w, s.h);
+          }
+        } else if (s.type === 'circle') {
+          ctx.translate(s.x, s.y);
+          ctx.rotate(s.rotation * Math.PI / 180);
+          ctx.scale(s.scale, s.scale);
+          ctx.beginPath();
+          ctx.arc(0, 0, s.r, 0, Math.PI * 2);
+          ctx.fillStyle = s.color;
+          ctx.fill();
+          if (selected === s) {
+            ctx.strokeStyle = '#007bff';
+            ctx.lineWidth = 2 / s.scale;
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+    }
+
+    function hitTest(mx, my) {
+      for (let i = shapes.length - 1; i >= 0; i--) {
+        const s = shapes[i];
+        if (s.type === 'rect') {
+          const cx = s.x + s.w / 2;
+          const cy = s.y + s.h / 2;
+          const hw = (s.w / 2) * s.scale;
+          const hh = (s.h / 2) * s.scale;
+          if (mx >= cx - hw && mx <= cx + hw && my >= cy - hh && my <= cy + hh) return s;
+        } else if (s.type === 'circle') {
+          const dist = Math.hypot(mx - s.x, my - s.y);
+          if (dist <= s.r * s.scale) return s;
+        }
+      }
+      return null;
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const hit = hitTest(mx, my);
+      if (hit) {
+        selected = hit;
+        dragging = true;
+        canvas.classList.add('dragging');
+        if (hit.type === 'rect') {
+          dragOffset.x = mx - hit.x;
+          dragOffset.y = my - hit.y;
+        } else {
+          dragOffset.x = mx - hit.x;
+          dragOffset.y = my - hit.y;
+        }
+        updateStatus(`Selected ${hit.name}`);
+      } else {
+        selected = null;
+        updateStatus('Deselected');
+      }
+      draw();
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!dragging || !selected) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      if (selected.type === 'rect') {
+        selected.x = mx - dragOffset.x;
+        selected.y = my - dragOffset.y;
+      } else {
+        selected.x = mx - dragOffset.x;
+        selected.y = my - dragOffset.y;
+      }
+      draw();
+      updateStatus(`Moving ${selected.name}: (${Math.round(selected.x)}, ${Math.round(selected.y)})`);
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      dragging = false;
+      canvas.classList.remove('dragging');
+    });
+
+    document.getElementById('btn-rotate').addEventListener('click', () => {
+      if (!selected) { updateStatus('Click a shape first'); return; }
+      selected.rotation += 45;
+      draw();
+      updateStatus(`Rotated ${selected.name} to ${selected.rotation}°`);
+    });
+
+    document.getElementById('btn-scale-up').addEventListener('click', () => {
+      if (!selected) { updateStatus('Click a shape first'); return; }
+      selected.scale *= 1.2;
+      draw();
+      updateStatus(`Scaled ${selected.name} to ${selected.scale.toFixed(2)}x`);
+    });
+
+    document.getElementById('btn-scale-down').addEventListener('click', () => {
+      if (!selected) { updateStatus('Click a shape first'); return; }
+      selected.scale *= 0.8;
+      draw();
+      updateStatus(`Scaled ${selected.name} to ${selected.scale.toFixed(2)}x`);
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      for (let i = 0; i < shapes.length; i++) {
+        Object.assign(shapes[i], initState[i]);
+      }
+      selected = null;
+      draw();
+      updateStatus('Reset to initial positions');
+    });
+
+    draw();
+  </script>
+</body>
+</html>
