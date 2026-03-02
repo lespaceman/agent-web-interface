@@ -168,19 +168,19 @@ describe('SessionStore', () => {
   });
 
   describe('destroySession', () => {
-    it('should remove session completely', () => {
+    it('should remove session completely', async () => {
       const session_id = store.createSession('tenant-1');
       store.addPage(session_id, 'page-1');
 
-      store.destroySession(session_id);
+      await store.destroySession(session_id);
 
       expect(store.getSession(session_id)).toBeUndefined();
       expect(store.getPages(session_id)).toEqual([]);
     });
 
-    it('should do nothing for unknown session_id', () => {
+    it('should do nothing for unknown session_id', async () => {
       // Should not throw
-      store.destroySession('session-unknown');
+      await store.destroySession('session-unknown');
     });
   });
 
@@ -202,11 +202,11 @@ describe('SessionStore', () => {
       expect(sessions.map((s) => s.session_id)).toContain(id2);
     });
 
-    it('should not include destroyed sessions', () => {
+    it('should not include destroyed sessions', async () => {
       const id1 = store.createSession('tenant-1');
       const id2 = store.createSession('tenant-2');
 
-      store.destroySession(id1);
+      await store.destroySession(id1);
 
       const sessions = store.listSessions();
 

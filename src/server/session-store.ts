@@ -56,6 +56,9 @@ export interface TenantSession {
 
   /** MCP client info from initialization handshake */
   client_info?: ClientInfo;
+
+  /** Isolated browser context for this session */
+  browser_context?: import('puppeteer-core').BrowserContext;
 }
 
 /**
@@ -185,11 +188,20 @@ export class SessionStore {
   }
 
   /**
-   * Destroy a session completely
+   * Destroy a session completely.
+   * If the session has an isolated browser context, it will be closed (best-effort).
    *
    * @param session_id - The session identifier
    */
-  destroySession(session_id: string): void {
+  async destroySession(session_id: string): Promise<void> {
+    const session = this.sessions.get(session_id);
+    if (session?.browser_context) {
+      try {
+        await session.browser_context.close();
+      } catch {
+        /* best effort */
+      }
+    }
     this.sessions.delete(session_id);
   }
 

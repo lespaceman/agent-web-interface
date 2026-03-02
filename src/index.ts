@@ -136,7 +136,7 @@ function initializeServer(): BrowserAutomationServer {
   });
   server.on('session:end', () => {
     const session = sessionStore.getDefaultSession();
-    if (session) sessionStore.destroySession(session.session_id);
+    if (session) void sessionStore.destroySession(session.session_id);
   });
 
   // Initialize session manager and tools

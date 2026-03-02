@@ -24,7 +24,7 @@ describe('SessionStore ↔ MCP lifecycle wiring', () => {
 
     emitter.on('session:end', () => {
       const session = store.getDefaultSession();
-      if (session) store.destroySession(session.session_id);
+      if (session) void store.destroySession(session.session_id);
     });
   }
 

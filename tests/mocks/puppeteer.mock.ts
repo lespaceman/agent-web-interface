@@ -72,6 +72,7 @@ export interface MockBrowser {
   connected: boolean; // Puppeteer uses property, not method
   browserContexts: Mock; // Puppeteer uses browserContexts() instead of contexts()
   defaultBrowserContext: Mock;
+  createBrowserContext: Mock; // Creates an isolated BrowserContext
   wsEndpoint: Mock; // Returns the WebSocket endpoint URL
   on: Mock;
   off: Mock;
@@ -247,6 +248,7 @@ export function createMockBrowser(
     connected: options.connected ?? true, // Property, not method
     browserContexts: vi.fn().mockReturnValue(options.contexts ?? [mockContext]),
     defaultBrowserContext: vi.fn().mockReturnValue(mockContext),
+    createBrowserContext: vi.fn().mockResolvedValue(createMockBrowserContext()),
     wsEndpoint: vi.fn().mockReturnValue('ws://127.0.0.1:0/devtools/browser/mock'),
     on: vi.fn(),
     off: vi.fn(),
