@@ -31,7 +31,11 @@ export { DEFAULT_WORKER_CONFIG, CHROME_WORKER_ARGS } from './types.js';
 
 // Component classes (for advanced usage/testing)
 export { PortAllocator, type PortAllocatorConfig } from './port-allocator.js';
-export { ChromeWorkerProcess, type ChromeWorkerProcessConfig, findChromePath } from './chrome-worker-process.js';
+export {
+  ChromeWorkerProcess,
+  type ChromeWorkerProcessConfig,
+  findChromePath,
+} from './chrome-worker-process.js';
 export { HealthMonitor, type HealthCheckConfig } from './health-monitor.js';
 export { LeaseManager, type LeaseManagerConfig } from './lease-manager.js';
 

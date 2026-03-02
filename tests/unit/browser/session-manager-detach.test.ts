@@ -103,9 +103,7 @@ describe('SessionManager.detach', () => {
 
       await sessionManager.detach();
 
-      expect(sessionManager.lastWsEndpoint).toBe(
-        'ws://127.0.0.1:9222/devtools/browser/abc'
-      );
+      expect(sessionManager.lastWsEndpoint).toBe('ws://127.0.0.1:9222/devtools/browser/abc');
     });
 
     it('should remove browser disconnect listener before disconnecting', async () => {

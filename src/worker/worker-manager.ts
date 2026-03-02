@@ -562,30 +562,24 @@ export class WorkerManager extends EventEmitter implements WorkerManagerEmitter 
   private setupWorkerProcessHandlers(entry: WorkerEntry): void {
     const { process, descriptor } = entry;
 
-    process.on(
-      'exit',
-      ({ code, signal }: { code: number | null; signal: string | null }) => {
-        // Only handle if not already cleaned up
-        if (!this.workers.has(descriptor.workerId)) return;
+    process.on('exit', ({ code, signal }: { code: number | null; signal: string | null }) => {
+      // Only handle if not already cleaned up
+      if (!this.workers.has(descriptor.workerId)) return;
 
-        descriptor.state = 'crashed';
+      descriptor.state = 'crashed';
 
-        this.emit('workerCrashed', {
-          workerId: descriptor.workerId,
-          tenantId: entry.tenantId,
-          exitCode: code,
-        });
+      this.emit('workerCrashed', {
+        workerId: descriptor.workerId,
+        tenantId: entry.tenantId,
+        exitCode: code,
+      });
 
-        // Revoke lease on crash
-        this.leaseManager.revoke(
-          entry.tenantId,
-          `worker crashed (exit: ${code}, signal: ${signal})`
-        );
+      // Revoke lease on crash
+      this.leaseManager.revoke(entry.tenantId, `worker crashed (exit: ${code}, signal: ${signal})`);
 
-        // Clean up
-        void this.cleanupWorker(descriptor.workerId, 'crashed');
-      }
-    );
+      // Clean up
+      void this.cleanupWorker(descriptor.workerId, 'crashed');
+    });
 
     process.on('error', ({ error }: { error: Error }) => {
       logger.error('Worker process error', error, {

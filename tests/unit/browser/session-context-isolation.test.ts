@@ -92,9 +92,7 @@ describe('Per-session BrowserContext isolation', () => {
 
       const ctx1 = createMockBrowserContext();
       const ctx2 = createMockBrowserContext();
-      mocks.browser.createBrowserContext
-        .mockResolvedValueOnce(ctx1)
-        .mockResolvedValueOnce(ctx2);
+      mocks.browser.createBrowserContext.mockResolvedValueOnce(ctx1).mockResolvedValueOnce(ctx2);
 
       const result1 = await session.createIsolatedContext();
       const result2 = await session.createIsolatedContext();
@@ -114,7 +112,8 @@ describe('Per-session BrowserContext isolation', () => {
       // Attach a mock browser context to the session
       const mockBrowserCtx = createMockBrowserContext();
       const session = store.getSession(sessionId)!;
-      session.browser_context = mockBrowserCtx as unknown as import('puppeteer-core').BrowserContext;
+      session.browser_context =
+        mockBrowserCtx as unknown as import('puppeteer-core').BrowserContext;
 
       await store.destroySession(sessionId);
 
@@ -129,7 +128,8 @@ describe('Per-session BrowserContext isolation', () => {
       const mockBrowserCtx = createMockBrowserContext();
       mockBrowserCtx.close.mockRejectedValue(new Error('Context already closed'));
       const session = store.getSession(sessionId)!;
-      session.browser_context = mockBrowserCtx as unknown as import('puppeteer-core').BrowserContext;
+      session.browser_context =
+        mockBrowserCtx as unknown as import('puppeteer-core').BrowserContext;
 
       await store.destroySession(sessionId);
 

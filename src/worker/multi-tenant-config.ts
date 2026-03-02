@@ -68,9 +68,7 @@ export function getMultiTenantConfig(): MultiTenantConfig {
 
   const tenantId = process.env.TENANT_ID;
   if (!tenantId) {
-    throw new Error(
-      'TENANT_ID environment variable is required when MULTI_TENANT_MODE is enabled'
-    );
+    throw new Error('TENANT_ID environment variable is required when MULTI_TENANT_MODE is enabled');
   }
 
   const controllerId = process.env.CONTROLLER_ID ?? `ctrl-${randomUUID().substring(0, 8)}`;
@@ -116,8 +114,7 @@ export function validateMultiTenantConfig(config: MultiTenantConfig): void {
   }
 
   // Check maxWorkers fits in port range
-  const portCapacity =
-    config.workerConfig.portRange.max - config.workerConfig.portRange.min + 1;
+  const portCapacity = config.workerConfig.portRange.max - config.workerConfig.portRange.min + 1;
   if (config.workerConfig.maxWorkers > portCapacity) {
     console.warn(
       `[WARN] WORKER_MAX_COUNT (${config.workerConfig.maxWorkers}) exceeds port range capacity (${portCapacity}). Effective limit will be ${portCapacity}.`

@@ -4,9 +4,7 @@ const { mockUnderlyingServer, mockMcpServer } = vi.hoisted(() => {
   const mockUnderlyingServer = {
     oninitialized: undefined as (() => void) | undefined,
     onclose: undefined as (() => void) | undefined,
-    getClientVersion: vi
-      .fn()
-      .mockReturnValue({ name: 'claude-code', version: '1.0' }),
+    getClientVersion: vi.fn().mockReturnValue({ name: 'claude-code', version: '1.0' }),
     getClientCapabilities: vi.fn().mockReturnValue({}),
     setRequestHandler: vi.fn(),
     setNotificationHandler: vi.fn(),

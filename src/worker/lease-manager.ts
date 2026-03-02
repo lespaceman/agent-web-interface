@@ -336,9 +336,13 @@ export class LeaseManager {
           try {
             callback(lease);
           } catch (err) {
-            logger.error('Error in lease expired callback', err instanceof Error ? err : undefined, {
-              errorMessage: String(err),
-            });
+            logger.error(
+              'Error in lease expired callback',
+              err instanceof Error ? err : undefined,
+              {
+                errorMessage: String(err),
+              }
+            );
           }
         }
       }

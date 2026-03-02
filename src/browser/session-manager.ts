@@ -918,8 +918,12 @@ export class SessionManager {
 
     // Save the WebSocket endpoint before disconnecting (for potential reconnection)
     try {
-      if (typeof (this.browser as unknown as { wsEndpoint: () => string }).wsEndpoint === 'function') {
-        this._lastWsEndpoint = (this.browser as unknown as { wsEndpoint: () => string }).wsEndpoint();
+      if (
+        typeof (this.browser as unknown as { wsEndpoint: () => string }).wsEndpoint === 'function'
+      ) {
+        this._lastWsEndpoint = (
+          this.browser as unknown as { wsEndpoint: () => string }
+        ).wsEndpoint();
       }
     } catch {
       // wsEndpoint may not be available (e.g., pipe transport)

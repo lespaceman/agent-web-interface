@@ -410,7 +410,10 @@ export type ClickOutcome = z.infer<typeof ClickOutcomeSchema>;
 
 export const ListPagesInputSchema = z.object({
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML result string */
@@ -427,7 +430,10 @@ export const ClosePageInputSchema = z.object({
   /** Page ID to close */
   page_id: z.string(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML result string */
@@ -442,7 +448,10 @@ export type ClosePageOutput = z.infer<typeof ClosePageOutputSchema>;
 
 export const CloseSessionInputSchema = z.object({
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML result string */
@@ -461,7 +470,10 @@ export const NavigateInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML state response string directly */
@@ -478,7 +490,10 @@ export const GoBackInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML state response string directly */
@@ -495,7 +510,10 @@ export const GoForwardInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML state response string directly */
@@ -512,7 +530,10 @@ export const ReloadInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML state response string directly */
@@ -529,7 +550,10 @@ export const CaptureSnapshotInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML state response string directly */
@@ -546,7 +570,10 @@ export const FindElementsInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page to search within.'),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
   /** Filter by element type. */
   kind: z
     .enum(['button', 'link', 'radio', 'checkbox', 'textbox', 'combobox', 'image', 'heading'])
@@ -594,7 +621,10 @@ export const GetNodeDetailsInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML result string */
@@ -617,7 +647,10 @@ const ScrollElementIntoViewInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 export const ScrollElementIntoViewInputSchema = ScrollElementIntoViewInputSchemaBase;
 export { ScrollElementIntoViewInputSchemaBase };
@@ -640,7 +673,10 @@ export const ScrollPageInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML state response string directly */
@@ -683,7 +719,10 @@ const ClickInputSchemaBase = z.object({
       'Element ID from find_elements results or the page snapshot. Every interactive element has a unique eid.'
     ),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 export const ClickInputSchema = ClickInputSchemaBase;
 // Re-export base for .shape access
@@ -713,7 +752,10 @@ const TypeInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 export const TypeInputSchema = TypeInputSchemaBase;
 export { TypeInputSchemaBase };
@@ -733,7 +775,10 @@ export const PressInputSchema = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 
 /** Returns XML state response string directly */
@@ -757,7 +802,10 @@ const SelectInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 export const SelectInputSchema = SelectInputSchemaBase;
 export { SelectInputSchemaBase };
@@ -775,7 +823,10 @@ const HoverInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
 });
 export const HoverInputSchema = HoverInputSchemaBase;
 export { HoverInputSchemaBase };
@@ -795,7 +846,10 @@ const TakeScreenshotInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page to screenshot.'),
   /** Session ID for multi-tenant routing */
-  session_id: z.string().optional().describe('Session ID. Required when multiple sessions are active.'),
+  session_id: z
+    .string()
+    .optional()
+    .describe('Session ID. Required when multiple sessions are active.'),
   /** Element ID to capture (requires prior snapshot). Cannot combine with fullPage. */
   eid: z
     .string()

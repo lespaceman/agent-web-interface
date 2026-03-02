@@ -116,9 +116,7 @@ describe('ChromeWorkerProcess', () => {
     });
 
     it('should auto-detect Chrome path', () => {
-      vi.mocked(existsSync).mockImplementation(
-        (path) => path === '/usr/bin/google-chrome-stable'
-      );
+      vi.mocked(existsSync).mockImplementation((path) => path === '/usr/bin/google-chrome-stable');
 
       const worker = new ChromeWorkerProcess({
         workerId: 'w-123',
