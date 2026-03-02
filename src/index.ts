@@ -6,7 +6,7 @@
  * Main entry point - initializes the MCP server with Puppeteer-based browser automation.
  */
 
-import { BrowserAutomationServer } from './server/mcp-server.js';
+import { BrowserAutomationServer, type SessionStartEvent } from './server/mcp-server.js';
 import {
   initServerConfig,
   getSessionManager,
@@ -14,10 +14,21 @@ import {
   ensureBrowserForTools,
   isSessionManagerInitialized,
 } from './server/server-config.js';
+import { SessionStore } from './server/session-store.js';
 import { getLogger } from './shared/services/logging.service.js';
 import { cleanupTempFiles } from './lib/temp-file.js';
 
 const logger = getLogger();
+
+/** Module-level session store for tenant isolation */
+const sessionStore = new SessionStore();
+
+/**
+ * Get the SessionStore instance for use in tool handlers.
+ */
+export function getSessionStore(): SessionStore {
+  return sessionStore;
+}
 import {
   initializeTools,
   initializeFormTools,
@@ -116,6 +127,16 @@ function initializeServer(): BrowserAutomationServer {
   const server = new BrowserAutomationServer({
     name: 'agent-web-interface',
     version: '3.0.0',
+  });
+
+  // Wire SessionStore to MCP lifecycle events
+  server.on('session:start', (event: SessionStartEvent) => {
+    const { clientInfo } = event;
+    sessionStore.createSession(clientInfo?.name ?? 'unknown', clientInfo);
+  });
+  server.on('session:end', () => {
+    const session = sessionStore.getDefaultSession();
+    if (session) sessionStore.destroySession(session.session_id);
   });
 
   // Initialize session manager and tools
