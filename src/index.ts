@@ -401,7 +401,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Drag',
       description:
-        'Drag from one point to another. Specify source and target coordinates. If `eid` is provided, coordinates are relative to the element\'s top-left corner. Otherwise, coordinates are absolute viewport positions. Useful for canvas drawing, slider manipulation, and drag-and-drop operations.',
+        "Drag from one point to another. Specify source and target coordinates. If `eid` is provided, coordinates are relative to the element's top-left corner. Otherwise, coordinates are absolute viewport positions. Useful for canvas drawing, slider manipulation, and drag-and-drop operations.",
       inputSchema: DragInputSchemaBase.shape,
     },
     withLazyInit(drag, 'drag')

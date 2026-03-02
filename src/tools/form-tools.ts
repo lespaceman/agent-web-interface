@@ -6,11 +6,7 @@
  */
 
 import { z } from 'zod';
-import {
-  getSessionManager,
-  getSnapshotStore,
-  resolveExistingPage,
-} from './tool-context.js';
+import { getSessionManager, getSnapshotStore, resolveExistingPage } from './tool-context.js';
 import {
   detectForms,
   getDependencyTracker,

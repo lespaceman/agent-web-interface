@@ -337,10 +337,14 @@ async function cleanupInspection(
       expression: `document.getElementById('${OVERLAY_ID}')?.remove()`,
       returnByValue: true,
     })
-    .catch(() => { /* best-effort cleanup */ });
+    .catch(() => {
+      /* best-effort cleanup */
+    });
 
   if (objectId) {
-    await cdp.send('Runtime.releaseObject', { objectId }).catch(() => { /* best-effort cleanup */ });
+    await cdp.send('Runtime.releaseObject', { objectId }).catch(() => {
+      /* best-effort cleanup */
+    });
   }
 }
 

@@ -170,8 +170,4 @@ export {
 } from './form-tools.js';
 
 // Canvas tools
-export {
-  inspectCanvas,
-  type CanvasMetadata,
-  type CanvasObject,
-} from './canvas-tools.js';
+export { inspectCanvas, type CanvasMetadata, type CanvasObject } from './canvas-tools.js';

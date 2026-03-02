@@ -95,7 +95,10 @@ vi.mock('../../../src/state/element-identity.js', () => ({
 }));
 
 vi.mock('../../../src/state/health.types.js', () => ({
-  createHealthyRuntime: vi.fn(() => ({ cdp: { ok: true }, snapshot: { ok: true, code: 'HEALTHY' } })),
+  createHealthyRuntime: vi.fn(() => ({
+    cdp: { ok: true },
+    snapshot: { ok: true, code: 'HEALTHY' },
+  })),
   createRecoveredCdpRuntime: vi.fn(),
 }));
 
@@ -162,8 +165,7 @@ describe('inspectCanvas', () => {
     mockCdp.send.mockImplementation((method: string) => {
       if (method === 'Page.getFrameTree') return Promise.resolve({});
       if (method === 'DOM.scrollIntoViewIfNeeded') return Promise.resolve({});
-      if (method === 'DOM.resolveNode')
-        return Promise.resolve({ object: { objectId: 'obj-1' } });
+      if (method === 'DOM.resolveNode') return Promise.resolve({ object: { objectId: 'obj-1' } });
       if (method === 'Runtime.callFunctionOn')
         return Promise.resolve({
           result: {
@@ -257,11 +259,11 @@ describe('inspectCanvas', () => {
 
     await inspectCanvas({ eid: 'cv-1' });
 
-    const evalCalls = mockCdp.send.mock.calls.filter(
-      (c: unknown[]) => c[0] === 'Runtime.evaluate'
-    );
+    const evalCalls = mockCdp.send.mock.calls.filter((c: unknown[]) => c[0] === 'Runtime.evaluate');
     expect(evalCalls.length).toBeGreaterThanOrEqual(1);
-    expect((evalCalls[0][1] as { expression: string }).expression).toContain('__inspect_canvas_overlay__');
+    expect((evalCalls[0][1] as { expression: string }).expression).toContain(
+      '__inspect_canvas_overlay__'
+    );
   });
 
   it('uses canvas bounding box as screenshot clip', async () => {
@@ -295,11 +297,11 @@ describe('inspectCanvas', () => {
 
     await expect(inspectCanvas({ eid: 'cv-1' })).rejects.toThrow('Screenshot failed');
 
-    const evalCalls = mockCdp.send.mock.calls.filter(
-      (c: unknown[]) => c[0] === 'Runtime.evaluate'
-    );
+    const evalCalls = mockCdp.send.mock.calls.filter((c: unknown[]) => c[0] === 'Runtime.evaluate');
     expect(evalCalls.length).toBeGreaterThanOrEqual(1);
-    expect((evalCalls[0][1] as { expression: string }).expression).toContain('__inspect_canvas_overlay__');
+    expect((evalCalls[0][1] as { expression: string }).expression).toContain(
+      '__inspect_canvas_overlay__'
+    );
   });
 
   it('releases CDP object reference in cleanup', async () => {

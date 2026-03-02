@@ -17,10 +17,7 @@ import type { CdpClient } from '../cdp/cdp-client.interface.js';
  *
  * @returns Content quad as 8-element array [x1,y1, x2,y2, x3,y3, x4,y4]
  */
-async function scrollAndGetContentQuad(
-  cdp: CdpClient,
-  backendNodeId: number
-): Promise<number[]> {
+async function scrollAndGetContentQuad(cdp: CdpClient, backendNodeId: number): Promise<number[]> {
   try {
     await cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId });
   } catch (error) {

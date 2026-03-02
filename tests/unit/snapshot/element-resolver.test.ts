@@ -511,21 +511,21 @@ describe('ElementResolver', () => {
     });
 
     it('should reject negative X coordinate', async () => {
-      await expect(
-        clickAtCoordinates(mockCdp as unknown as CdpClient, -1, 200)
-      ).rejects.toThrow('Invalid click coordinates');
+      await expect(clickAtCoordinates(mockCdp as unknown as CdpClient, -1, 200)).rejects.toThrow(
+        'Invalid click coordinates'
+      );
     });
 
     it('should reject negative Y coordinate', async () => {
-      await expect(
-        clickAtCoordinates(mockCdp as unknown as CdpClient, 100, -5)
-      ).rejects.toThrow('Invalid click coordinates');
+      await expect(clickAtCoordinates(mockCdp as unknown as CdpClient, 100, -5)).rejects.toThrow(
+        'Invalid click coordinates'
+      );
     });
 
     it('should reject NaN coordinates', async () => {
-      await expect(
-        clickAtCoordinates(mockCdp as unknown as CdpClient, NaN, 200)
-      ).rejects.toThrow('Invalid click coordinates');
+      await expect(clickAtCoordinates(mockCdp as unknown as CdpClient, NaN, 200)).rejects.toThrow(
+        'Invalid click coordinates'
+      );
     });
   });
 
@@ -596,14 +596,7 @@ describe('ElementResolver', () => {
 
     it('should dispatch mousePressed, N mouseMoved, and mouseReleased', async () => {
       const steps = 5;
-      await dragBetweenCoordinates(
-        mockCdp as unknown as CdpClient,
-        100,
-        200,
-        200,
-        400,
-        steps
-      );
+      await dragBetweenCoordinates(mockCdp as unknown as CdpClient, 100, 200, 200, 400, steps);
 
       const calls = mockCdp.send.mock.calls;
 
@@ -645,14 +638,7 @@ describe('ElementResolver', () => {
     });
 
     it('should correctly interpolate intermediate points', async () => {
-      await dragBetweenCoordinates(
-        mockCdp as unknown as CdpClient,
-        0,
-        0,
-        100,
-        200,
-        2
-      );
+      await dragBetweenCoordinates(mockCdp as unknown as CdpClient, 0, 0, 100, 200, 2);
 
       const calls = mockCdp.send.mock.calls;
 

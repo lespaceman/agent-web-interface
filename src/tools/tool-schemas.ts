@@ -530,7 +530,17 @@ export const FindElementsInputSchema = z.object({
 
   /** Filter by element type. */
   kind: z
-    .enum(['button', 'link', 'radio', 'checkbox', 'textbox', 'combobox', 'image', 'heading', 'canvas'])
+    .enum([
+      'button',
+      'link',
+      'radio',
+      'checkbox',
+      'textbox',
+      'combobox',
+      'image',
+      'heading',
+      'canvas',
+    ])
     .optional()
     .describe(
       "Filter by element type: 'button' for clickable buttons, 'link' for hyperlinks, 'textbox' for input fields, 'checkbox'/'radio' for toggles, 'combobox' for dropdowns, 'heading' for section titles, 'image' for images, 'canvas' for canvas elements."
@@ -874,7 +884,9 @@ const InspectCanvasInputSchemaBase = z.object({
     .max(500)
     .default(50)
     .optional()
-    .describe('Grid line spacing in pixels (default: 50). Smaller values give finer coordinate resolution.'),
+    .describe(
+      'Grid line spacing in pixels (default: 50). Smaller values give finer coordinate resolution.'
+    ),
   /** Image format (default: png) */
   format: z
     .enum(['png', 'jpeg'])
