@@ -15,6 +15,7 @@ import {
   isSessionManagerInitialized,
 } from './server/server-config.js';
 import { SessionStore } from './server/session-store.js';
+import { SessionWorkerBinding, type IsolationMode } from './session/session-worker-binding.js';
 import { getLogger } from './shared/services/logging.service.js';
 import { cleanupTempFiles } from './lib/temp-file.js';
 
@@ -23,11 +24,25 @@ const logger = getLogger();
 /** Module-level session store for tenant isolation */
 const sessionStore = new SessionStore();
 
+/** Isolation mode from environment (default: 'context') */
+const isolationMode: IsolationMode =
+  (process.env.ISOLATION_MODE as IsolationMode) === 'process' ? 'process' : 'context';
+
+/** Session-to-worker binding adapter */
+const sessionBinding = new SessionWorkerBinding(isolationMode);
+
 /**
  * Get the SessionStore instance for use in tool handlers.
  */
 export function getSessionStore(): SessionStore {
   return sessionStore;
+}
+
+/**
+ * Get the SessionWorkerBinding instance.
+ */
+export function getSessionBinding(): SessionWorkerBinding {
+  return sessionBinding;
 }
 import {
   initializeTools,
@@ -132,11 +147,36 @@ function initializeServer(): BrowserAutomationServer {
   // Wire SessionStore to MCP lifecycle events
   server.on('session:start', (event: SessionStartEvent) => {
     const { clientInfo } = event;
-    sessionStore.createSession(clientInfo?.name ?? 'unknown', clientInfo);
+    const sessionId = sessionStore.createSession(clientInfo?.name ?? 'unknown', clientInfo);
+
+    // Route session start through the isolation binding
+    const session = sessionStore.getSession(sessionId);
+    if (session) {
+      void sessionBinding
+        .onSessionStart(sessionId, getSessionManager())
+        .then((result) => {
+          if (result.browserContext) {
+            session.browser_context = result.browserContext;
+          }
+        })
+        .catch((err) => {
+          logger.error(
+            'Failed to initialize session isolation',
+            err instanceof Error ? err : undefined,
+            {
+              sessionId,
+              isolationMode,
+            }
+          );
+        });
+    }
   });
   server.on('session:end', () => {
     const session = sessionStore.getDefaultSession();
-    if (session) void sessionStore.destroySession(session.session_id);
+    if (session) {
+      sessionBinding.onSessionEnd(session.session_id);
+      void sessionStore.destroySession(session.session_id);
+    }
   });
 
   // Initialize session manager and tools
