@@ -1,3 +1,21 @@
+## [4.2.0] - 2026-03-02
+
+- fix: surface <option> elements in semantic snapshots for native <select> dropdowns
+- revert: remove session_id from tool schemas
+- refactor: simplify code from review findings
+- chore: formatting fixes and audit cleanup
+- feat: SessionWorkerBinding — route session lifecycle to context or process isolation
+- feat: per-session BrowserContext isolation for cookie/storage separation
+- feat: add session_id to tool schemas and session-scoped page routing
+- feat: add WorkerManager for process-level Chrome isolation per session
+- feat: wire SessionStore into MCP lifecycle (oninitialized/onclose)
+- feat: add detach() to SessionManager — browser survives MCP server exit
+- feat: port LeaseManager, HealthMonitor, PortAllocator from stale multi-tenant branch
+- feat: extend SessionStore with clientInfo and getDefaultSession
+- feat: add MCP lifecycle hooks (oninitialized, onclose) to BrowserAutomationServer
+- chore: update patch-level dependencies
+- chore: add .worktrees/ to .gitignore
+
 ## [4.1.1] - 2026-03-01
 
 - Merge pull request #52 from lespaceman/fix/portal-overlay-snapshot
