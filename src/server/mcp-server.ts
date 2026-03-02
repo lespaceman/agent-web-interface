@@ -28,7 +28,7 @@ export interface ServerConfig {
  * Minimal shell - tool handlers will be registered by the new semantic snapshot system.
  */
 export interface SessionStartEvent {
-  clientInfo: { name: string; version: string } | undefined;
+  clientInfo: import('./session-store.js').ClientInfo | undefined;
 }
 
 export interface BrowserAutomationServerEvents {

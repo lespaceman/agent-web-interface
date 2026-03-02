@@ -918,27 +918,24 @@ export class SessionManager {
 
     // Save the WebSocket endpoint before disconnecting (for potential reconnection)
     try {
-      if (
-        typeof (this.browser as unknown as { wsEndpoint: () => string }).wsEndpoint === 'function'
-      ) {
-        this._lastWsEndpoint = (
-          this.browser as unknown as { wsEndpoint: () => string }
-        ).wsEndpoint();
+      if ('wsEndpoint' in this.browser && typeof this.browser.wsEndpoint === 'function') {
+        this._lastWsEndpoint = (this.browser.wsEndpoint as () => string)();
       }
     } catch {
       // wsEndpoint may not be available (e.g., pipe transport)
       this.logger.debug('Could not retrieve wsEndpoint during detach');
     }
 
-    // Close/detach all CDP sessions (best-effort)
+    // Close/detach all CDP sessions concurrently (best-effort)
     const pages = this.registry.list();
-    for (const page of pages) {
-      try {
-        await page.cdp.close();
-      } catch (err) {
+    const results = await Promise.allSettled(pages.map((page) => page.cdp.close()));
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected') {
+        const reason: unknown = result.reason;
         this.logger.debug('CDP session close failed during detach', {
-          page_id: page.page_id,
-          error: err instanceof Error ? err.message : String(err),
+          page_id: pages[i].page_id,
+          error: reason instanceof Error ? reason.message : String(reason),
         });
       }
     }

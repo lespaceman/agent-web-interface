@@ -101,13 +101,21 @@ export class SessionWorkerBinding {
       );
     }
 
-    this.workerAssignments.set(sessionId, {
+    const assignment = {
       workerId: result.workerId,
       cdpEndpoint: result.cdpEndpoint,
-    });
+    };
+    this.workerAssignments.set(sessionId, assignment);
 
     // Connect SessionManager to the worker's CDP endpoint
-    await sessionManager.connect({ browserWSEndpoint: result.cdpEndpoint });
+    try {
+      await sessionManager.connect({ browserWSEndpoint: result.cdpEndpoint });
+    } catch (err) {
+      // Rollback: release assignment so we don't leak a dangling entry
+      this.workerAssignments.delete(sessionId);
+      throw err;
+    }
+
     logger.info(`Session connected to worker`, {
       sessionId,
       workerId: result.workerId,

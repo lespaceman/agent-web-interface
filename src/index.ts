@@ -148,28 +148,26 @@ function initializeServer(): BrowserAutomationServer {
   server.on('session:start', (event: SessionStartEvent) => {
     const { clientInfo } = event;
     const sessionId = sessionStore.createSession(clientInfo?.name ?? 'unknown', clientInfo);
+    const session = sessionStore.getSession(sessionId)!;
 
-    // Route session start through the isolation binding
-    const session = sessionStore.getSession(sessionId);
-    if (session) {
-      void sessionBinding
-        .onSessionStart(sessionId, getSessionManager())
-        .then((result) => {
-          if (result.browserContext) {
-            session.browser_context = result.browserContext;
-          }
-        })
-        .catch((err) => {
-          logger.error(
-            'Failed to initialize session isolation',
-            err instanceof Error ? err : undefined,
-            {
-              sessionId,
-              isolationMode,
-            }
-          );
-        });
-    }
+    // Route session start through the isolation binding.
+    // Browser init is lazy (first tool call), so context creation may fail here
+    // if the browser isn't launched yet. That's OK — the tool's withLazyInit
+    // will ensure the browser is ready before any real work happens.
+    sessionBinding
+      .onSessionStart(sessionId, getSessionManager())
+      .then((result) => {
+        if (result.browserContext) {
+          session.browser_context = result.browserContext;
+        }
+      })
+      .catch((err) => {
+        logger.error(
+          'Failed to initialize session isolation',
+          err instanceof Error ? err : undefined,
+          { sessionId, isolationMode }
+        );
+      });
   });
   server.on('session:end', () => {
     const session = sessionStore.getDefaultSession();
