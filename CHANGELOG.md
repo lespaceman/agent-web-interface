@@ -1,3 +1,11 @@
+## [4.3.0] - 2026-03-02
+
+- refactor: replace button controls with direct shape interactions in canvas fixtures
+- chore: format code and add mcp config and plan doc
+- feat: add canvas inspection tool and refactor shared tool helpers
+- test: add interactive canvas fixtures for all 7 supported libraries
+- chore: remove unused plan and docs files
+
 ## [4.2.0] - 2026-03-02
 
 - fix: surface <option> elements in semantic snapshots for native <select> dropdowns
