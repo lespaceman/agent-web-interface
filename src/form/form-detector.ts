@@ -13,11 +13,10 @@
  * @module form/form-detector
  */
 
-import type { BaseSnapshot, ReadableNode, NodeKind } from '../snapshot/snapshot.types.js';
+import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
 import type {
   FormRegion,
   FormSignal,
-  FormIntent,
   FormPattern,
   FormCandidate,
   FormDetectionConfig,
@@ -26,141 +25,17 @@ import { DEFAULT_FORM_DETECTION_CONFIG } from './types.js';
 import { extractFields } from './field-extractor.js';
 import { computeFormState } from './form-state.js';
 import { createHash } from 'crypto';
-
-/**
- * Interactive input kinds
- */
-const INPUT_KINDS = new Set<NodeKind>([
-  'input',
-  'textarea',
-  'select',
-  'combobox',
-  'checkbox',
-  'radio',
-  'switch',
-  'slider',
-]);
-
-/**
- * Button kinds that could be submit buttons
- */
-const BUTTON_KINDS = new Set<NodeKind>(['button']);
-
-/**
- * Signal weights for form detection
- */
-const SIGNAL_WEIGHTS: Record<FormSignal['type'], number> = {
-  form_tag: 0.5,
-  role_form: 0.45,
-  role_search: 0.4,
-  fieldset: 0.3,
-  input_cluster: 0.25,
-  label_input_pairs: 0.2,
-  submit_button: 0.3,
-  form_keywords: 0.15,
-  naming_pattern: 0.1,
-};
-
-/**
- * Weighted keywords that indicate form intent.
- * Higher weight = more explicit signal (e.g., "create account" is more explicitly signup than "email")
- * Lower weight = ambiguous signal that appears in multiple form types
- */
-const INTENT_KEYWORDS: Record<FormIntent, { keyword: string; weight: number }[]> = {
-  login: [
-    { keyword: 'log in', weight: 3 },
-    { keyword: 'login', weight: 3 },
-    { keyword: 'sign in', weight: 3 },
-    { keyword: 'signin', weight: 3 },
-    // These are ambiguous - they appear in both login and signup forms
-    { keyword: 'email', weight: 0.5 },
-    { keyword: 'password', weight: 0.5 },
-    { keyword: 'username', weight: 0.5 },
-  ],
-  signup: [
-    { keyword: 'sign up', weight: 3 },
-    { keyword: 'signup', weight: 3 },
-    { keyword: 'register', weight: 3 },
-    { keyword: 'create account', weight: 3 },
-    { keyword: 'join', weight: 2 },
-  ],
-  search: [
-    { keyword: 'search', weight: 3 },
-    { keyword: 'find', weight: 2 },
-    { keyword: 'lookup', weight: 2 },
-    { keyword: 'query', weight: 2 },
-  ],
-  checkout: [
-    { keyword: 'checkout', weight: 3 },
-    { keyword: 'payment', weight: 2 },
-    { keyword: 'order', weight: 2 },
-    { keyword: 'purchase', weight: 2 },
-    { keyword: 'buy now', weight: 3 },
-  ],
-  filter: [
-    { keyword: 'filter', weight: 3 },
-    { keyword: 'sort', weight: 2 },
-    { keyword: 'refine', weight: 2 },
-    { keyword: 'narrow', weight: 2 },
-  ],
-  settings: [
-    { keyword: 'settings', weight: 3 },
-    { keyword: 'preferences', weight: 2 },
-    { keyword: 'configuration', weight: 2 },
-    { keyword: 'options', weight: 1 },
-  ],
-  contact: [
-    { keyword: 'contact', weight: 3 },
-    { keyword: 'message', weight: 1 },
-    { keyword: 'feedback', weight: 2 },
-    { keyword: 'inquiry', weight: 2 },
-  ],
-  subscribe: [
-    { keyword: 'subscribe', weight: 3 },
-    { keyword: 'newsletter', weight: 3 },
-    { keyword: 'email updates', weight: 2 },
-  ],
-  shipping: [
-    { keyword: 'shipping', weight: 3 },
-    { keyword: 'delivery', weight: 2 },
-    { keyword: 'address', weight: 1 },
-  ],
-  payment: [
-    { keyword: 'payment', weight: 3 },
-    { keyword: 'credit card', weight: 3 },
-    { keyword: 'billing', weight: 2 },
-    { keyword: 'card number', weight: 3 },
-  ],
-  profile: [
-    { keyword: 'profile', weight: 3 },
-    { keyword: 'account', weight: 1 },
-    { keyword: 'personal info', weight: 2 },
-  ],
-  unknown: [],
-};
-
-/**
- * Submit button keywords
- */
-const SUBMIT_KEYWORDS = [
-  'submit',
-  'send',
-  'continue',
-  'next',
-  'save',
-  'apply',
-  'confirm',
-  'add to',
-  'sign in',
-  'log in',
-  'sign up',
-  'register',
-  'search',
-  'buy',
-  'checkout',
-  'purchase',
-  'subscribe',
-];
+import { inferIntent, hasIntentKeywords, INTENT_KEYWORDS } from './intent-inference.js';
+import {
+  findSubmitButton,
+  findSubmitButtonNearCluster,
+} from './submit-detection.js';
+import { clusterInputs } from './input-clustering.js';
+import {
+  extractFormActions,
+  INPUT_KINDS,
+  SIGNAL_WEIGHTS,
+} from './form-actions.js';
 
 /**
  * Form Detector class
@@ -264,7 +139,13 @@ export class FormDetector {
       }
 
       // Check for submit button
-      const submitButton = this.findSubmitButton(snapshot, formNode, fieldEids);
+      const submitButton = findSubmitButton(
+        snapshot,
+        formNode,
+        fieldEids,
+        this.isNodeWithinForm.bind(this),
+        this.computeClusterBbox.bind(this)
+      );
       if (submitButton) {
         signals.push({
           type: 'submit_button',
@@ -277,7 +158,7 @@ export class FormDetector {
       const confidence = this.computeConfidence(signals);
 
       // Infer intent
-      const intent = this.inferIntent(snapshot, fieldEids, formNode);
+      const intent = inferIntent(snapshot, fieldEids, formNode);
 
       candidates.push({
         root_node_id: formNode.node_id,
@@ -316,7 +197,7 @@ export class FormDetector {
     }
 
     // Group inputs by proximity and structural context
-    const clusters = this.clusterInputs(unclaimedInputs, snapshot);
+    const clusters = clusterInputs(unclaimedInputs, snapshot, this.config);
 
     for (const cluster of clusters) {
       if (cluster.length < 1) continue;
@@ -344,7 +225,7 @@ export class FormDetector {
       const allKeywords = Object.values(INTENT_KEYWORDS)
         .flat()
         .map((entry) => entry.keyword);
-      const hasFormKeywords = cluster.some((n) => this.hasIntentKeywords(n.label, allKeywords));
+      const hasFormKeywords = cluster.some((n) => hasIntentKeywords(n.label, allKeywords));
       if (hasFormKeywords) {
         signals.push({
           type: 'form_keywords',
@@ -355,7 +236,11 @@ export class FormDetector {
 
       // Check for submit button near cluster
       const fieldEids = cluster.map((n) => n.node_id);
-      const submitButton = this.findSubmitButtonNearCluster(snapshot, cluster);
+      const submitButton = findSubmitButtonNearCluster(
+        snapshot,
+        cluster,
+        this.computeClusterBbox.bind(this)
+      );
       if (submitButton) {
         signals.push({
           type: 'submit_button',
@@ -368,7 +253,7 @@ export class FormDetector {
       const confidence = this.computeConfidence(signals);
 
       // Infer intent
-      const intent = this.inferIntent(snapshot, fieldEids, undefined);
+      const intent = inferIntent(snapshot, fieldEids, undefined);
 
       // Compute bounding box from cluster
       const bbox = this.computeClusterBbox(cluster);
@@ -383,66 +268,6 @@ export class FormDetector {
     }
 
     return candidates;
-  }
-
-  /**
-   * Cluster input nodes by proximity and structural context.
-   */
-  private clusterInputs(inputs: ReadableNode[], _snapshot: BaseSnapshot): ReadableNode[][] {
-    if (inputs.length === 0) return [];
-    if (inputs.length === 1) return [[inputs[0]]];
-
-    // Group by region first
-    const byRegion = new Map<string, ReadableNode[]>();
-    for (const input of inputs) {
-      const key = input.where.region ?? 'unknown';
-      const group = byRegion.get(key) ?? [];
-      group.push(input);
-      byRegion.set(key, group);
-    }
-
-    const clusters: ReadableNode[][] = [];
-
-    // Within each region, cluster by proximity
-    for (const regionInputs of byRegion.values()) {
-      if (regionInputs.length === 1) {
-        clusters.push(regionInputs);
-        continue;
-      }
-
-      // Simple clustering by vertical proximity
-      const sorted = [...regionInputs].sort((a, b) => {
-        const yA = a.layout?.bbox?.y ?? 0;
-        const yB = b.layout?.bbox?.y ?? 0;
-        return yA - yB;
-      });
-
-      let currentCluster: ReadableNode[] = [sorted[0]];
-
-      for (let i = 1; i < sorted.length; i++) {
-        const prev = sorted[i - 1];
-        const curr = sorted[i];
-
-        const prevY = (prev.layout?.bbox?.y ?? 0) + (prev.layout?.bbox?.h ?? 0);
-        const currY = curr.layout?.bbox?.y ?? 0;
-        const distance = currY - prevY;
-
-        if (distance <= this.config.cluster_distance) {
-          currentCluster.push(curr);
-        } else {
-          if (currentCluster.length > 0) {
-            clusters.push(currentCluster);
-          }
-          currentCluster = [curr];
-        }
-      }
-
-      if (currentCluster.length > 0) {
-        clusters.push(currentCluster);
-      }
-    }
-
-    return clusters;
   }
 
   /**
@@ -490,99 +315,6 @@ export class FormDetector {
   }
 
   /**
-   * Find a submit button associated with a form.
-   */
-  private findSubmitButton(
-    snapshot: BaseSnapshot,
-    formNode: ReadableNode,
-    fieldEids: string[]
-  ): ReadableNode | undefined {
-    const buttons = snapshot.nodes.filter((n) => BUTTON_KINDS.has(n.kind));
-
-    for (const button of buttons) {
-      // Check if button is within form's scope
-      if (!this.isNodeWithinForm(button, formNode, snapshot)) {
-        continue;
-      }
-
-      // Check if button label suggests submission
-      if (this.isSubmitButton(button)) {
-        return button;
-      }
-    }
-
-    // Also check buttons near the fields
-    if (fieldEids.length > 0) {
-      const fieldNodes = fieldEids
-        .map((eid) => snapshot.nodes.find((n) => n.node_id === eid))
-        .filter((n): n is ReadableNode => n !== undefined);
-
-      return this.findSubmitButtonNearCluster(snapshot, fieldNodes);
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Find a submit button near a cluster of inputs.
-   */
-  private findSubmitButtonNearCluster(
-    snapshot: BaseSnapshot,
-    cluster: ReadableNode[]
-  ): ReadableNode | undefined {
-    if (cluster.length === 0) return undefined;
-
-    const buttons = snapshot.nodes.filter((n) => BUTTON_KINDS.has(n.kind));
-    const clusterBbox = this.computeClusterBbox(cluster);
-
-    if (!clusterBbox) return undefined;
-
-    // Find buttons near the cluster
-    const nearbyButtons = buttons.filter((button) => {
-      if (!button.layout?.bbox) return false;
-      const btnBbox = button.layout.bbox;
-
-      // Check if button is below or to the right of the cluster
-      const isNearX =
-        btnBbox.x >= clusterBbox.x - 100 && btnBbox.x <= clusterBbox.x + clusterBbox.width + 100;
-      const isNearY =
-        btnBbox.y >= clusterBbox.y - 50 && btnBbox.y <= clusterBbox.y + clusterBbox.height + 150;
-
-      return isNearX && isNearY;
-    });
-
-    // Find the best submit button candidate
-    for (const button of nearbyButtons) {
-      if (this.isSubmitButton(button)) {
-        return button;
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Check if a button looks like a submit button.
-   */
-  private isSubmitButton(button: ReadableNode): boolean {
-    const label = button.label.toLowerCase();
-
-    // Check for submit keywords
-    for (const keyword of SUBMIT_KEYWORDS) {
-      if (label.includes(keyword)) {
-        return true;
-      }
-    }
-
-    // Check for type="submit" attribute
-    if (button.attributes?.input_type === 'submit') {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
    * Compute confidence score from signals.
    */
   private computeConfidence(signals: FormSignal[]): number {
@@ -595,71 +327,6 @@ export class FormDetector {
 
     // Normalize to 0-1
     return Math.min(1.0, score);
-  }
-
-  /**
-   * Infer the intent of a form.
-   */
-  private inferIntent(
-    snapshot: BaseSnapshot,
-    fieldEids: string[],
-    formNode?: ReadableNode
-  ): FormIntent {
-    // Collect all relevant text to analyze
-    const textToAnalyze: string[] = [];
-
-    // Add form node label if available
-    if (formNode?.label) {
-      textToAnalyze.push(formNode.label);
-    }
-
-    // Add form heading context
-    if (formNode?.where.heading_context) {
-      textToAnalyze.push(formNode.where.heading_context);
-    }
-
-    // Add field labels
-    for (const eid of fieldEids) {
-      const node = snapshot.nodes.find((n) => n.node_id === eid);
-      if (node?.label) {
-        textToAnalyze.push(node.label);
-      }
-      if (node?.attributes?.placeholder) {
-        textToAnalyze.push(node.attributes.placeholder);
-      }
-    }
-
-    const combinedText = textToAnalyze.join(' ').toLowerCase();
-
-    // Score each intent using weighted keywords
-    let bestIntent: FormIntent = 'unknown';
-    let bestScore = 0;
-
-    for (const [intent, keywordEntries] of Object.entries(INTENT_KEYWORDS)) {
-      if (intent === 'unknown') continue;
-
-      let score = 0;
-      for (const entry of keywordEntries) {
-        if (combinedText.includes(entry.keyword)) {
-          score += entry.weight;
-        }
-      }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestIntent = intent as FormIntent;
-      }
-    }
-
-    return bestIntent;
-  }
-
-  /**
-   * Check if text contains any of the given keywords.
-   */
-  private hasIntentKeywords(text: string, keywords: string[]): boolean {
-    const lower = text.toLowerCase();
-    return keywords.some((k) => lower.includes(k));
   }
 
   /**
@@ -709,7 +376,11 @@ export class FormDetector {
     const fields = extractFields(snapshot, candidate.field_eids, this.config);
 
     // Find action buttons
-    const actions = this.extractFormActions(snapshot, candidate);
+    const actions = extractFormActions(
+      snapshot,
+      candidate,
+      this.computeClusterBbox.bind(this)
+    );
 
     // Compute form state
     const state = computeFormState(fields);
@@ -747,89 +418,6 @@ export class FormDetector {
     ];
     const hash = createHash('sha256').update(components.join('::')).digest('hex');
     return `form-${hash.substring(0, 8)}`;
-  }
-
-  /**
-   * Extract form action buttons.
-   */
-  private extractFormActions(
-    snapshot: BaseSnapshot,
-    candidate: FormCandidate
-  ): FormRegion['actions'] {
-    const actions: FormRegion['actions'] = [];
-    const buttons = snapshot.nodes.filter((n) => BUTTON_KINDS.has(n.kind));
-
-    for (const button of buttons) {
-      // Skip disabled buttons for now but still include them
-      const isSubmit = this.isSubmitButton(button);
-      const isNearForm = candidate.bbox
-        ? this.isButtonNearBbox(button, candidate.bbox)
-        : candidate.field_eids.length === 0 ||
-          this.isButtonNearFields(button, snapshot, candidate.field_eids);
-
-      if (!isNearForm) continue;
-
-      // Determine action type
-      let type: FormRegion['actions'][0]['type'] = 'action';
-      const label = button.label.toLowerCase();
-
-      if (isSubmit) {
-        type = 'submit';
-      } else if (label.includes('cancel') || label.includes('close')) {
-        type = 'cancel';
-      } else if (label.includes('back') || label.includes('previous')) {
-        type = 'back';
-      } else if (label.includes('next') || label.includes('continue')) {
-        type = 'next';
-      } else if (label.includes('reset') || label.includes('clear')) {
-        type = 'reset';
-      }
-
-      actions.push({
-        eid: button.node_id,
-        backend_node_id: button.backend_node_id,
-        label: button.label,
-        type,
-        enabled: button.state?.enabled ?? true,
-        is_primary: isSubmit,
-      });
-    }
-
-    return actions;
-  }
-
-  /**
-   * Check if a button is near a bounding box.
-   */
-  private isButtonNearBbox(
-    button: ReadableNode,
-    bbox: NonNullable<FormCandidate['bbox']>
-  ): boolean {
-    if (!button.layout?.bbox) return false;
-    const btnBbox = button.layout.bbox;
-
-    const isNearX = btnBbox.x >= bbox.x - 100 && btnBbox.x <= bbox.x + bbox.width + 100;
-    const isNearY = btnBbox.y >= bbox.y - 50 && btnBbox.y <= bbox.y + bbox.height + 150;
-
-    return isNearX && isNearY;
-  }
-
-  /**
-   * Check if a button is near a set of fields.
-   */
-  private isButtonNearFields(
-    button: ReadableNode,
-    snapshot: BaseSnapshot,
-    fieldEids: string[]
-  ): boolean {
-    const fieldNodes = fieldEids
-      .map((eid) => snapshot.nodes.find((n) => n.node_id === eid))
-      .filter((n): n is ReadableNode => n !== undefined);
-
-    const clusterBbox = this.computeClusterBbox(fieldNodes);
-    if (!clusterBbox) return false;
-
-    return this.isButtonNearBbox(button, clusterBbox);
   }
 
   /**
