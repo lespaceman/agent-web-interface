@@ -8,7 +8,7 @@
  * Reliability: Includes concurrency protection and error recovery.
  */
 
-import { createHash, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
 import type {
   StateResponse,
@@ -34,7 +34,11 @@ import { linkObservationsToSnapshot } from '../observation/index.js';
 import { generateLocator } from './locator-generator.js';
 import { ElementRegistry } from './element-registry.js';
 import { validateSnapshotHealth, isErrorHealth } from '../snapshot/snapshot-health.js';
-import { renderStateXml, normalizeRegion } from './state-renderer.js';
+import { renderStateXml } from './state-renderer.js';
+import { maskValue } from './value-masking.js';
+import { sanitizeUrl, sanitizeHref } from './url-sanitization.js';
+import { computeDocId, computeUiHash, computeLayerHash } from './hash-utils.js';
+import { extractRegionEidMapping } from './region-mapping.js';
 
 // ============================================================================
 // Default Configuration
@@ -43,64 +47,6 @@ import { renderStateXml, normalizeRegion } from './state-renderer.js';
 const DEFAULT_CONFIG: StateManagerConfig = {
   maxActionables: 1000, // Show all elements (practically unlimited)
 };
-
-// ============================================================================
-// Security: Sensitive Field Detection
-// ============================================================================
-
-/**
- * Sensitive field name patterns (case-insensitive).
- * Values in these fields will be masked.
- */
-const SENSITIVE_FIELD_PATTERNS = [
-  'password',
-  'passwd',
-  'pass',
-  'secret',
-  'token',
-  'auth',
-  'key',
-  'api_key',
-  'apikey',
-  'otp',
-  'pin',
-  'cvv',
-  'cvc',
-  'ssn',
-  'social',
-  'credit',
-  'card',
-];
-
-/**
- * Input types that should always be masked.
- */
-const MASKED_INPUT_TYPES = ['password'];
-
-/**
- * Input types with partial masking (show first/last chars).
- */
-const PARTIAL_MASK_TYPES = ['email', 'tel', 'phone'];
-
-/**
- * URL query parameters that are safe to keep.
- * All others will be stripped.
- */
-const SAFE_QUERY_PARAMS = new Set([
-  'page',
-  'p',
-  'sort',
-  'order',
-  'q',
-  'query',
-  'search',
-  'tab',
-  'view',
-  'limit',
-  'offset',
-  'lang',
-  'locale',
-]);
 
 // ============================================================================
 // State Manager Class
@@ -636,160 +582,3 @@ export class StateManager {
   }
 }
 
-// ============================================================================
-// Security: Value Masking
-// ============================================================================
-
-/**
- * Mask sensitive values in val_hint.
- *
- * Rules:
- * - password type: always full mask
- * - sensitive field names: always full mask
- * - email/tel: partial mask (show first/last chars)
- * - default: truncate to 12 chars, mask middle
- */
-function maskValue(value: string, inputType?: string, label?: string): string {
-  // Strip newlines first
-  const cleanValue = value.replace(/[\r\n]/g, ' ').trim();
-
-  if (!cleanValue) return '';
-
-  // Password type: always full mask
-  if (inputType && MASKED_INPUT_TYPES.includes(inputType.toLowerCase())) {
-    return '••••••••';
-  }
-
-  // Check sensitive field names
-  const lowerLabel = (label ?? '').toLowerCase();
-  for (const pattern of SENSITIVE_FIELD_PATTERNS) {
-    if (lowerLabel.includes(pattern)) {
-      return '***';
-    }
-  }
-
-  // Email/tel: partial mask
-  if (inputType && PARTIAL_MASK_TYPES.includes(inputType.toLowerCase())) {
-    return partialMask(cleanValue);
-  }
-
-  // Default: truncate and partial mask if long
-  if (cleanValue.length <= 12) {
-    return cleanValue;
-  }
-
-  return partialMask(cleanValue.substring(0, 12));
-}
-
-/**
- * Partial mask: show first 2 and last 2 chars.
- * Example: "example@email.com" -> "ex•••om"
- */
-function partialMask(value: string): string {
-  if (value.length <= 4) {
-    return '••••';
-  }
-
-  const first = value.substring(0, 2);
-  const last = value.substring(value.length - 2);
-  return `${first}•••${last}`;
-}
-
-// ============================================================================
-// Security: URL Sanitization
-// ============================================================================
-
-/**
- * Sanitize URL by stripping sensitive query parameters.
- * Only keeps safe params like page, sort, q.
- */
-function sanitizeUrl(rawUrl: string): string {
-  try {
-    const url = new URL(rawUrl);
-
-    // Build new search params with only safe ones
-    const safeParams = new URLSearchParams();
-    for (const [key, value] of url.searchParams) {
-      if (SAFE_QUERY_PARAMS.has(key.toLowerCase())) {
-        safeParams.set(key, value);
-      }
-    }
-
-    // Reconstruct URL with sanitized params
-    url.search = safeParams.toString();
-    return url.toString();
-  } catch {
-    // If URL parsing fails, return origin only
-    return rawUrl.split('?')[0];
-  }
-}
-
-/**
- * Sanitize href attribute (remove tokens from URLs).
- */
-function sanitizeHref(href: string): string {
-  // For relative URLs, return as-is
-  if (!href.startsWith('http://') && !href.startsWith('https://')) {
-    return href;
-  }
-
-  return sanitizeUrl(href);
-}
-
-// ============================================================================
-// Utilities
-// ============================================================================
-
-/**
- * Extract region → ordered eid list mapping from actionables.
- */
-function extractRegionEidMapping(actionables: ActionableInfo[]): Map<string, string[]> {
-  const regions = new Map<string, string[]>();
-
-  for (const item of actionables) {
-    const region = normalizeRegion(item.ctx.region);
-    let eids = regions.get(region);
-    if (!eids) {
-      eids = [];
-      regions.set(region, eids);
-    }
-    eids.push(item.eid);
-  }
-
-  return regions;
-}
-
-/**
- * Compute document ID from snapshot.
- *
- * Uses only URL origin + pathname for navigation detection.
- * This ensures DOM mutations (like autocomplete suggestions appearing)
- * are NOT falsely detected as navigation events.
- *
- * NOTE: Previously this included a hash of the first 10 interactive node IDs,
- * which caused false navigation detection when typing triggered autocomplete
- * or other dynamic UI updates. See: https://github.com/lespaceman/agent-web-interface/issues/XXX
- */
-function computeDocId(snapshot: BaseSnapshot): string {
-  const url = new URL(snapshot.url);
-  // Only use origin + pathname for navigation detection
-  // Query params and fragments are ignored (same page, different state)
-  return hash(`${url.origin}:${url.pathname}`);
-}
-
-function computeUiHash(snapshot: BaseSnapshot): string {
-  const interactiveNodeIds = snapshot.nodes
-    .filter((n) => isInteractiveKind(n.kind) && n.state?.visible)
-    .map((n) => computeEid(n))
-    .join(',');
-
-  return hash(interactiveNodeIds).substring(0, 6);
-}
-
-function computeLayerHash(stack: string[]): string {
-  return hash(stack.join(',')).substring(0, 6);
-}
-
-function hash(input: string): string {
-  return createHash('sha256').update(input).digest('hex').substring(0, 12);
-}
