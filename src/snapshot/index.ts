@@ -64,7 +64,9 @@ export {
 } from './element-resolver.js';
 
 // Snapshot compiler
-export { SnapshotCompiler, compileSnapshot, type CompileOptions } from './snapshot-compiler.js';
+export { SnapshotCompiler, compileSnapshot } from './snapshot-compiler.js';
+export type { CompileOptions } from './kind-mapping.js';
+export { sliceWithOverlayPriority } from './node-filter.js';
 
 // Extractors (advanced usage)
 export * from './extractors/index.js';

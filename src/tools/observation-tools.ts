@@ -27,8 +27,8 @@ import { LIVE_REGION_KINDS } from '../state/actionables-filter.js';
 import {
   executeAction,
   executeActionWithRetry,
-  getStateManager,
 } from './execute-action.js';
+import { getStateManager } from './state-manager-registry.js';
 import {
   buildFindElementsResponse,
   buildGetElementDetailsResponse,

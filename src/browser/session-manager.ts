@@ -43,15 +43,6 @@ import type {
 /** Type alias for Puppeteer Page (exported for downstream use) */
 export type { Page };
 
-// Re-export types and utilities for backward compatibility
-export { extractErrorMessage } from './connection-utils.js';
-export type {
-  ConnectionState,
-  ConnectionStateChangeEvent,
-  StorageState,
-  LaunchOptions,
-  ConnectOptions,
-} from './session-manager.types.js';
 
 /** Default user data directory for persistent browser profiles */
 const DEFAULT_USER_DATA_DIR = path.join(

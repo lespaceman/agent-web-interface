@@ -83,6 +83,12 @@ vi.mock('../../../src/snapshot/index.js', () => {
 });
 
 vi.mock('../../../src/tools/execute-action.js', () => ({
+  executeAction: vi.fn(),
+  executeActionWithRetry: vi.fn(),
+  executeActionWithOutcome: vi.fn(),
+}));
+
+vi.mock('../../../src/tools/state-manager-registry.js', () => ({
   getStateManager: vi.fn(() => ({
     generateResponse: vi.fn().mockReturnValue('<state>test</state>'),
     getElementRegistry: vi.fn(() => ({
@@ -93,10 +99,11 @@ vi.mock('../../../src/tools/execute-action.js', () => ({
   })),
   removeStateManager: vi.fn(),
   clearAllStateManagers: vi.fn(),
+}));
+
+vi.mock('../../../src/tools/action-stabilization.js', () => ({
   stabilizeAfterNavigation: vi.fn().mockResolvedValue(undefined),
-  executeAction: vi.fn(),
-  executeActionWithRetry: vi.fn(),
-  executeActionWithOutcome: vi.fn(),
+  captureSnapshotFallback: vi.fn(),
 }));
 
 vi.mock('../../../src/observation/index.js', () => ({

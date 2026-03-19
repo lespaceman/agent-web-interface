@@ -11,7 +11,7 @@ import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
 import type { RuntimeHealth } from '../state/health.types.js';
 import { createHealthyRuntime, createRecoveredCdpRuntime } from '../state/health.types.js';
 import { SnapshotStore } from '../snapshot/index.js';
-import { getStateManager } from './execute-action.js';
+import { getStateManager } from './state-manager-registry.js';
 import { ElementNotFoundError, StaleElementError, SnapshotRequiredError } from './errors.js';
 
 // ---------------------------------------------------------------------------

@@ -54,10 +54,17 @@ vi.mock('../../../src/tools/execute-action.js', () => ({
   executeAction: vi.fn(),
   executeActionWithRetry: vi.fn(),
   executeActionWithOutcome: vi.fn(),
-  stabilizeAfterNavigation: vi.fn(),
+}));
+
+vi.mock('../../../src/tools/state-manager-registry.js', () => ({
   getStateManager: vi.fn(),
   removeStateManager: vi.fn(),
   clearAllStateManagers: vi.fn(),
+}));
+
+vi.mock('../../../src/tools/action-stabilization.js', () => ({
+  stabilizeAfterNavigation: vi.fn(),
+  captureSnapshotFallback: vi.fn(),
 }));
 
 vi.mock('../../../src/state/element-identity.js', () => ({

@@ -7,14 +7,16 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  getStateManager,
-  removeStateManager,
-  clearAllStateManagers,
   executeAction,
   executeActionWithRetry,
   executeActionWithOutcome,
   type CaptureSnapshotFn,
 } from '../../../src/tools/execute-action.js';
+import {
+  getStateManager,
+  removeStateManager,
+  clearAllStateManagers,
+} from '../../../src/tools/state-manager-registry.js';
 import type { PageHandle } from '../../../src/browser/page-registry.js';
 import type { BaseSnapshot, ReadableNode } from '../../../src/snapshot/snapshot.types.js';
 import type { RuntimeHealth } from '../../../src/state/health.types.js';

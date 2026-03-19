@@ -17,10 +17,6 @@ import { observationAccumulator } from '../observation/index.js';
 import { ATTACHMENT_SIGNIFICANCE_THRESHOLD } from '../observation/observation.types.js';
 import { getDependencyTracker } from '../form/index.js';
 
-// Re-export from extracted modules for backward compatibility
-export { getStateManager, removeStateManager, clearAllStateManagers } from './state-manager-registry.js';
-export { stabilizeAfterNavigation } from './action-stabilization.js';
-
 import { getStateManager } from './state-manager-registry.js';
 import { computeObservedEffect } from './effect-tracker.js';
 import { stabilizeAfterAction, captureSnapshotFallback } from './action-stabilization.js';

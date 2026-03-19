@@ -5,7 +5,7 @@
  * overlay content when max_nodes would otherwise truncate it.
  */
 import { describe, it, expect } from 'vitest';
-import { sliceWithOverlayPriority } from '../../../src/snapshot/snapshot-compiler.js';
+import { sliceWithOverlayPriority } from '../../../src/snapshot/node-filter.js';
 import type { RawNodeData } from '../../../src/snapshot/extractors/types.js';
 
 // Minimal RawNodeData-like objects for testing

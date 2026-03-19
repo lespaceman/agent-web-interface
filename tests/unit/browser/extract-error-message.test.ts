@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { extractErrorMessage } from '../../../src/browser/session-manager.js';
+import { extractErrorMessage } from '../../../src/browser/connection-utils.js';
 
 describe('extractErrorMessage', () => {
   describe('Error instances', () => {

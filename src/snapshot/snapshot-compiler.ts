@@ -61,10 +61,6 @@ import { synthesizeOptionNodes, synthesizeCanvasNodes, promoteToastNodes } from 
 import { filterNoiseNodes, sliceWithOverlayPriority } from './node-filter.js';
 import { mapRoleToKind, getKindFromTag, DEFAULT_OPTIONS, type CompileOptions } from './kind-mapping.js';
 
-// Re-export for backward compatibility
-export type { CompileOptions } from './kind-mapping.js';
-export { sliceWithOverlayPriority } from './node-filter.js';
-
 /**
  * SnapshotCompiler class
  *

@@ -5,10 +5,11 @@
  */
 
 export { PageRegistry, type PageHandle } from './page-registry.js';
-export {
-  SessionManager,
-  type LaunchOptions,
-  type ConnectOptions,
-  type ConnectionState,
-  type ConnectionStateChangeEvent,
-} from './session-manager.js';
+export { SessionManager } from './session-manager.js';
+export type {
+  LaunchOptions,
+  ConnectOptions,
+  ConnectionState,
+  ConnectionStateChangeEvent,
+} from './session-manager.types.js';
+export { extractErrorMessage } from './connection-utils.js';

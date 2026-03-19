@@ -18,8 +18,8 @@ import {
   getStateManager,
   removeStateManager,
   clearAllStateManagers,
-  stabilizeAfterNavigation,
-} from './execute-action.js';
+} from './state-manager-registry.js';
+import { stabilizeAfterNavigation } from './action-stabilization.js';
 import {
   buildClosePageResponse,
   buildCloseSessionResponse,

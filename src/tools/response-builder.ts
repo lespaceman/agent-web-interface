@@ -7,7 +7,7 @@
  */
 
 import type { BaseSnapshot, NodeState } from '../snapshot/snapshot.types.js';
-import { getStateManager } from './execute-action.js';
+import { getStateManager } from './state-manager-registry.js';
 import type { StateResponse } from '../state/types.js';
 import type { NodeDetails } from './tool-schemas.js';
 import { escapeXml, xmlAttr } from '../lib/text-utils.js';

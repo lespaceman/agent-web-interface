@@ -19,6 +19,3 @@ export { click, type, press, select, hover } from './interaction-tools.js';
 
 // Viewport tools
 export { drag, wheel, takeScreenshot } from './viewport-tools.js';
-
-// Re-export for backward compatibility (external consumers import from browser-tools)
-export { getSnapshotStore } from './tool-context.js';
