@@ -22,44 +22,36 @@ import type { ConnectionHealth } from '../state/health.types.js';
 import { observationAccumulator } from '../observation/index.js';
 import { waitForNetworkQuiet, NAVIGATION_NETWORK_IDLE_TIMEOUT_MS } from './page-stabilization.js';
 import { getOrCreateTracker, removeTracker } from './page-network-tracker.js';
+import {
+  extractErrorMessage,
+  isValidHttpUrl,
+  isValidWsUrl,
+  getDefaultChromeUserDataDir,
+  readDevToolsActivePort,
+  DEFAULT_CDP_PORT,
+  DEFAULT_CDP_HOST,
+  DEFAULT_CONNECTION_TIMEOUT,
+} from './connection-utils.js';
+import type {
+  ConnectionState,
+  ConnectionStateChangeEvent,
+  StorageState,
+  LaunchOptions,
+  ConnectOptions,
+} from './session-manager.types.js';
 
 /** Type alias for Puppeteer Page (exported for downstream use) */
 export type { Page };
 
-/**
- * Connection state machine states
- */
-export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'failed';
-
-/**
- * Event emitted on connection state changes
- */
-export interface ConnectionStateChangeEvent {
-  previousState: ConnectionState;
-  currentState: ConnectionState;
-  timestamp: Date;
-}
-
-/**
- * Storage state for cookies and localStorage.
- * Puppeteer doesn't have a built-in storageState type like Playwright.
- */
-export interface StorageState {
-  cookies: {
-    name: string;
-    value: string;
-    domain: string;
-    path: string;
-    expires: number;
-    httpOnly: boolean;
-    secure: boolean;
-    sameSite?: 'Strict' | 'Lax' | 'None';
-  }[];
-  origins: {
-    origin: string;
-    localStorage: { name: string; value: string }[];
-  }[];
-}
+// Re-export types and utilities for backward compatibility
+export { extractErrorMessage } from './connection-utils.js';
+export type {
+  ConnectionState,
+  ConnectionStateChangeEvent,
+  StorageState,
+  LaunchOptions,
+  ConnectOptions,
+} from './session-manager.types.js';
 
 /** Default user data directory for persistent browser profiles */
 const DEFAULT_USER_DATA_DIR = path.join(
@@ -68,191 +60,6 @@ const DEFAULT_USER_DATA_DIR = path.join(
   'agent-web-interface',
   'chrome-profile'
 );
-
-/**
- * Options for launching a new browser
- */
-export interface LaunchOptions {
-  /** Run browser in headless mode (default: false) */
-  headless?: boolean;
-
-  /** Viewport dimensions */
-  viewport?: { width: number; height: number };
-
-  /** Chrome channel to use */
-  channel?: 'chrome' | 'chrome-canary' | 'chrome-beta' | 'chrome-dev';
-
-  /** Path to Chrome executable (overrides channel) */
-  executablePath?: string;
-
-  /** Use isolated temp profile instead of persistent (default: false) */
-  isolated?: boolean;
-
-  /** Directory for persistent browser profile (user data dir) */
-  userDataDir?: string;
-
-  /** Additional Chrome command-line arguments */
-  args?: string[];
-
-  /** Use pipe transport instead of WebSocket (default: true, more secure) */
-  pipe?: boolean;
-}
-
-/**
- * Extract a meaningful error message from any thrown value.
- * Exported for testing.
- */
-export function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message || error.name || 'Unknown Error';
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  if (error && typeof error === 'object') {
-    // Check common error-like properties
-    const obj = error as Record<string, unknown>;
-    if (typeof obj.message === 'string') return obj.message;
-    if (typeof obj.error === 'string') return obj.error;
-    if (typeof obj.reason === 'string') return obj.reason;
-    // Try to stringify, but handle circular refs
-    try {
-      const str = JSON.stringify(error);
-      return str !== '{}' ? str : `Unknown error object: ${Object.keys(obj).join(', ') || 'empty'}`;
-    } catch {
-      return `Non-serializable error: ${Object.prototype.toString.call(error)}`;
-    }
-  }
-  return String(error);
-}
-
-/** Default CDP port for browser automation */
-const DEFAULT_CDP_PORT = 9223;
-/** Default CDP host */
-const DEFAULT_CDP_HOST = '127.0.0.1';
-/** Default connection timeout in ms (30s to handle slow networks and remote browsers) */
-const DEFAULT_CONNECTION_TIMEOUT = 30000;
-
-/**
- * Options for connecting to an existing browser via CDP
- */
-export interface ConnectOptions {
-  /** WebSocket endpoint URL (e.g., ws://localhost:9222/devtools/browser/...) */
-  browserWSEndpoint?: string;
-
-  /** HTTP endpoint URL for Puppeteer to discover WebSocket (e.g., http://localhost:9222) */
-  browserURL?: string;
-
-  /** CDP endpoint URL (legacy, converted to browserURL) */
-  endpointUrl?: string;
-
-  /** CDP host (default: 127.0.0.1) - used if no endpoint provided */
-  host?: string;
-
-  /** CDP port (default: 9223) - used if no endpoint provided */
-  port?: number;
-
-  /** Connection timeout in ms (default: 30000) */
-  timeout?: number;
-
-  /**
-   * Auto-connect to Chrome 144+ with UI-based remote debugging enabled.
-   * Reads DevToolsActivePort file from Chrome's user data directory.
-   * Requires user to enable remote debugging at chrome://inspect/#remote-debugging
-   */
-  autoConnect?: boolean;
-
-  /** Chrome user data directory for autoConnect (default: ~/.config/google-chrome on Linux) */
-  userDataDir?: string;
-}
-
-/**
- * Get the default Chrome user data directory for the current platform
- */
-function getDefaultChromeUserDataDir(): string {
-  const platform = os.platform();
-  const home = os.homedir();
-
-  switch (platform) {
-    case 'darwin':
-      return path.join(home, 'Library', 'Application Support', 'Google', 'Chrome');
-    case 'win32':
-      return path.join(home, 'AppData', 'Local', 'Google', 'Chrome', 'User Data');
-    default: // linux
-      return path.join(home, '.config', 'google-chrome');
-  }
-}
-
-/**
- * Read the DevToolsActivePort file from Chrome's user data directory.
- * Chrome 144+ writes this file when remote debugging is enabled via chrome://inspect/#remote-debugging
- *
- * @param userDataDir - Chrome user data directory
- * @returns WebSocket URL for CDP connection
- * @throws Error if file not found or invalid
- */
-async function readDevToolsActivePort(userDataDir: string): Promise<string> {
-  const portFilePath = path.join(userDataDir, 'DevToolsActivePort');
-
-  try {
-    const content = await fs.promises.readFile(portFilePath, 'utf8');
-    const lines = content
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    if (lines.length < 2) {
-      throw new Error(`Invalid DevToolsActivePort content: ${content}`);
-    }
-
-    const [rawPort, wsPath] = lines;
-    const port = parseInt(rawPort, 10);
-
-    if (isNaN(port) || port < 1 || port > 65535) {
-      throw new Error(`Invalid port in DevToolsActivePort: ${rawPort}`);
-    }
-
-    return `ws://127.0.0.1:${port}${wsPath}`;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(
-        `DevToolsActivePort file not found at ${portFilePath}. ` +
-          'Make sure Chrome is running and remote debugging is enabled at chrome://inspect/#remote-debugging'
-      );
-    }
-    throw error;
-  }
-}
-
-/**
- * Validates that a URL is a valid HTTP/HTTPS endpoint URL.
- *
- * @param urlString - URL string to validate
- * @returns true if valid http(s) URL
- */
-function isValidHttpUrl(urlString: string): boolean {
-  try {
-    const url = new URL(urlString);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Validates that a URL is a valid WebSocket endpoint URL.
- *
- * @param urlString - URL string to validate
- * @returns true if valid ws(s) URL
- */
-function isValidWsUrl(urlString: string): boolean {
-  try {
-    const url = new URL(urlString);
-    return url.protocol === 'ws:' || url.protocol === 'wss:';
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Manages browser lifecycle and page creation.
