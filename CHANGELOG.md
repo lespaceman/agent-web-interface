@@ -1,3 +1,19 @@
+## [4.4.0] - 2026-03-19
+
+- fix: resolve CI failures from formatting and dependency vulnerabilities
+- refactor: address code review findings
+- refactor: remove backward-compatibility re-exports, use direct imports
+- refactor: extract form-detector and field-extractor into focused modules (Phases 6-7)
+- refactor: extract query-engine and layer-detector into focused modules (Phase 8)
+- refactor: extract session-manager utilities and types (Phase 5)
+- refactor: split browser-tools into category modules (Phase 4)
+- refactor: extract execute-action into focused modules (Phase 3)
+- refactor: extract state-manager utilities into focused modules (Phase 2)
+- refactor: extract snapshot-compiler into focused modules (Phase 1)
+- feat: add toast overlay layer detection and unsemantic toast library support (Phases 5-6)
+- feat: add characterData and visibility tracking to DOM observer (Phase 4)
+- feat: add live region support for ephemeral UI feedback (alerts, toasts, status)
+
 ## [4.3.0] - 2026-03-02
 
 - refactor: replace button controls with direct shape interactions in canvas fixtures
