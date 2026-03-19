@@ -964,3 +964,21 @@ export const InspectCanvasInputSchema = InspectCanvasInputSchemaBase;
 export { InspectCanvasInputSchemaBase };
 
 export type InspectCanvasInput = z.infer<typeof InspectCanvasInputSchema>;
+
+// ============================================================================
+// read_page - Extract clean readable content using Mozilla Readability
+// ============================================================================
+
+export const ReadPageInputSchema = z.object({
+  /** Page ID. If omitted, operates on the most recently used page */
+  page_id: z
+    .string()
+    .optional()
+    .describe('Page ID. If omitted, operates on the most recently used page.'),
+});
+
+/** Returns XML result string */
+export const ReadPageOutputSchema = z.string();
+
+export type ReadPageInput = z.infer<typeof ReadPageInputSchema>;
+export type ReadPageOutput = z.infer<typeof ReadPageOutputSchema>;

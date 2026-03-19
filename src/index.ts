@@ -70,6 +70,7 @@ import {
   getFieldContext,
   takeScreenshot,
   inspectCanvas,
+  readPage,
   // Input schemas only (all outputs are XML strings now)
   ListPagesInputSchema,
   ClosePageInputSchema,
@@ -94,6 +95,7 @@ import {
   GetFieldContextInputSchema,
   TakeScreenshotInputSchemaBase,
   InspectCanvasInputSchemaBase,
+  ReadPageInputSchema,
 } from './tools/index.js';
 
 /**
@@ -445,6 +447,21 @@ function initializeServer(): BrowserAutomationServer {
       inputSchema: GetFieldContextInputSchema.shape,
     },
     withLazyInit(getFieldContext, 'get_field')
+  );
+
+  // ============================================================================
+  // READABILITY TOOLS
+  // ============================================================================
+
+  server.registerTool(
+    'read_page',
+    {
+      title: 'Read Page',
+      description:
+        'Extract the main readable content from the page, removing navigation, ads, and clutter. Uses Mozilla Readability (Firefox Reader View engine). Best for articles, blog posts, documentation, and content-heavy pages.',
+      inputSchema: ReadPageInputSchema.shape,
+    },
+    withLazyInit(readPage, 'read_page')
   );
 
   return server;

@@ -181,6 +181,43 @@ export function buildFindElementsResponse(
 }
 
 /**
+ * Article metadata for read_page response.
+ */
+export interface ReadPageArticle {
+  title: string;
+  byline: string | null;
+  excerpt: string | null;
+  siteName: string | null;
+  lang: string | null;
+  textContent: string;
+  length: number;
+}
+
+/**
+ * Build XML response for read_page tool.
+ *
+ * @param article - Extracted article metadata and content
+ * @returns XML result string
+ */
+export function buildReadPageResponse(article: ReadPageArticle): string {
+  const metaAttrs: string[] = [xmlAttr('title', article.title)];
+  if (article.byline) metaAttrs.push(xmlAttr('byline', article.byline));
+  if (article.excerpt) metaAttrs.push(xmlAttr('excerpt', article.excerpt));
+  if (article.siteName) metaAttrs.push(xmlAttr('site_name', article.siteName));
+  if (article.lang) metaAttrs.push(xmlAttr('lang', article.lang));
+
+  const lines: string[] = [];
+  lines.push('<result type="read_page">');
+  lines.push(`  <metadata ${metaAttrs.join(' ')} />`);
+  lines.push(`  <content length="${article.length}">`);
+  lines.push(escapeXml(article.textContent.trim()));
+  lines.push('  </content>');
+  lines.push('</result>');
+
+  return lines.join('\n');
+}
+
+/**
  * Build XML response for get_element_details tool.
  *
  * Optimized format with flattened attributes, label as content, and no wrapper elements.

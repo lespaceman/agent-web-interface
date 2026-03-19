@@ -178,3 +178,12 @@ export {
 
 // Canvas tools
 export { inspectCanvas, type CanvasMetadata, type CanvasObject } from './canvas-tools.js';
+
+// Readability tools
+export { readPage } from './browser-tools.js';
+export {
+  ReadPageInputSchema,
+  ReadPageOutputSchema,
+  type ReadPageInput,
+  type ReadPageOutput,
+} from './tool-schemas.js';

@@ -41,3 +41,6 @@ export { click, type, press, select, hover } from './interaction-tools.js';
 
 // Viewport tools
 export { drag, wheel, takeScreenshot } from './viewport-tools.js';
+
+// Readability tools
+export { readPage } from './readability-tools.js';
