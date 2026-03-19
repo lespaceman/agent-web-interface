@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toast Overlay Layer Detection Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2rem;
+    }
+    h1 { margin-bottom: 1rem; }
+    .content {
+      max-width: 600px;
+    }
+    .toast {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 1rem 1.5rem;
+      font-size: 0.95rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toast.visible {
+      display: flex;
+    }
+    .toast button {
+      background: transparent;
+      color: #ccc;
+      border: 1px solid #555;
+      padding: 0.3rem 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: 1rem;
+    }
+    .toast button:hover {
+      background: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Toast Overlay Test</h1>
+  <div class="content">
+    <p>Click the button below to show a toast notification.</p>
+    <button id="show-toast" type="button">Show Toast</button>
+  </div>
+
+  <div class="toast" id="toast" role="alert" aria-live="assertive">
+    <span>Changes saved successfully.</span>
+    <button id="dismiss-toast" type="button">Dismiss</button>
+  </div>
+
+  <script>
+    const toast = document.getElementById('toast');
+    document.getElementById('show-toast').addEventListener('click', () => {
+      toast.classList.add('visible');
+    });
+    document.getElementById('dismiss-toast').addEventListener('click', () => {
+      toast.classList.remove('visible');
+    });
+  </script>
+</body>
+</html>

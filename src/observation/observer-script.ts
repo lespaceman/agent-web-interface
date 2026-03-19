@@ -33,6 +33,19 @@ export const OBSERVATION_OBSERVER_SCRIPT = `
   // Attributes whose changes can reveal hidden elements (visibility tracking)
   const VISIBILITY_ATTRS = ['style', 'class', 'hidden', 'aria-hidden'];
 
+  // Known toast library selectors (unsemantic — no ARIA roles).
+  // Keep in sync with TOAST_DATA_ATTRS / TOAST_CLASS_PATTERNS in snapshot-compiler.ts.
+  const TOAST_LIBRARY_PARTS = [
+    '[data-sonner-toaster]',
+    '[data-sonner-toast]',
+    '[data-hot-toast]',
+    '.Toastify__toast-container',
+    '.Toastify__toast',
+    '.ant-message',
+    '.ant-message-notice',
+  ];
+  const TOAST_LIBRARY_SELECTOR = TOAST_LIBRARY_PARTS.join(', ');
+
   // Significance weights (must match server-side observation.types.ts)
   const WEIGHTS = {
     // Semantic signals (strongest)
@@ -48,6 +61,9 @@ export const OBSERVATION_OBSERVER_SCRIPT = `
     // Structural signals
     isBodyDirectChild: 1,
     containsInteractiveElements: 1,
+
+    // Known toast library patterns (unsemantic but significant)
+    isKnownToastLibrary: 3,      // Equivalent to hasAlertRole
 
     // New universal signals - work without ARIA
     isVisibleInViewport: 2,      // Element is visible in viewport
@@ -192,6 +208,9 @@ export const OBSERVATION_OBSERVER_SCRIPT = `
       // Structural signals - consider top-level shadow DOM elements as equivalent to body children
       isBodyDirectChild: el.parentElement === document.body || isTopLevelInShadow,
       containsInteractiveElements: el.querySelector('button, a, input, select, textarea') !== null,
+
+      // Known toast library detection (unsemantic but significant)
+      isKnownToastLibrary: el.matches(TOAST_LIBRARY_SELECTOR) || (typeof el.className === 'string' && el.className.includes('chakra-toast')),
 
       // Universal signals (work without ARIA)
       isVisibleInViewport: !!isVisibleInViewport,

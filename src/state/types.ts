@@ -88,7 +88,7 @@ export interface StateHandle {
 
   /** Layer stack and active layer */
   layer: {
-    active: 'main' | 'modal' | 'drawer' | 'popover';
+    active: ActiveLayerType;
     stack: string[];
     focus_eid?: string;
     pointer_lock: boolean;
@@ -292,6 +292,12 @@ export interface LocatorInfo {
 // Layer Detection Types
 // ============================================================================
 
+/** Layer types that can be the active (interaction-scoping) layer. Toast is excluded — it's non-blocking. */
+export type ActiveLayerType = 'main' | 'modal' | 'drawer' | 'popover';
+
+/** All layer types including non-blocking overlays. */
+export type LayerType = ActiveLayerType | 'toast';
+
 /**
  * Result of layer detection.
  */
@@ -299,8 +305,8 @@ export interface LayerDetectionResult {
   /** Layer stack (bottom to top) */
   stack: LayerInfo[];
 
-  /** Active layer (topmost) */
-  active: 'main' | 'modal' | 'drawer' | 'popover';
+  /** Active layer (topmost non-toast) */
+  active: ActiveLayerType;
 
   /** Currently focused element ID */
   focusEid?: string;
@@ -313,7 +319,7 @@ export interface LayerDetectionResult {
  * Information about a detected layer.
  */
 export interface LayerInfo {
-  type: 'main' | 'modal' | 'drawer' | 'popover';
+  type: LayerType;
   rootEid?: string; // eid of layer root node
   zIndex?: number;
   isModal: boolean; // blocks interaction with lower layers

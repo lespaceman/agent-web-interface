@@ -817,4 +817,134 @@ describe('Layer Detector', () => {
       expect(modalLayers.length).toBe(2);
     });
   });
+
+  describe('Toast Detection', () => {
+    it('should detect role="alert" with high z-index as toast', () => {
+      const snapshot = createSnapshot([
+        createNode({
+          kind: 'alert',
+          label: 'Error message',
+          attributes: { role: 'alert' },
+          layout: { bbox: { x: 20, y: 600, w: 400, h: 60 }, zIndex: 9999 },
+        }),
+      ]);
+
+      const result = detectLayers(snapshot);
+
+      const toastLayer = result.stack.find((l) => l.type === 'toast');
+      expect(toastLayer).toBeDefined();
+      expect(toastLayer?.isModal).toBe(false);
+      expect(toastLayer?.zIndex).toBe(9999);
+    });
+
+    it('should detect role="status" with high z-index as toast', () => {
+      const snapshot = createSnapshot([
+        createNode({
+          kind: 'status',
+          label: 'Saving...',
+          attributes: { role: 'status' },
+          layout: { bbox: { x: 20, y: 600, w: 300, h: 50 }, zIndex: 5000 },
+        }),
+      ]);
+
+      const result = detectLayers(snapshot);
+
+      const toastLayer = result.stack.find((l) => l.type === 'toast');
+      expect(toastLayer).toBeDefined();
+      expect(toastLayer?.isModal).toBe(false);
+    });
+
+    it('should NOT make toast the active layer', () => {
+      const snapshot = createSnapshot([
+        createNode({
+          kind: 'alert',
+          label: 'Toast notification',
+          attributes: { role: 'alert' },
+          layout: { bbox: { x: 20, y: 600, w: 400, h: 60 }, zIndex: 9999 },
+        }),
+      ]);
+
+      const result = detectLayers(snapshot);
+
+      expect(result.active).toBe('main');
+    });
+
+    it('should include toast in the layer stack', () => {
+      const snapshot = createSnapshot([
+        createNode({
+          kind: 'alert',
+          label: 'Something happened',
+          attributes: { role: 'alert' },
+          layout: { bbox: { x: 20, y: 600, w: 400, h: 60 }, zIndex: 9999 },
+        }),
+      ]);
+
+      const result = detectLayers(snapshot);
+
+      const types = result.stack.map((l) => l.type);
+      expect(types).toContain('main');
+      expect(types).toContain('toast');
+      expect(result.stack.length).toBe(2);
+    });
+
+    it('should NOT detect toast for low z-index alert', () => {
+      const snapshot = createSnapshot([
+        createNode({
+          kind: 'alert',
+          label: 'Inline error',
+          attributes: { role: 'alert' },
+          layout: { bbox: { x: 20, y: 600, w: 400, h: 60 }, zIndex: 50 },
+        }),
+      ]);
+
+      const result = detectLayers(snapshot);
+
+      const toastLayer = result.stack.find((l) => l.type === 'toast');
+      expect(toastLayer).toBeUndefined();
+      expect(result.active).toBe('main');
+    });
+
+    it('should NOT detect alertdialog with aria-modal as toast', () => {
+      const snapshot = createSnapshot([
+        createNode({
+          kind: 'dialog',
+          label: 'Confirm action',
+          attributes: { role: 'alertdialog', 'aria-modal': 'true' },
+          layout: { bbox: { x: 300, y: 200, w: 400, h: 300 }, zIndex: 1000 },
+        }),
+      ]);
+
+      const result = detectLayers(snapshot);
+
+      const toastLayer = result.stack.find((l) => l.type === 'toast');
+      expect(toastLayer).toBeUndefined();
+      expect(result.active).toBe('modal');
+    });
+
+    it('should detect toast alongside modal with modal or main as active', () => {
+      const snapshot = createSnapshot([
+        createNode({
+          kind: 'dialog',
+          label: 'Confirm Delete',
+          attributes: { role: 'dialog', 'aria-modal': 'true' },
+          layout: { bbox: { x: 300, y: 200, w: 400, h: 300 }, zIndex: 1000 },
+        }),
+        createNode({
+          kind: 'alert',
+          label: 'Saved successfully',
+          attributes: { role: 'alert' },
+          layout: { bbox: { x: 20, y: 600, w: 400, h: 60 }, zIndex: 9999 },
+        }),
+      ]);
+
+      const result = detectLayers(snapshot);
+
+      const types = result.stack.map((l) => l.type);
+      expect(types).toContain('modal');
+      expect(types).toContain('toast');
+      // Active should be modal (not toast), since toast is non-blocking
+      expect(['main', 'modal']).toContain(result.active);
+      expect(result.active).not.toBe('toast');
+    });
+  });
 });

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unsemantic Toast Library Detection Test (Phase 6)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    h1 { margin-bottom: 8px; }
+    h2 { margin-top: 32px; color: #333; }
+    p.desc { color: #666; margin-top: 0; }
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 16px 0;
+    }
+    button {
+      padding: 8px 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #f5f5f5;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover { background: #e0e0e0; }
+    #log {
+      margin-top: 32px;
+      padding: 12px;
+      background: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 13px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Unsemantic Toast Library Detection</h1>
+  <p class="desc">
+    Each button simulates a toast from a popular library that does NOT use ARIA roles.
+    Toasts auto-dismiss after 3 seconds.
+  </p>
+
+  <h2>6A: Sonner</h2>
+  <div class="controls">
+    <button onclick="triggerSonner()">Trigger Sonner Toast</button>
+  </div>
+
+  <h2>6B: react-hot-toast</h2>
+  <div class="controls">
+    <button onclick="triggerHotToast()">Trigger Hot Toast</button>
+  </div>
+
+  <h2>6C: React-Toastify</h2>
+  <div class="controls">
+    <button onclick="triggerToastify()">Trigger Toastify Toast</button>
+  </div>
+
+  <h2>6D: Ant Design Message</h2>
+  <div class="controls">
+    <button onclick="triggerAntMessage()">Trigger Ant Message</button>
+  </div>
+
+  <h2>6E: Chakra UI Toast</h2>
+  <div class="controls">
+    <button onclick="triggerChakraToast()">Trigger Chakra Toast</button>
+  </div>
+
+  <div id="log">Event log:</div>
+
+  <script>
+    function logEvent(msg) {
+      const el = document.getElementById('log');
+      el.textContent += '\n' + new Date().toISOString().slice(11, 23) + ' ' + msg;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function autoDismiss(el, label, delay) {
+      delay = delay || 3000;
+      setTimeout(function() {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+          logEvent('[removed] ' + label);
+        }
+      }, delay);
+    }
+
+    // 6A: Sonner
+    function triggerSonner() {
+      var existing = document.querySelector('[data-sonner-toaster]');
+      if (existing) existing.parentNode.removeChild(existing);
+
+      var ol = document.createElement('ol');
+      ol.setAttribute('data-sonner-toaster', 'true');
+      ol.setAttribute('data-y-position', 'bottom');
+      ol.style.cssText = 'position:fixed; bottom:0; right:0; z-index:9999; list-style:none; margin:0; padding:16px;';
+
+      var li = document.createElement('li');
+      li.setAttribute('data-sonner-toast', '');
+      li.setAttribute('data-visible', 'true');
+      li.style.cssText = 'background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px 16px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:280px;';
+
+      var content = document.createElement('div');
+      content.setAttribute('data-content', '');
+
+      var title = document.createElement('div');
+      title.setAttribute('data-title', '');
+      title.textContent = 'Login failed';
+      title.style.fontWeight = '600';
+
+      var desc = document.createElement('div');
+      desc.setAttribute('data-description', '');
+      desc.textContent = 'Invalid credentials. Please try again.';
+      desc.style.cssText = 'color:#666; margin-top:4px; font-size:13px;';
+
+      content.appendChild(title);
+      content.appendChild(desc);
+      li.appendChild(content);
+      ol.appendChild(li);
+      document.body.appendChild(ol);
+
+      logEvent('[added] Sonner toast: "Login failed"');
+      autoDismiss(ol, 'Sonner toast');
+    }
+
+    // 6B: react-hot-toast
+    function triggerHotToast() {
+      var existing = document.querySelector('[data-hot-toast]');
+      if (existing) existing.parentNode.removeChild(existing);
+
+      var div = document.createElement('div');
+      div.setAttribute('data-hot-toast', '');
+      div.style.cssText = 'position:fixed; top:20px; right:20px; z-index:9999; background:#fff; border-radius:8px; padding:12px 16px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:250px;';
+
+      var inner = document.createElement('div');
+      inner.textContent = 'Successfully saved!';
+
+      div.appendChild(inner);
+      document.body.appendChild(div);
+
+      logEvent('[added] react-hot-toast: "Successfully saved!"');
+      autoDismiss(div, 'react-hot-toast');
+    }
+
+    // 6C: React-Toastify
+    function triggerToastify() {
+      var existing = document.querySelector('.Toastify__toast-container');
+      if (existing) existing.parentNode.removeChild(existing);
+
+      var container = document.createElement('div');
+      container.className = 'Toastify__toast-container';
+      container.style.cssText = 'position:fixed; top:20px; right:20px; z-index:9999;';
+
+      var toast = document.createElement('div');
+      toast.className = 'Toastify__toast Toastify__toast--error';
+      toast.style.cssText = 'background:#fff; border-left:4px solid #e74c3c; border-radius:4px; padding:12px 16px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:280px; display:flex; justify-content:space-between; align-items:center;';
+
+      var body = document.createElement('div');
+      body.className = 'Toastify__toast-body';
+      body.textContent = 'Connection error. Retrying...';
+
+      var closeBtn = document.createElement('button');
+      closeBtn.className = 'Toastify__close-button';
+      closeBtn.textContent = '\u00d7';
+      closeBtn.style.cssText = 'background:none; border:none; font-size:18px; cursor:pointer; color:#999; padding:0 0 0 12px;';
+      closeBtn.onclick = function() {
+        container.parentNode.removeChild(container);
+        logEvent('[removed] Toastify toast (user closed)');
+      };
+
+      toast.appendChild(body);
+      toast.appendChild(closeBtn);
+      container.appendChild(toast);
+      document.body.appendChild(container);
+
+      logEvent('[added] Toastify toast: "Connection error. Retrying..."');
+      autoDismiss(container, 'Toastify toast');
+    }
+
+    // 6D: Ant Design Message
+    function triggerAntMessage() {
+      var existing = document.querySelector('.ant-message');
+      if (existing) existing.parentNode.removeChild(existing);
+
+      var wrapper = document.createElement('div');
+      wrapper.className = 'ant-message';
+      wrapper.style.cssText = 'position:fixed; top:8px; left:50%; transform:translateX(-50%); z-index:1010;';
+
+      var notice = document.createElement('div');
+      notice.className = 'ant-message-notice';
+
+      var content = document.createElement('div');
+      content.className = 'ant-message-notice-content';
+      content.style.cssText = 'background:#fff; border-radius:8px; padding:10px 16px; box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+
+      var span = document.createElement('span');
+      span.className = 'ant-message-success';
+      span.textContent = 'Settings updated successfully';
+
+      content.appendChild(span);
+      notice.appendChild(content);
+      wrapper.appendChild(notice);
+      document.body.appendChild(wrapper);
+
+      logEvent('[added] Ant Design message: "Settings updated successfully"');
+      autoDismiss(wrapper, 'Ant Design message');
+    }
+
+    // 6E: Chakra UI Toast
+    function triggerChakraToast() {
+      var existing = document.querySelector('.chakra-toast');
+      if (existing) existing.parentNode.removeChild(existing);
+
+      var toast = document.createElement('div');
+      toast.className = 'chakra-toast';
+      toast.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:5500;';
+
+      var inner = document.createElement('div');
+      inner.className = 'chakra-toast__inner';
+      inner.style.cssText = 'background:#38a169; color:#fff; border-radius:8px; padding:12px 16px; min-width:280px; box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+
+      var alert = document.createElement('div');
+      alert.className = 'chakra-alert';
+
+      var titleSpan = document.createElement('span');
+      titleSpan.className = 'chakra-alert__title';
+      titleSpan.textContent = 'Success';
+      titleSpan.style.fontWeight = '600';
+
+      var descSpan = document.createElement('span');
+      descSpan.className = 'chakra-alert__desc';
+      descSpan.textContent = 'Your profile has been updated.';
+      descSpan.style.cssText = 'display:block; margin-top:4px; font-size:13px; opacity:0.9;';
+
+      alert.appendChild(titleSpan);
+      alert.appendChild(descSpan);
+      inner.appendChild(alert);
+      toast.appendChild(inner);
+      document.body.appendChild(toast);
+
+      logEvent('[added] Chakra toast: "Success - Your profile has been updated."');
+      autoDismiss(toast, 'Chakra toast');
+    }
+  </script>
+</body>
+</html>

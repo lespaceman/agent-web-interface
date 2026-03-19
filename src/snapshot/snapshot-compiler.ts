@@ -65,6 +65,44 @@ const ROOT_CONTEXT = 'root';
 const LIGHT_DOM_CONTEXT = 'light';
 
 /**
+ * Data attributes used by unsemantic toast libraries.
+ * Keep in sync with TOAST_LIBRARY_SELECTOR in observer-script.ts.
+ */
+const TOAST_DATA_ATTRS = ['data-sonner-toast', 'data-hot-toast'];
+
+/**
+ * CSS class substrings used by unsemantic toast libraries.
+ * Keep in sync with TOAST_LIBRARY_SELECTOR in observer-script.ts.
+ */
+const TOAST_CLASS_PATTERNS = [
+  'Toastify__toast',
+  'ant-message-notice',
+  'ant-message',
+  'chakra-toast',
+];
+
+/**
+ * Check if a DOM node belongs to a known unsemantic toast library.
+ */
+function isToastLibraryNode(domNode: RawDomNode): boolean {
+  const attrs = domNode.attributes;
+  if (!attrs) return false;
+
+  for (const attrName of TOAST_DATA_ATTRS) {
+    if (attrs[attrName] !== undefined) return true;
+  }
+
+  const className = attrs.class ?? attrs.className;
+  if (typeof className === 'string') {
+    for (const pattern of TOAST_CLASS_PATTERNS) {
+      if (className.includes(pattern)) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Build a context key based on iframe and shadow ancestry.
  */
 function buildContextKey(node: RawDomNode): string {
@@ -687,6 +725,35 @@ export class SnapshotCompiler {
           axNode: syntheticAx,
         });
         alreadyInCanvas.add(backendNodeId);
+      }
+    }
+
+    // Phase 2.3: Synthesize live region nodes for unsemantic toast libraries.
+    // Popular toast libraries (Sonner, react-hot-toast, Toastify, Ant Design, Chakra UI)
+    // don't use ARIA roles. Detect them by data attributes and CSS classes.
+    // Selectors mirror TOAST_LIBRARY_SELECTOR in observer-script.ts — keep in sync.
+    if (domResult) {
+      const alreadyScheduled = new Set(nodesToProcess.map((n) => n.backendNodeId));
+
+      for (const [backendNodeId, domNode] of domResult.nodes) {
+        if (alreadyScheduled.has(backendNodeId)) continue;
+
+        if (isToastLibraryNode(domNode)) {
+          const syntheticAx: RawAxNode = {
+            nodeId: `synthetic-toast-${backendNodeId}`,
+            backendDOMNodeId: backendNodeId,
+            role: 'alert',
+            name: '', // Will be resolved via label fallback (textContent)
+            properties: [],
+          };
+
+          nodesToProcess.push({
+            backendNodeId,
+            domNode,
+            axNode: syntheticAx,
+          });
+          alreadyScheduled.add(backendNodeId);
+        }
       }
     }
 
