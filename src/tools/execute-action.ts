@@ -8,148 +8,24 @@
  * Navigation-aware click outcome model for better error classification.
  */
 
-import type { Page } from 'puppeteer-core';
+import type { ReadableNode, BaseSnapshot } from '../snapshot/snapshot.types.js';
 import type { PageHandle } from '../browser/page-registry.js';
-import { compileSnapshot } from '../snapshot/index.js';
-import { stabilizeDom, type StabilizationResult } from '../delta/dom-stabilizer.js';
-import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
-import { StateManager } from '../state/state-manager.js';
 import type { StateResponse } from '../state/types.js';
 import type { ClickOutcome } from '../state/element-ref.types.js';
 import type { RuntimeHealth } from '../state/health.types.js';
-import { createHealthyRuntime } from '../state/health.types.js';
 import { observationAccumulator } from '../observation/index.js';
 import { ATTACHMENT_SIGNIFICANCE_THRESHOLD } from '../observation/observation.types.js';
-import {
-  waitForNetworkQuiet,
-  ACTION_NETWORK_IDLE_TIMEOUT_MS,
-  NAVIGATION_NETWORK_IDLE_TIMEOUT_MS,
-} from '../browser/page-stabilization.js';
-import { getDependencyTracker, createObservedEffect, type ObservedEffect } from '../form/index.js';
+import { getDependencyTracker } from '../form/index.js';
 
-// ============================================================================
-// State Manager Registry
-// ============================================================================
+// Re-export from extracted modules for backward compatibility
+export { getStateManager, removeStateManager, clearAllStateManagers } from './state-manager-registry.js';
+export { stabilizeAfterNavigation } from './action-stabilization.js';
 
-/**
- * Global registry of state managers (one per page).
- */
-const stateManagers = new Map<string, StateManager>();
-
-/**
- * Get or create state manager for a page.
- *
- * @param pageId - Page ID
- * @returns State manager instance
- */
-export function getStateManager(pageId: string): StateManager {
-  if (!stateManagers.has(pageId)) {
-    stateManagers.set(pageId, new StateManager({ pageId }));
-  }
-  return stateManagers.get(pageId)!;
-}
-
-/**
- * Remove state manager for a page (call on page close).
- *
- * @param pageId - Page ID
- */
-export function removeStateManager(pageId: string): void {
-  stateManagers.delete(pageId);
-}
-
-/**
- * Clear all state managers (call on session close).
- */
-export function clearAllStateManagers(): void {
-  stateManagers.clear();
-}
-
-// ============================================================================
-// Dependency Tracking Helpers
-// ============================================================================
-
-/**
- * Compute an ObservedEffect by comparing snapshots before and after an action.
- *
- * This function analyzes differences between two snapshots to determine:
- * - Which elements became enabled/disabled
- * - Which elements appeared/disappeared
- * - Which elements had their values change
- *
- * @param triggerEid - EID of the element that triggered the action
- * @param actionType - Type of action performed
- * @param prevSnapshot - Snapshot before the action (null if first action)
- * @param currSnapshot - Snapshot after the action
- * @returns ObservedEffect if meaningful changes detected, null otherwise
- */
-function computeObservedEffect(
-  triggerEid: string,
-  actionType: 'click' | 'type' | 'select' | 'focus' | 'blur',
-  prevSnapshot: BaseSnapshot | null,
-  currSnapshot: BaseSnapshot
-): ObservedEffect | null {
-  // Skip if no previous snapshot to compare
-  if (!prevSnapshot) {
-    return null;
-  }
-
-  // Build maps of enabled/visible states
-  const beforeEids = new Map<string, boolean>();
-  const beforeVisible = new Set<string>();
-  const beforeValues = new Map<string, string>();
-
-  for (const node of prevSnapshot.nodes) {
-    beforeEids.set(node.node_id, node.state?.enabled ?? true);
-    if (node.state?.visible) {
-      beforeVisible.add(node.node_id);
-    }
-    if (node.attributes?.value !== undefined) {
-      beforeValues.set(node.node_id, node.attributes.value);
-    }
-  }
-
-  const afterEids = new Map<string, boolean>();
-  const afterVisible = new Set<string>();
-  const valueChanges: string[] = [];
-
-  for (const node of currSnapshot.nodes) {
-    afterEids.set(node.node_id, node.state?.enabled ?? true);
-    if (node.state?.visible) {
-      afterVisible.add(node.node_id);
-    }
-    // Detect value changes
-    const prevValue = beforeValues.get(node.node_id);
-    const currValue = node.attributes?.value;
-    if (currValue !== undefined && currValue !== prevValue) {
-      // Skip if this is the trigger element itself (self-change from typing)
-      if (node.node_id !== triggerEid) {
-        valueChanges.push(node.node_id);
-      }
-    }
-  }
-
-  // Create the observed effect
-  const effect = createObservedEffect(
-    triggerEid,
-    actionType,
-    beforeEids,
-    afterEids,
-    beforeVisible,
-    afterVisible,
-    valueChanges
-  );
-
-  // Only return if there are meaningful changes
-  const hasChanges =
-    effect.enabled.length > 0 ||
-    effect.disabled.length > 0 ||
-    effect.appeared.length > 0 ||
-    effect.disappeared.length > 0 ||
-    effect.value_changed.length > 0;
-
-  return hasChanges ? effect : null;
-}
+import { getStateManager } from './state-manager-registry.js';
+import { computeObservedEffect } from './effect-tracker.js';
+import { stabilizeAfterAction, captureSnapshotFallback } from './action-stabilization.js';
+import { isStaleElementError, handleStaleElementRetry } from './stale-element-retry.js';
+import { captureNavigationState, checkNavigationOccurred } from './navigation-detection.js';
 
 // ============================================================================
 // Action Result Types
@@ -197,110 +73,9 @@ export type CaptureSnapshotFn = () => Promise<{
   runtime_health: RuntimeHealth;
 }>;
 
-/**
- * Check if an error is a stale element error.
- */
-function isStaleElementError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const message = err.message.toLowerCase();
-  return (
-    message.includes('no node found for given backend id') ||
-    message.includes('protocol error (dom.scrollintoviewifneeded)') ||
-    message.includes('node is detached from document') ||
-    message.includes('node has been deleted')
-  );
-}
-
-/**
- * Capture snapshot without recovery (fallback path).
- */
-async function captureSnapshotFallback(
-  handle: PageHandle
-): Promise<{ snapshot: BaseSnapshot; runtime_health: RuntimeHealth }> {
-  const snapshot = await compileSnapshot(handle.cdp, handle.page, handle.page_id);
-  return { snapshot, runtime_health: createHealthyRuntime() };
-}
-
 // ============================================================================
-// Navigation-Aware Stabilization
+// Action Execution
 // ============================================================================
-
-/**
- * Stabilize page after an action using tiered waiting strategy.
- *
- * This addresses the core issue: actions may trigger API calls that complete
- * after DOM mutations settle. The tiered approach:
- *
- * 1. Wait for DOM to stabilize (MutationObserver) - catches SPA rendering
- * 2. Wait for network to quiet down (networkidle) - catches pending API calls
- * 3. If DOM stabilization fails (navigation), fall back to network idle wait
- *
- * Timeouts are generous but never throw - we proceed even if network stays busy
- * (common with analytics, long-polling, websockets).
- *
- * @param page - Puppeteer Page instance
- * @param networkTimeoutMs - Optional custom timeout for network idle (default: 3000ms)
- * @returns Stabilization result with status
- */
-async function stabilizeAfterAction(
-  page: Page,
-  networkTimeoutMs: number = ACTION_NETWORK_IDLE_TIMEOUT_MS
-): Promise<StabilizationResult> {
-  // Step 1: Try MutationObserver-based DOM stabilization first
-  const result = await stabilizeDom(page);
-
-  // Step 2: Handle based on DOM stabilization result
-  if (result.status === 'stable' || result.status === 'timeout') {
-    // DOM settled (or timed out) - now wait for network to quiet down
-    // This catches API calls that haven't rendered to DOM yet
-    const networkIdle = await waitForNetworkQuiet(page, networkTimeoutMs);
-
-    if (!networkIdle && result.status === 'stable') {
-      // DOM was stable but network didn't idle - add a note
-      return {
-        ...result,
-        warning: result.warning ?? 'Network did not reach idle state within timeout',
-      };
-    }
-
-    return result;
-  }
-
-  // status === 'error' means page.evaluate() failed, likely due to navigation
-  // Fall back to waiting for network idle on the new page
-  try {
-    // Wait for network to settle on the new page
-    await waitForNetworkQuiet(page, networkTimeoutMs);
-
-    return {
-      status: 'stable',
-      waitTimeMs: result.waitTimeMs,
-      warning: 'Navigation detected; waited for networkidle',
-    };
-  } catch (waitError) {
-    // If network wait also fails, the page might be in an unusual state
-    // Return the original error but with additional context
-    const message = waitError instanceof Error ? waitError.message : String(waitError);
-    return {
-      status: 'error',
-      waitTimeMs: result.waitTimeMs,
-      warning: `${result.warning}. Fallback network wait also failed: ${message}`,
-    };
-  }
-}
-
-/**
- * Stabilize page after explicit navigation (goto, back, forward, reload).
- *
- * Uses a longer network timeout since navigations typically trigger more
- * requests than in-page actions.
- *
- * @param page - Puppeteer Page instance
- * @returns Stabilization result with status
- */
-export async function stabilizeAfterNavigation(page: Page): Promise<StabilizationResult> {
-  return stabilizeAfterAction(page, NAVIGATION_NETWORK_IDLE_TIMEOUT_MS);
-}
 
 /**
  * Execute a mutating action with automatic snapshot capture and state response generation.
@@ -510,134 +285,6 @@ export async function executeActionWithRetry(
     snapshot,
     runtime_health: captureResult.runtime_health,
   };
-}
-
-// ============================================================================
-// Navigation State Helpers
-// ============================================================================
-
-/**
- * Navigation state for detecting URL/loaderId changes.
- */
-interface NavigationState {
-  url: string;
-  loaderId?: string;
-}
-
-/**
- * Capture current navigation state (URL and loaderId).
- *
- * @param handle - Page handle with CDP client
- * @returns Navigation state with URL and optional loaderId
- */
-async function captureNavigationState(handle: PageHandle): Promise<NavigationState> {
-  const url = handle.page.url();
-  let loaderId: string | undefined;
-
-  try {
-    const frameTree = await handle.cdp.send('Page.getFrameTree', undefined);
-    loaderId = frameTree.frameTree.frame.loaderId;
-  } catch {
-    // Ignore - we can still detect navigation via URL
-  }
-
-  return { url, loaderId };
-}
-
-/**
- * Check if navigation occurred between two states.
- *
- * @param before - State before action
- * @param after - State after action
- * @returns True if navigation detected
- */
-function checkNavigationOccurred(before: NavigationState, after: NavigationState): boolean {
-  // URL changed = navigation
-  if (before.url !== after.url) {
-    return true;
-  }
-
-  // LoaderId changed (and both defined) = navigation
-  if (
-    before.loaderId !== undefined &&
-    after.loaderId !== undefined &&
-    before.loaderId !== after.loaderId
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Result of handling a stale element retry.
- */
-interface StaleElementRetryResult {
-  success: boolean;
-  error?: string;
-  outcome: ClickOutcome;
-}
-
-/**
- * Handle stale element retry logic.
- *
- * @param handle - Page handle
- * @param node - Original target node
- * @param action - Action to retry
- * @param capture - Snapshot capture function
- * @param snapshotStore - Optional snapshot store to update
- * @returns Retry result with success/error/outcome
- */
-async function handleStaleElementRetry(
-  handle: PageHandle,
-  node: ReadableNode,
-  action: (backendNodeId: number) => Promise<void>,
-  capture: CaptureSnapshotFn,
-  snapshotStore?: { store: (pageId: string, snapshot: BaseSnapshot) => void }
-): Promise<StaleElementRetryResult> {
-  try {
-    // Capture fresh snapshot
-    const freshSnapshot = (await capture()).snapshot;
-
-    // Update snapshot store if provided
-    if (snapshotStore) {
-      snapshotStore.store(handle.page_id, freshSnapshot);
-    }
-
-    // Find element by label in fresh snapshot
-    const freshNode = freshSnapshot.nodes.find(
-      (n) => n.label === node.label && n.kind === node.kind
-    );
-
-    if (!freshNode) {
-      return {
-        success: false,
-        error: `Element no longer found after refresh: ${node.label}`,
-        outcome: {
-          status: 'element_not_found',
-          eid: '', // Will be filled by caller if available
-          last_known_label: node.label,
-        },
-      };
-    }
-
-    // Retry action with fresh backend_node_id
-    await action(freshNode.backend_node_id);
-
-    return {
-      success: true,
-      outcome: { status: 'stale_element', reason: 'dom_mutation', retried: true },
-    };
-  } catch (retryErr) {
-    return {
-      success: false,
-      error:
-        retryErr instanceof Error
-          ? `Retry failed: ${retryErr.message}`
-          : `Retry failed: ${String(retryErr)}`,
-      outcome: { status: 'stale_element', reason: 'dom_mutation', retried: true },
-    };
-  }
 }
 
 // ============================================================================
