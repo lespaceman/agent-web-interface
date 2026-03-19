@@ -83,7 +83,7 @@ describe('buildReadPageResponse', () => {
 
     expect(result).toContain('title="Tom &amp; Jerry &lt;Adventures&gt;"');
     // xmlAttr uses single-quote wrapping when value contains double quotes
-    expect(result).toContain("byline='\"Author\" &amp; Co.'");
+    expect(result).toContain('byline=\'"Author" &amp; Co.\'');
     expect(result).toContain('Use &lt;div&gt; &amp; &quot;quotes&quot; in HTML.');
   });
 
@@ -163,10 +163,7 @@ describe('readPage handler', () => {
 
   it('should return error when Readability cannot extract content', async () => {
     // An empty page with no meaningful content causes Readability to return null
-    setupMockPage(
-      '<html><head></head><body></body></html>',
-      'https://example.com/app'
-    );
+    setupMockPage('<html><head></head><body></body></html>', 'https://example.com/app');
 
     const result = await readPage({});
 
@@ -176,11 +173,7 @@ describe('readPage handler', () => {
   });
 
   it('should pass page_id to resolveExistingPage', async () => {
-    setupMockPage(
-      '<html><body>short</body></html>',
-      'https://example.com',
-      'custom-page'
-    );
+    setupMockPage('<html><body>short</body></html>', 'https://example.com', 'custom-page');
 
     await readPage({ page_id: 'custom-page' });
 
@@ -188,10 +181,7 @@ describe('readPage handler', () => {
   });
 
   it('should default to MRU page when page_id is omitted', async () => {
-    setupMockPage(
-      '<html><body>short</body></html>',
-      'https://example.com'
-    );
+    setupMockPage('<html><body>short</body></html>', 'https://example.com');
 
     await readPage({});
 
