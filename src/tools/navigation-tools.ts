@@ -26,10 +26,7 @@ import {
   buildListPagesResponse,
 } from './response-builder.js';
 import { getDependencyTracker } from '../form/index.js';
-import {
-  getSessionManager,
-  getSnapshotStore,
-} from './tool-context.js';
+import { getSessionManager, getSnapshotStore } from './tool-context.js';
 import { captureSnapshotWithRecovery } from './action-context.js';
 
 // Convenience alias for module-internal use

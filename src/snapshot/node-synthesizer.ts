@@ -9,7 +9,12 @@
  * @module snapshot/node-synthesizer
  */
 
-import type { RawNodeData, RawDomNode, RawAxNode, DomExtractionResult } from './extractors/index.js';
+import type {
+  RawNodeData,
+  RawDomNode,
+  RawAxNode,
+  DomExtractionResult,
+} from './extractors/index.js';
 import { getTextContent } from '../lib/text-utils.js';
 
 /**

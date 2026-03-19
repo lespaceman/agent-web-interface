@@ -6,13 +6,35 @@
  */
 
 // Action context & initialization
-export { initializeTools, type ActionContext, prepareActionContext, captureSnapshotWithRecovery, createActionCapture, buildRuntimeHealth } from './action-context.js';
+export {
+  initializeTools,
+  type ActionContext,
+  prepareActionContext,
+  captureSnapshotWithRecovery,
+  createActionCapture,
+  buildRuntimeHealth,
+} from './action-context.js';
 
 // Navigation & session tools
-export { listPages, closePage, closeSession, navigate, goBack, goForward, reload } from './navigation-tools.js';
+export {
+  listPages,
+  closePage,
+  closeSession,
+  navigate,
+  goBack,
+  goForward,
+  reload,
+} from './navigation-tools.js';
 
 // Observation tools
-export { captureSnapshot, findElements, getNodeDetails, scrollElementIntoView, scrollPage, mapSchemaKindToNodeKind } from './observation-tools.js';
+export {
+  captureSnapshot,
+  findElements,
+  getNodeDetails,
+  scrollElementIntoView,
+  scrollPage,
+  mapSchemaKindToNodeKind,
+} from './observation-tools.js';
 
 // Interaction tools
 export { click, type, press, select, hover } from './interaction-tools.js';

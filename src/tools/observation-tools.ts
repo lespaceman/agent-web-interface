@@ -4,10 +4,7 @@
  * MCP tool handlers for page observation: snapshots, find, get_element, scroll.
  */
 
-import {
-  scrollIntoView,
-  scrollPage as scrollPageByAmount,
-} from '../snapshot/index.js';
+import { scrollIntoView, scrollPage as scrollPageByAmount } from '../snapshot/index.js';
 import { observationAccumulator } from '../observation/index.js';
 import { ATTACHMENT_SIGNIFICANCE_THRESHOLD } from '../observation/observation.types.js';
 import type { NodeDetails } from './tool-schemas.js';
@@ -24,10 +21,7 @@ import type { NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
 import { isReadableNode, isStructuralNode, isLiveRegionNode } from '../snapshot/snapshot.types.js';
 import { computeEid } from '../state/element-identity.js';
 import { LIVE_REGION_KINDS } from '../state/actionables-filter.js';
-import {
-  executeAction,
-  executeActionWithRetry,
-} from './execute-action.js';
+import { executeAction, executeActionWithRetry } from './execute-action.js';
 import { getStateManager } from './state-manager-registry.js';
 import {
   buildFindElementsResponse,
@@ -150,7 +144,8 @@ export function findElements(rawInput: unknown): import('./tool-schemas.js').Fin
 
   const matches: FindElementsMatch[] = response.matches.map((m) => {
     // Check if this is a readable/structural (non-interactive) node
-    const isNonInteractive = isReadableNode(m.node) || isStructuralNode(m.node) || isLiveRegionNode(m.node);
+    const isNonInteractive =
+      isReadableNode(m.node) || isStructuralNode(m.node) || isLiveRegionNode(m.node);
 
     // Look up EID from registry (for interactive nodes)
     const registryEid = registry.getEidBySnapshotAndBackendNodeId(

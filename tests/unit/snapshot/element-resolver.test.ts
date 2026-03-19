@@ -675,15 +675,9 @@ describe('ElementResolver', () => {
     });
 
     it('should pass modifier bitmask to all drag events', async () => {
-      await dragBetweenCoordinates(
-        mockCdp as unknown as CdpClient,
-        100,
-        200,
-        200,
-        400,
-        2,
-        ['Shift']
-      );
+      await dragBetweenCoordinates(mockCdp as unknown as CdpClient, 100, 200, 200, 400, 2, [
+        'Shift',
+      ]);
 
       const calls = mockCdp.send.mock.calls;
       // All calls (pressed, moved, released) should have modifiers: 8 (Shift)

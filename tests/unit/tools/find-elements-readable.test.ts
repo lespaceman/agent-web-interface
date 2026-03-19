@@ -107,13 +107,7 @@ describe('isReadableNode and isStructuralNode', () => {
     });
 
     it('should return false for non-live-region kinds', () => {
-      const nonLiveRegionKinds: NodeKind[] = [
-        'button',
-        'heading',
-        'text',
-        'dialog',
-        'form',
-      ];
+      const nonLiveRegionKinds: NodeKind[] = ['button', 'heading', 'text', 'dialog', 'form'];
 
       for (const kind of nonLiveRegionKinds) {
         const node = createMockNode({ kind });

@@ -9,11 +9,7 @@ import {
   dragBetweenCoordinates,
   dispatchWheelEvent,
 } from '../snapshot/index.js';
-import {
-  DragInputSchema,
-  WheelInputSchema,
-  TakeScreenshotInputSchema,
-} from './tool-schemas.js';
+import { DragInputSchema, WheelInputSchema, TakeScreenshotInputSchema } from './tool-schemas.js';
 import { captureScreenshot, getElementBoundingBox } from '../screenshot/index.js';
 import { executeAction } from './execute-action.js';
 import {

@@ -57,9 +57,18 @@ import {
   type FrameLoaderInfo,
 } from './frame-context.js';
 import { buildHeadingIndex } from './heading-index.js';
-import { synthesizeOptionNodes, synthesizeCanvasNodes, promoteToastNodes } from './node-synthesizer.js';
+import {
+  synthesizeOptionNodes,
+  synthesizeCanvasNodes,
+  promoteToastNodes,
+} from './node-synthesizer.js';
 import { filterNoiseNodes, sliceWithOverlayPriority } from './node-filter.js';
-import { mapRoleToKind, getKindFromTag, DEFAULT_OPTIONS, type CompileOptions } from './kind-mapping.js';
+import {
+  mapRoleToKind,
+  getKindFromTag,
+  DEFAULT_OPTIONS,
+  type CompileOptions,
+} from './kind-mapping.js';
 
 /**
  * SnapshotCompiler class
@@ -513,7 +522,12 @@ export class SnapshotCompiler {
 
     // Fallback for live region containers (alert, status, etc.) with empty labels:
     // Their text typically lives in child StaticText/text nodes, not in the AX name.
-    if (!label && axNode?.role && LIVE_REGION_AX_ROLES.has(axNode.role.toLowerCase()) && domTree.size > 0) {
+    if (
+      !label &&
+      axNode?.role &&
+      LIVE_REGION_AX_ROLES.has(axNode.role.toLowerCase()) &&
+      domTree.size > 0
+    ) {
       label = getTextContent(backendNodeId, domTree, 3) ?? '';
     }
 

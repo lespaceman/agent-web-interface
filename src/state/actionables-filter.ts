@@ -82,7 +82,11 @@ export function selectActionables(
   // Filter to candidates — interactive nodes AND live region nodes
   const candidates = snapshot.nodes.filter((node) => {
     // Must be interactive or a live region (alert, status, tooltip, etc.)
-    if (!isInteractiveKind(node.kind) && !node.implicitly_interactive && !isLiveRegionKind(node.kind)) {
+    if (
+      !isInteractiveKind(node.kind) &&
+      !node.implicitly_interactive &&
+      !isLiveRegionKind(node.kind)
+    ) {
       return false;
     }
 

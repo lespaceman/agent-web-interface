@@ -26,16 +26,9 @@ import { extractFields } from './field-extractor.js';
 import { computeFormState } from './form-state.js';
 import { createHash } from 'crypto';
 import { inferIntent, hasIntentKeywords, INTENT_KEYWORDS } from './intent-inference.js';
-import {
-  findSubmitButton,
-  findSubmitButtonNearCluster,
-} from './submit-detection.js';
+import { findSubmitButton, findSubmitButtonNearCluster } from './submit-detection.js';
 import { clusterInputs } from './input-clustering.js';
-import {
-  extractFormActions,
-  INPUT_KINDS,
-  SIGNAL_WEIGHTS,
-} from './form-actions.js';
+import { extractFormActions, INPUT_KINDS, SIGNAL_WEIGHTS } from './form-actions.js';
 
 /**
  * Form Detector class
@@ -376,11 +369,7 @@ export class FormDetector {
     const fields = extractFields(snapshot, candidate.field_eids, this.config);
 
     // Find action buttons
-    const actions = extractFormActions(
-      snapshot,
-      candidate,
-      this.computeClusterBbox.bind(this)
-    );
+    const actions = extractFormActions(snapshot, candidate, this.computeClusterBbox.bind(this));
 
     // Compute form state
     const state = computeFormState(fields);

@@ -194,8 +194,7 @@ function initializeServer(): BrowserAutomationServer {
     'list_pages',
     {
       title: 'List Pages',
-      description:
-        'List all open browser pages with their page_id, URL, and title.',
+      description: 'List all open browser pages with their page_id, URL, and title.',
       inputSchema: ListPagesInputSchema.shape,
     },
     withLazyInit(listPages, 'list_pages')
@@ -215,8 +214,7 @@ function initializeServer(): BrowserAutomationServer {
     'close_session',
     {
       title: 'Close Session',
-      description:
-        'Close the entire browser and clear all state.',
+      description: 'Close the entire browser and clear all state.',
       inputSchema: CloseSessionInputSchema.shape,
     },
     withLazyInit(closeSession, 'close_session')
@@ -230,8 +228,7 @@ function initializeServer(): BrowserAutomationServer {
     'navigate',
     {
       title: 'Navigate',
-      description:
-        'Go to a URL. Returns page snapshot with interactive elements.',
+      description: 'Go to a URL. Returns page snapshot with interactive elements.',
       inputSchema: NavigateInputSchema.shape,
     },
     withLazyInit(navigate, 'navigate')
@@ -241,8 +238,7 @@ function initializeServer(): BrowserAutomationServer {
     'go_back',
     {
       title: 'Go Back',
-      description:
-        'Go back one page in browser history.',
+      description: 'Go back one page in browser history.',
       inputSchema: GoBackInputSchema.shape,
     },
     withLazyInit(goBack, 'go_back')
@@ -262,8 +258,7 @@ function initializeServer(): BrowserAutomationServer {
     'reload',
     {
       title: 'Reload',
-      description:
-        'Refresh the current page.',
+      description: 'Refresh the current page.',
       inputSchema: ReloadInputSchema.shape,
     },
     withLazyInit(reload, 'reload')
@@ -299,8 +294,7 @@ function initializeServer(): BrowserAutomationServer {
     'get_element',
     {
       title: 'Get Element',
-      description:
-        'Get complete details for one element: exact position, size, state, attributes.',
+      description: 'Get complete details for one element: exact position, size, state, attributes.',
       inputSchema: GetNodeDetailsInputSchema.shape,
     },
     withLazyInit(getNodeDetails, 'get_element')
@@ -310,8 +304,7 @@ function initializeServer(): BrowserAutomationServer {
     'screenshot',
     {
       title: 'Screenshot',
-      description:
-        'Capture a screenshot of the current page or a specific element.',
+      description: 'Capture a screenshot of the current page or a specific element.',
       inputSchema: TakeScreenshotInputSchemaBase.shape,
     },
     withLazyInit(takeScreenshot, 'screenshot')
@@ -325,8 +318,7 @@ function initializeServer(): BrowserAutomationServer {
     'scroll_to',
     {
       title: 'Scroll To',
-      description:
-        'Scroll until a specific element is visible in the viewport.',
+      description: 'Scroll until a specific element is visible in the viewport.',
       inputSchema: ScrollElementIntoViewInputSchemaBase.shape,
     },
     withLazyInit(scrollElementIntoView, 'scroll_to')
@@ -336,8 +328,7 @@ function initializeServer(): BrowserAutomationServer {
     'scroll',
     {
       title: 'Scroll',
-      description:
-        'Scroll the viewport up or down by pixels.',
+      description: 'Scroll the viewport up or down by pixels.',
       inputSchema: ScrollPageInputSchema.shape,
     },
     withLazyInit(scrollPage, 'scroll')
@@ -347,8 +338,7 @@ function initializeServer(): BrowserAutomationServer {
     'click',
     {
       title: 'Click Element',
-      description:
-        'Click an element or at viewport coordinates.',
+      description: 'Click an element or at viewport coordinates.',
       inputSchema: ClickInputSchemaBase.shape,
     },
     withLazyInit(click, 'click')
@@ -358,8 +348,7 @@ function initializeServer(): BrowserAutomationServer {
     'type',
     {
       title: 'Type Text',
-      description:
-        'Type text into an input field or text area.',
+      description: 'Type text into an input field or text area.',
       inputSchema: TypeInputSchemaBase.shape,
     },
     withLazyInit(type, 'type')
@@ -369,8 +358,7 @@ function initializeServer(): BrowserAutomationServer {
     'press',
     {
       title: 'Press Key',
-      description:
-        'Press a keyboard key with optional modifiers.',
+      description: 'Press a keyboard key with optional modifiers.',
       inputSchema: PressInputSchema.shape,
     },
     withLazyInit(press, 'press')
@@ -380,8 +368,7 @@ function initializeServer(): BrowserAutomationServer {
     'select',
     {
       title: 'Select Option',
-      description:
-        'Choose an option from a dropdown menu by value or visible text.',
+      description: 'Choose an option from a dropdown menu by value or visible text.',
       inputSchema: SelectInputSchemaBase.shape,
     },
     withLazyInit(select, 'select')
@@ -402,8 +389,7 @@ function initializeServer(): BrowserAutomationServer {
     'drag',
     {
       title: 'Drag',
-      description:
-        'Drag from one point to another.',
+      description: 'Drag from one point to another.',
       inputSchema: DragInputSchemaBase.shape,
     },
     withLazyInit(drag, 'drag')

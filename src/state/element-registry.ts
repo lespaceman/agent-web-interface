@@ -67,7 +67,12 @@ export class ElementRegistry {
     // Process all interactive and live region nodes
     for (const node of snapshot.nodes) {
       // Track interactive elements, implicitly interactive elements, and live regions
-      if (!isInteractiveKind(node.kind) && !node.implicitly_interactive && !isLiveRegionKind(node.kind)) continue;
+      if (
+        !isInteractiveKind(node.kind) &&
+        !node.implicitly_interactive &&
+        !isLiveRegionKind(node.kind)
+      )
+        continue;
 
       // Compute eid (with collision resolution)
       const baseEid = computeEid(node, activeLayer);

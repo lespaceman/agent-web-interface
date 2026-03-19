@@ -809,9 +809,7 @@ describe('renderActionable kind attribute', () => {
     const response = createBaselineWithActionables([actionable]);
     const xml = renderStateXml(response);
 
-    expect(xml).toContain(
-      '<alert id="abc123def456" kind="status">3 items added to cart</alert>'
-    );
+    expect(xml).toContain('<alert id="abc123def456" kind="status">3 items added to cart</alert>');
   });
 
   it('should render alert tag with kind attribute for tooltip elements', () => {
@@ -1026,9 +1024,7 @@ describe('renderStateXml region trimming', () => {
 
     const xml = renderStateXml(response, { trimRegions: true });
 
-    expect(xml).toContain(
-      '<!-- trimmed 10 items. Use find with region=main to see all -->'
-    );
+    expect(xml).toContain('<!-- trimmed 10 items. Use find with region=main to see all -->');
   });
 
   it('should keep correct head and tail elements in trimmed output', () => {
@@ -1100,13 +1096,9 @@ describe('renderStateXml region trimming', () => {
     const xml = renderStateXml(response, { trimRegions: true });
 
     // header { head: 3, tail: 2 }: 10 elements, trims 5
-    expect(xml).toContain(
-      '<!-- trimmed 5 items. Use find with region=header to see all -->'
-    );
+    expect(xml).toContain('<!-- trimmed 5 items. Use find with region=header to see all -->');
     // main { head: 5, tail: 5 }: 15 elements, trims 5
-    expect(xml).toContain(
-      '<!-- trimmed 5 items. Use find with region=main to see all -->'
-    );
+    expect(xml).toContain('<!-- trimmed 5 items. Use find with region=main to see all -->');
   });
 
   it('should place trim comment after all elements, before </region>', () => {
@@ -1171,9 +1163,7 @@ describe('AWI_TRIM_REGIONS env var', () => {
   it('should enable trimming when AWI_TRIM_REGIONS is unset (default)', async () => {
     const xml = await renderWithEnv(undefined);
 
-    expect(xml).toContain(
-      '<!-- trimmed 10 items. Use find with region=main to see all -->'
-    );
+    expect(xml).toContain('<!-- trimmed 10 items. Use find with region=main to see all -->');
   });
 });
 
@@ -1331,9 +1321,7 @@ describe('renderStateXml region deduplication', () => {
     // Nav should be collapsed (unchanged)
     expect(xml).toContain('<region name="nav" unchanged="true" count="3" />');
     // Main should be trimmed (changed, 20 elements with head=5, tail=5)
-    expect(xml).toContain(
-      '<!-- trimmed 10 items. Use find with region=main to see all -->'
-    );
+    expect(xml).toContain('<!-- trimmed 10 items. Use find with region=main to see all -->');
   });
 
   it('should skip trimming for unchanged regions even when trimRegions is true', () => {

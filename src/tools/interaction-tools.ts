@@ -26,11 +26,7 @@ import {
   executeActionWithRetry,
   executeActionWithOutcome,
 } from './execute-action.js';
-import {
-  getSnapshotStore,
-  requireSnapshot,
-  resolveElementByEid,
-} from './tool-context.js';
+import { getSnapshotStore, requireSnapshot, resolveElementByEid } from './tool-context.js';
 import { prepareActionContext } from './action-context.js';
 
 // Convenience alias for module-internal use

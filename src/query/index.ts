@@ -12,7 +12,12 @@ export { QueryEngine } from './query-engine.js';
 export type { QueryEngineOptions } from './query-engine.js';
 
 // Scoring
-export { scoreMatch, calculateMaxPossibleScore, normalizeLabelFilter, SCORING_WEIGHTS } from './scoring.js';
+export {
+  scoreMatch,
+  calculateMaxPossibleScore,
+  normalizeLabelFilter,
+  SCORING_WEIGHTS,
+} from './scoring.js';
 
 // Disambiguation
 export { generateSuggestions, countByAttribute } from './disambiguation.js';

@@ -601,9 +601,7 @@ const ScrollElementIntoViewInputSchemaBase = z.object({
   /** Stable element ID from find or snapshot */
   eid: z
     .string()
-    .describe(
-      'Element ID of the off-screen element from find results or the page snapshot.'
-    ),
+    .describe('Element ID of the off-screen element from find results or the page snapshot.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
@@ -706,9 +704,7 @@ const TypeInputSchemaBase = z.object({
   /** Text to type */
   text: z.string().describe('The text to type into the element.'),
   /** Stable element ID from find or snapshot */
-  eid: z
-    .string()
-    .describe('Element ID of the input field from find results or the page snapshot.'),
+  eid: z.string().describe('Element ID of the input field from find results or the page snapshot.'),
   /** Clear existing text before typing (default: false) */
   clear: z
     .boolean()
@@ -747,9 +743,7 @@ export type PressOutput = z.infer<typeof PressOutputSchema>;
 // select - Select a dropdown option (no agent_version)
 const SelectInputSchemaBase = z.object({
   /** Stable element ID from find or snapshot */
-  eid: z
-    .string()
-    .describe('Element ID of the dropdown from find results or the page snapshot.'),
+  eid: z.string().describe('Element ID of the dropdown from find results or the page snapshot.'),
   /** Option value or visible text to select */
   value: z
     .string()

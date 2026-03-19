@@ -43,7 +43,6 @@ import type {
 /** Type alias for Puppeteer Page (exported for downstream use) */
 export type { Page };
 
-
 /** Default user data directory for persistent browser profiles */
 const DEFAULT_USER_DATA_DIR = path.join(
   os.homedir(),

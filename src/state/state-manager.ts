@@ -581,4 +581,3 @@ export class StateManager {
     return Math.ceil(jsonString.length / 4);
   }
 }
-
