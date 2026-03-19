@@ -276,6 +276,55 @@ describe('OBSERVATION_OBSERVER_SCRIPT', () => {
     });
   });
 
+  describe('characterData and visibility tracking', () => {
+    it('should include characterData in MutationObserver config', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('characterData: true');
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('characterDataOldValue: true');
+    });
+
+    it('should include attributes tracking for visibility changes', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('attributes: true');
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('attributeFilter: VISIBILITY_ATTRS');
+    });
+
+    it('should define VISIBILITY_ATTRS with style, class, hidden, aria-hidden', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("'style'");
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("'class'");
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("'hidden'");
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("'aria-hidden'");
+    });
+
+    it('should define LIVE_REGION_ROLES for characterData ancestor lookup', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('LIVE_REGION_ROLES');
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("'alert'");
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("'status'");
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("'log'");
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("'timer'");
+    });
+
+    it('should have findLiveRegionAncestor function', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('function findLiveRegionAncestor');
+    });
+
+    it('should have processCharacterDataMutation function', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('function processCharacterDataMutation');
+    });
+
+    it('should have processAttributeMutation function', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('function processAttributeMutation');
+    });
+
+    it('should handle characterData mutations in the callback', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("m.type === 'characterData'");
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('processCharacterDataMutation(m, shadowPath)');
+    });
+
+    it('should handle attributes mutations in the callback', () => {
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain("m.type === 'attributes'");
+      expect(OBSERVATION_OBSERVER_SCRIPT).toContain('processAttributeMutation(m, shadowPath)');
+    });
+  });
+
   describe('sync validation', () => {
     it('should have matching EXCLUDED_TEXT_TAGS in source', () => {
       const expectedTags = ['STYLE', 'SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'SVG'];

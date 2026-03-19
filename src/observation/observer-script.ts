@@ -28,6 +28,10 @@ export const OBSERVATION_OBSERVER_SCRIPT = `
   const SIGNIFICANCE_THRESHOLD = 4;
   // Node type constant for shadow root parent check
   const DOCUMENT_FRAGMENT_NODE = 11;
+  // ARIA roles that indicate live regions (text mutations are significant)
+  const LIVE_REGION_ROLES = new Set(['alert', 'status', 'log', 'marquee', 'timer']);
+  // Attributes whose changes can reveal hidden elements (visibility tracking)
+  const VISIBILITY_ATTRS = ['style', 'class', 'hidden', 'aria-hidden'];
 
   // Significance weights (must match server-side observation.types.ts)
   const WEIGHTS = {
@@ -376,20 +380,111 @@ export const OBSERVATION_OBSERVER_SCRIPT = `
   }
 
   /**
+   * Find the nearest ancestor (or self) with a live region role.
+   * Returns the element if found, null otherwise.
+   */
+  function findLiveRegionAncestor(node) {
+    let el = node.nodeType === 1 ? node : node.parentElement;
+    while (el && el !== document.body) {
+      const role = el.getAttribute && el.getAttribute('role');
+      if (role && LIVE_REGION_ROLES.has(role)) return el;
+      const ariaLive = el.getAttribute && el.getAttribute('aria-live');
+      if (ariaLive === 'polite' || ariaLive === 'assertive') return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  /**
+   * Handle characterData mutations (text-only changes in existing elements).
+   * Captures the live region container when its text content changes.
+   */
+  function processCharacterDataMutation(mutation, shadowPath) {
+    const textNode = mutation.target;
+    const liveRegion = findLiveRegionAncestor(textNode);
+    if (!liveRegion) return;
+
+    // Avoid re-capturing the same live region for rapid successive text changes
+    // Use a short debounce window (same element within 100ms)
+    const now = Date.now();
+    if (liveRegion.__lastTextCapture && (now - liveRegion.__lastTextCapture) < 100) return;
+    liveRegion.__lastTextCapture = now;
+
+    const entry = captureEntry(liveRegion, 'added', shadowPath);
+    if (entry) {
+      entry.appearedAfterDelay = (entry.timestamp - pageLoadTime) > 100;
+      log.push(entry);
+    }
+  }
+
+  /**
+   * Handle attribute mutations that may reveal hidden elements.
+   * Detects visibility changes (display:none → block, hidden removal, etc.)
+   */
+  function processAttributeMutation(mutation, shadowPath) {
+    const el = mutation.target;
+    if (el.nodeType !== 1) return;
+
+    // Skip if already processed in this cycle
+    if (processedElements.has(el)) return;
+
+    // Check if this attribute change made the element visible
+    const attrName = mutation.attributeName;
+
+    // For 'hidden' attribute: element becomes visible when hidden is removed
+    if (attrName === 'hidden' && el.hasAttribute('hidden')) return; // Still hidden
+
+    // For 'aria-hidden': element becomes visible when set to false or removed
+    if (attrName === 'aria-hidden') {
+      const val = el.getAttribute('aria-hidden');
+      if (val === 'true') return; // Still hidden
+    }
+
+    // For 'style' or 'class': check computed visibility
+    if (attrName === 'style' || attrName === 'class') {
+      try {
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          return; // Still hidden
+        }
+      } catch (e) {
+        return; // Detached element
+      }
+    }
+
+    // Check if this element (or a live region ancestor) is significant
+    // Only capture if the element has meaningful content and meets threshold
+    const entry = captureEntry(el, 'added', shadowPath);
+    if (entry) {
+      entry.appearedAfterDelay = (entry.timestamp - pageLoadTime) > 100;
+      log.push(entry);
+      processedElements.add(el);
+    }
+  }
+
+  /**
    * Create a mutation callback for observing a specific context (main DOM or shadow root).
    * @param shadowPath - The shadow path context for this observer
    */
   function createMutationCallback(shadowPath) {
     return function(mutations) {
       for (const m of mutations) {
-        // Capture added nodes
-        for (const node of m.addedNodes) {
-          processAddedNode(node, shadowPath);
-        }
+        if (m.type === 'childList') {
+          // Capture added nodes
+          for (const node of m.addedNodes) {
+            processAddedNode(node, shadowPath);
+          }
 
-        // Capture removed nodes
-        for (const node of m.removedNodes) {
-          processRemovedNode(node, shadowPath);
+          // Capture removed nodes
+          for (const node of m.removedNodes) {
+            processRemovedNode(node, shadowPath);
+          }
+        } else if (m.type === 'characterData') {
+          // Text content changed in an existing node (live region updates)
+          processCharacterDataMutation(m, shadowPath);
+        } else if (m.type === 'attributes') {
+          // Attribute changed — may reveal hidden elements (visibility tracking)
+          processAttributeMutation(m, shadowPath);
         }
       }
 
@@ -420,6 +515,10 @@ export const OBSERVATION_OBSERVER_SCRIPT = `
     observer.observe(shadowRoot, {
       childList: true,
       subtree: true,
+      characterData: true,
+      characterDataOldValue: true,
+      attributes: true,
+      attributeFilter: VISIBILITY_ATTRS,
     });
 
     shadowObservers.set(shadowRoot, { observer, hostPath: shadowPath });
@@ -503,6 +602,10 @@ export const OBSERVATION_OBSERVER_SCRIPT = `
     observer.observe(document.body, {
       childList: true,
       subtree: true,
+      characterData: true,
+      characterDataOldValue: true,
+      attributes: true,
+      attributeFilter: VISIBILITY_ATTRS,
     });
 
     // Initial scan for existing shadow roots in the DOM
