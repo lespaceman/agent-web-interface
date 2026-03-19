@@ -410,6 +410,16 @@ describe('AX Extractor', () => {
       expect(classifyAxRole('dialog')).toBe('structural');
     });
 
+    it('should classify live region roles', () => {
+      expect(classifyAxRole('alert')).toBe('live');
+      expect(classifyAxRole('status')).toBe('live');
+      expect(classifyAxRole('log')).toBe('live');
+      expect(classifyAxRole('marquee')).toBe('live');
+      expect(classifyAxRole('timer')).toBe('live');
+      expect(classifyAxRole('tooltip')).toBe('live');
+      expect(classifyAxRole('progressbar')).toBe('live');
+    });
+
     it('should return unknown for unrecognized roles', () => {
       expect(classifyAxRole('generic')).toBe('unknown');
       expect(classifyAxRole('none')).toBe('unknown');
@@ -420,6 +430,8 @@ describe('AX Extractor', () => {
       expect(classifyAxRole('BUTTON')).toBe('interactive');
       expect(classifyAxRole('Button')).toBe('interactive');
       expect(classifyAxRole('HEADING')).toBe('readable');
+      expect(classifyAxRole('ALERT')).toBe('live');
+      expect(classifyAxRole('Status')).toBe('live');
     });
   });
 });

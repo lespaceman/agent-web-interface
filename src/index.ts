@@ -65,6 +65,7 @@ import {
   select,
   hover,
   drag,
+  wheel,
   getFormUnderstanding,
   getFieldContext,
   takeScreenshot,
@@ -88,6 +89,7 @@ import {
   SelectInputSchemaBase,
   HoverInputSchemaBase,
   DragInputSchemaBase,
+  WheelInputSchemaBase,
   GetFormUnderstandingInputSchema,
   GetFieldContextInputSchema,
   TakeScreenshotInputSchemaBase,
@@ -193,7 +195,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'List Pages',
       description:
-        'List all open browser pages with their page_id, URL, and title. Use when working with multiple pages or to get the page_id for targeting a specific page.',
+        'List all open browser pages with their page_id, URL, and title.',
       inputSchema: ListPagesInputSchema.shape,
     },
     withLazyInit(listPages, 'list_pages')
@@ -214,7 +216,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Close Session',
       description:
-        'Close the entire browser and clear all state. Use when done with browser tasks or to reset after errors. Browser auto-restarts on next tool call.',
+        'Close the entire browser and clear all state.',
       inputSchema: CloseSessionInputSchema.shape,
     },
     withLazyInit(closeSession, 'close_session')
@@ -229,7 +231,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Navigate',
       description:
-        'Go to a URL. Returns page snapshot with interactive elements. This is typically your first action when starting browser automation.',
+        'Go to a URL. Returns page snapshot with interactive elements.',
       inputSchema: NavigateInputSchema.shape,
     },
     withLazyInit(navigate, 'navigate')
@@ -240,7 +242,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Go Back',
       description:
-        'Go back one page in browser history (like clicking the back button). Returns updated page snapshot.',
+        'Go back one page in browser history.',
       inputSchema: GoBackInputSchema.shape,
     },
     withLazyInit(goBack, 'go_back')
@@ -250,7 +252,7 @@ function initializeServer(): BrowserAutomationServer {
     'go_forward',
     {
       title: 'Go Forward',
-      description: 'Go forward one page in browser history. Returns updated page snapshot.',
+      description: 'Go forward one page in browser history.',
       inputSchema: GoForwardInputSchema.shape,
     },
     withLazyInit(goForward, 'go_forward')
@@ -261,21 +263,21 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Reload',
       description:
-        'Refresh the current page. Use when content may be stale or after waiting for server-side changes. Returns updated snapshot.',
+        'Refresh the current page.',
       inputSchema: ReloadInputSchema.shape,
     },
     withLazyInit(reload, 'reload')
   );
 
   server.registerTool(
-    'capture_snapshot',
+    'snapshot',
     {
-      title: 'Capture Snapshot',
+      title: 'Snapshot',
       description:
-        'Re-capture the page state without performing any action. Use when the page may have changed on its own (timers, live updates, animations completing). NOT needed after click/type/etc - those already return fresh snapshots.',
+        'Re-capture the page state without performing any action. Use when the page may have changed on its own (timers, live updates, animations).',
       inputSchema: CaptureSnapshotInputSchema.shape,
     },
-    withLazyInit(captureSnapshot, 'capture_snapshot')
+    withLazyInit(captureSnapshot, 'snapshot')
   );
 
   // ============================================================================
@@ -283,36 +285,36 @@ function initializeServer(): BrowserAutomationServer {
   // ============================================================================
 
   server.registerTool(
-    'find_elements',
+    'find',
     {
-      title: 'Find Elements',
+      title: 'Find',
       description:
-        'Search for interactive elements OR read page text content. Filter by `kind` (button, link, textbox, canvas), `label` (case-insensitive substring match), or `region` (header, main, footer). To READ page content, ensure `include_readable: true` (default) which includes paragraphs and headings.',
+        'Search for interactive elements OR read page text content. Filter by `kind` (button, link, textbox, canvas), `label` (case-insensitive substring match), or `region` (header, main, footer).',
       inputSchema: FindElementsInputSchema.shape,
     },
-    withLazyInit(findElements, 'find_elements')
+    withLazyInit(findElements, 'find')
   );
 
   server.registerTool(
-    'get_element_details',
+    'get_element',
     {
-      title: 'Get Element Details',
+      title: 'Get Element',
       description:
-        'Get complete details for one element: exact position, size, state, attributes. Use when you need more info than find_elements provides, like precise coordinates or full attribute list.',
+        'Get complete details for one element: exact position, size, state, attributes.',
       inputSchema: GetNodeDetailsInputSchema.shape,
     },
-    withLazyInit(getNodeDetails, 'get_element_details')
+    withLazyInit(getNodeDetails, 'get_element')
   );
 
   server.registerTool(
-    'take_screenshot',
+    'screenshot',
     {
-      title: 'Take Screenshot',
+      title: 'Screenshot',
       description:
-        'Capture a screenshot of the current page or a specific element. Returns the image directly for small screenshots (<2MB) or saves to a temp file for large ones. Use `eid` for element screenshots (requires a prior snapshot) or `fullPage: true` for full-page capture. Supports PNG (lossless, default) and JPEG (lossy with quality 0-100). Cannot combine eid and fullPage.',
+        'Capture a screenshot of the current page or a specific element.',
       inputSchema: TakeScreenshotInputSchemaBase.shape,
     },
-    withLazyInit(takeScreenshot, 'take_screenshot')
+    withLazyInit(takeScreenshot, 'screenshot')
   );
 
   // ============================================================================
@@ -320,25 +322,25 @@ function initializeServer(): BrowserAutomationServer {
   // ============================================================================
 
   server.registerTool(
-    'scroll_element_into_view',
+    'scroll_to',
     {
-      title: 'Scroll Element Into View',
+      title: 'Scroll To',
       description:
-        'Scroll until a specific element is visible in the viewport. Use BEFORE clicking or interacting with elements that are off-screen.',
+        'Scroll until a specific element is visible in the viewport.',
       inputSchema: ScrollElementIntoViewInputSchemaBase.shape,
     },
-    withLazyInit(scrollElementIntoView, 'scroll_element_into_view')
+    withLazyInit(scrollElementIntoView, 'scroll_to')
   );
 
   server.registerTool(
-    'scroll_page',
+    'scroll',
     {
-      title: 'Scroll Page',
+      title: 'Scroll',
       description:
-        'Scroll the viewport up or down by pixels. Use to explore page content, load lazy content, or reach elements below the fold. Returns updated snapshot.',
+        'Scroll the viewport up or down by pixels.',
       inputSchema: ScrollPageInputSchema.shape,
     },
-    withLazyInit(scrollPage, 'scroll_page')
+    withLazyInit(scrollPage, 'scroll')
   );
 
   server.registerTool(
@@ -346,7 +348,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Click Element',
       description:
-        'Click an element or at viewport coordinates. Use for buttons, links, checkboxes, or any clickable element. Returns updated page snapshot reflecting any changes from the click. Supports three modes: (1) eid only - clicks element center, (2) eid + x/y - clicks at offset relative to element top-left, (3) x/y only - clicks at absolute viewport coordinates (useful for canvas elements).',
+        'Click an element or at viewport coordinates.',
       inputSchema: ClickInputSchemaBase.shape,
     },
     withLazyInit(click, 'click')
@@ -357,7 +359,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Type Text',
       description:
-        'Type text into an input field, search box, or text area. Set `clear: true` to replace existing text instead of appending. Returns updated snapshot.',
+        'Type text into an input field or text area.',
       inputSchema: TypeInputSchemaBase.shape,
     },
     withLazyInit(type, 'type')
@@ -368,7 +370,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Press Key',
       description:
-        'Press a keyboard key (Enter, Tab, Escape, arrows, etc.) with optional Ctrl/Shift/Alt modifiers. Use for: submitting forms (Enter), moving between fields (Tab), closing dialogs (Escape), or keyboard shortcuts.',
+        'Press a keyboard key with optional modifiers.',
       inputSchema: PressInputSchema.shape,
     },
     withLazyInit(press, 'press')
@@ -379,7 +381,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Select Option',
       description:
-        'Choose an option from a dropdown menu. Specify the option by its value attribute or visible text. Returns updated snapshot.',
+        'Choose an option from a dropdown menu by value or visible text.',
       inputSchema: SelectInputSchemaBase.shape,
     },
     withLazyInit(select, 'select')
@@ -390,7 +392,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Hover Element',
       description:
-        'Move mouse over an element without clicking. Use to trigger hover menus, tooltips, or reveal hidden content that appears on mouseover.',
+        'Move mouse over an element without clicking. Triggers hover menus and tooltips.',
       inputSchema: HoverInputSchemaBase.shape,
     },
     withLazyInit(hover, 'hover')
@@ -401,10 +403,21 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Drag',
       description:
-        "Drag from one point to another. Specify source and target coordinates. If `eid` is provided, coordinates are relative to the element's top-left corner. Otherwise, coordinates are absolute viewport positions. Useful for canvas drawing, slider manipulation, and drag-and-drop operations.",
+        'Drag from one point to another.',
       inputSchema: DragInputSchemaBase.shape,
     },
     withLazyInit(drag, 'drag')
+  );
+
+  server.registerTool(
+    'wheel',
+    {
+      title: 'Wheel',
+      description:
+        'Dispatch a mouse wheel event at specific coordinates. Use for scroll-to-zoom (with Control modifier) or horizontal scrolling.',
+      inputSchema: WheelInputSchemaBase.shape,
+    },
+    withLazyInit(wheel, 'wheel')
   );
 
   // ============================================================================
@@ -416,7 +429,7 @@ function initializeServer(): BrowserAutomationServer {
     {
       title: 'Inspect Canvas',
       description:
-        'Analyze a canvas element: auto-detect the rendering library (Fabric.js, Konva, PixiJS, Phaser, Three.js, EaselJS), query its scene graph for objects with positions/sizes, and return an annotated screenshot with coordinate grid overlay and object bounding boxes. Use find_elements with kind=canvas first to discover canvas elements, then inspect_canvas to understand their contents before interacting via click/drag.',
+        'Analyze a canvas element: auto-detect the rendering library, query its scene graph, and return an annotated screenshot with coordinate grid overlay.',
       inputSchema: InspectCanvasInputSchemaBase.shape,
     },
     withLazyInit(inspectCanvas, 'inspect_canvas')
@@ -427,25 +440,25 @@ function initializeServer(): BrowserAutomationServer {
   // ============================================================================
 
   server.registerTool(
-    'get_form_understanding',
+    'get_form',
     {
-      title: 'Get Form Understanding',
+      title: 'Get Form',
       description:
-        'Analyze all forms on the page: fields, required inputs, validation rules, and field dependencies. Use BEFORE filling complex forms (multi-step, conditional fields) to understand what is required and in what order.',
+        'Analyze all forms on the page: fields, required inputs, validation rules, and field dependencies.',
       inputSchema: GetFormUnderstandingInputSchema.shape,
     },
-    withLazyInit(getFormUnderstanding, 'get_form_understanding')
+    withLazyInit(getFormUnderstanding, 'get_form')
   );
 
   server.registerTool(
-    'get_field_context',
+    'get_field',
     {
-      title: 'Get Field Context',
+      title: 'Get Field',
       description:
-        'Get detailed info about one form field: what it is for, valid input formats, dependencies on other fields, and suggested values. Use when unsure how to fill a specific field.',
+        'Get detailed info about one form field: purpose, valid input formats, dependencies, and suggested values.',
       inputSchema: GetFieldContextInputSchema.shape,
     },
-    withLazyInit(getFieldContext, 'get_field_context')
+    withLazyInit(getFieldContext, 'get_field')
   );
 
   return server;

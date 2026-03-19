@@ -34,7 +34,7 @@ export function initializeFormTools(_manager: SessionManager): void {
 // ============================================================================
 
 /**
- * get_form_understanding input schema
+ * get_form input schema
  */
 export const GetFormUnderstandingInputSchema = z.object({
   /** Page identifier (optional, defaults to MRU page) */
@@ -48,7 +48,7 @@ export const GetFormUnderstandingInputSchema = z.object({
 export type GetFormUnderstandingInput = z.infer<typeof GetFormUnderstandingInputSchema>;
 
 /**
- * get_field_context input schema
+ * get_field input schema
  */
 export const GetFieldContextInputSchema = z.object({
   /** Page identifier (optional, defaults to MRU page) */
@@ -377,7 +377,7 @@ export async function getFormUnderstanding(rawInput: unknown): Promise<string> {
   // Get snapshot for the page
   const snapshot = snapshotStore.getByPageId(pageId);
   if (!snapshot) {
-    return '<error>No snapshot available. Use capture_snapshot first.</error>';
+    return '<error>No snapshot available. Use snapshot first.</error>';
   }
 
   // Detect forms
@@ -477,7 +477,7 @@ export function getFieldContext(rawInput: unknown): string {
   // Get snapshot for the page
   const snapshot = snapshotStore.getByPageId(pageId);
   if (!snapshot) {
-    return '<error>No snapshot available. Use capture_snapshot first.</error>';
+    return '<error>No snapshot available. Use snapshot first.</error>';
   }
 
   // Find the field's form

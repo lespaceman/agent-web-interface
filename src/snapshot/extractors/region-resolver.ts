@@ -28,6 +28,14 @@ const ROLE_TO_REGION: Record<string, SemanticRegion> = {
   search: 'search',
   form: 'form',
   region: 'unknown', // Generic region
+  // Live region roles — mapped to 'alert' region for semantic distinction
+  alert: 'alert',
+  status: 'alert',
+  log: 'alert',
+  marquee: 'alert',
+  timer: 'alert',
+  tooltip: 'alert',
+  progressbar: 'alert',
 };
 
 /**

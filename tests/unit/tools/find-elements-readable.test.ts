@@ -1,11 +1,15 @@
 /**
  * Find Elements Readable Tests
  *
- * Tests for the include_readable parameter in find_elements.
+ * Tests for the include_readable parameter in find.
  */
 
 import { describe, it, expect } from 'vitest';
-import { isReadableNode, isStructuralNode } from '../../../src/snapshot/snapshot.types.js';
+import {
+  isReadableNode,
+  isStructuralNode,
+  isLiveRegionNode,
+} from '../../../src/snapshot/snapshot.types.js';
 import type { ReadableNode, NodeKind } from '../../../src/snapshot/snapshot.types.js';
 import { computeEid } from '../../../src/state/element-identity.js';
 
@@ -81,6 +85,39 @@ describe('isReadableNode and isStructuralNode', () => {
       for (const kind of nonStructuralKinds) {
         const node = createMockNode({ kind });
         expect(isStructuralNode(node)).toBe(false);
+      }
+    });
+  });
+
+  describe('isLiveRegionNode', () => {
+    it('should return true for live region kinds', () => {
+      const liveRegionKinds: NodeKind[] = [
+        'alert',
+        'status',
+        'log',
+        'tooltip',
+        'progressbar',
+        'timer',
+      ];
+
+      for (const kind of liveRegionKinds) {
+        const node = createMockNode({ kind });
+        expect(isLiveRegionNode(node)).toBe(true);
+      }
+    });
+
+    it('should return false for non-live-region kinds', () => {
+      const nonLiveRegionKinds: NodeKind[] = [
+        'button',
+        'heading',
+        'text',
+        'dialog',
+        'form',
+      ];
+
+      for (const kind of nonLiveRegionKinds) {
+        const node = createMockNode({ kind });
+        expect(isLiveRegionNode(node)).toBe(false);
       }
     });
   });

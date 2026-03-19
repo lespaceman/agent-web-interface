@@ -11,6 +11,7 @@
 
 import { BBox } from '../shared/types/base.types.js';
 import type { ObservationGroups } from '../observation/observation.types.js';
+import { isLiveRegionKind } from '../state/actionables-filter.js';
 
 // Re-export BBox as BoundingBox for semantic clarity in this module
 export type { BBox };
@@ -166,6 +167,13 @@ export type NodeKind =
   | 'dialog'
   | 'navigation'
   | 'section'
+  // Live region / ephemeral feedback
+  | 'alert'
+  | 'status'
+  | 'log'
+  | 'tooltip'
+  | 'progressbar'
+  | 'timer'
   // Fallback
   | 'generic';
 
@@ -183,6 +191,7 @@ export type SemanticRegion =
   | 'search'
   | 'form'
   | 'contentinfo'
+  | 'alert'
   | 'unknown';
 
 /**
@@ -423,4 +432,12 @@ export function isReadableNode(node: ReadableNode): boolean {
 export function isStructuralNode(node: ReadableNode): boolean {
   const structuralKinds: NodeKind[] = ['form', 'dialog', 'navigation', 'section'];
   return structuralKinds.includes(node.kind);
+}
+
+/**
+ * Type guard for live region / ephemeral feedback nodes.
+ * Delegates to the canonical LIVE_REGION_KINDS set in actionables-filter.
+ */
+export function isLiveRegionNode(node: ReadableNode): boolean {
+  return isLiveRegionKind(node.kind);
 }

@@ -30,6 +30,7 @@ export {
   INTERACTIVE_AX_ROLES,
   READABLE_AX_ROLES,
   STRUCTURAL_AX_ROLES,
+  LIVE_REGION_AX_ROLES,
 } from './types.js';
 
 // DOM Extractor

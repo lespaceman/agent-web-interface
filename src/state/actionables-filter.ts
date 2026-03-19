@@ -26,11 +26,29 @@ const INTERACTIVE_KINDS: NodeKind[] = [
   'canvas',
 ];
 
+// Live region kinds — non-interactive but must appear in snapshot output.
+// This is the single source of truth for NodeKind-level live region classification.
+export const LIVE_REGION_KINDS = new Set<NodeKind>([
+  'alert',
+  'status',
+  'log',
+  'tooltip',
+  'progressbar',
+  'timer',
+]);
+
 /**
  * Check if node kind is interactive.
  */
 export function isInteractiveKind(kind: NodeKind): boolean {
   return INTERACTIVE_KINDS.includes(kind);
+}
+
+/**
+ * Check if node kind is a live region (ephemeral feedback element).
+ */
+export function isLiveRegionKind(kind: NodeKind): boolean {
+  return LIVE_REGION_KINDS.has(kind);
 }
 
 // ============================================================================
@@ -61,10 +79,10 @@ export function selectActionables(
 ): ReadableNode[] {
   const skipLayerFilter = INCLUSIVE_OVERLAY_LAYERS.has(activeLayer);
 
-  // Filter to candidates
+  // Filter to candidates — interactive nodes AND live region nodes
   const candidates = snapshot.nodes.filter((node) => {
-    // Must be interactive
-    if (!isInteractiveKind(node.kind) && !node.implicitly_interactive) {
+    // Must be interactive or a live region (alert, status, tooltip, etc.)
+    if (!isInteractiveKind(node.kind) && !node.implicitly_interactive && !isLiveRegionKind(node.kind)) {
       return false;
     }
 

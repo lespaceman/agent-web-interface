@@ -27,7 +27,7 @@ import type {
 import { computeEid, resolveEidCollision } from './element-identity.js';
 import { detectLayers } from './layer-detector.js';
 import { computeDiff } from './diff-engine.js';
-import { selectActionables, isInteractiveKind } from './actionables-filter.js';
+import { selectActionables, isInteractiveKind, isLiveRegionKind } from './actionables-filter.js';
 import { getNodeLayer, INCLUSIVE_OVERLAY_LAYERS } from './node-layer.js';
 import { extractAtoms } from './atoms-extractor.js';
 import { linkObservationsToSnapshot } from '../observation/index.js';
@@ -286,7 +286,7 @@ export class StateManager {
     const skipLayerFilter = INCLUSIVE_OVERLAY_LAYERS.has(layerResult.active);
     const totalInLayer = snapshot.nodes.filter(
       (n) =>
-        isInteractiveKind(n.kind) &&
+        (isInteractiveKind(n.kind) || isLiveRegionKind(n.kind)) &&
         n.state?.visible &&
         (skipLayerFilter || getNodeLayer(n, layerResult.active) === layerResult.active)
     ).length;

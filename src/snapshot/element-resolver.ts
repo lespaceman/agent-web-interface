@@ -8,6 +8,75 @@
 import type { CdpClient } from '../cdp/cdp-client.interface.js';
 
 // ============================================================================
+// Modifier Bitmask Constants
+// ============================================================================
+
+/**
+ * CDP Input modifier bitmask values.
+ * These are ORed together for combined modifiers.
+ */
+export const MODIFIER_ALT = 1;
+export const MODIFIER_CTRL = 2;
+export const MODIFIER_META = 4;
+export const MODIFIER_SHIFT = 8;
+
+/**
+ * Convert modifier names to CDP modifier bitmask.
+ */
+function computeModifiers(modifiers?: string[]): number {
+  if (!modifiers) return 0;
+  let bits = 0;
+  for (const mod of modifiers) {
+    switch (mod.toLowerCase()) {
+      case 'alt':
+        bits |= MODIFIER_ALT;
+        break;
+      case 'control':
+      case 'ctrl':
+        bits |= MODIFIER_CTRL;
+        break;
+      case 'meta':
+      case 'cmd':
+      case 'command':
+        bits |= MODIFIER_META;
+        break;
+      case 'shift':
+        bits |= MODIFIER_SHIFT;
+        break;
+    }
+  }
+  return bits;
+}
+
+// ============================================================================
+// Key Code Mapping
+// ============================================================================
+
+/**
+ * Maps key names to their DOM key codes.
+ * Used for Input.dispatchKeyEvent CDP commands.
+ */
+const KEY_DEFINITIONS: Record<
+  string,
+  { code: string; keyCode: number; key: string; text?: string }
+> = {
+  Enter: { code: 'Enter', keyCode: 13, key: 'Enter', text: '\r' },
+  Tab: { code: 'Tab', keyCode: 9, key: 'Tab' },
+  Escape: { code: 'Escape', keyCode: 27, key: 'Escape' },
+  Backspace: { code: 'Backspace', keyCode: 8, key: 'Backspace' },
+  Delete: { code: 'Delete', keyCode: 46, key: 'Delete' },
+  Space: { code: 'Space', keyCode: 32, key: ' ', text: ' ' },
+  ArrowUp: { code: 'ArrowUp', keyCode: 38, key: 'ArrowUp' },
+  ArrowDown: { code: 'ArrowDown', keyCode: 40, key: 'ArrowDown' },
+  ArrowLeft: { code: 'ArrowLeft', keyCode: 37, key: 'ArrowLeft' },
+  ArrowRight: { code: 'ArrowRight', keyCode: 39, key: 'ArrowRight' },
+  Home: { code: 'Home', keyCode: 36, key: 'Home' },
+  End: { code: 'End', keyCode: 35, key: 'End' },
+  PageUp: { code: 'PageUp', keyCode: 33, key: 'PageUp' },
+  PageDown: { code: 'PageDown', keyCode: 34, key: 'PageDown' },
+};
+
+// ============================================================================
 // Element Box Model Helpers
 // ============================================================================
 
@@ -62,135 +131,6 @@ export async function getElementTopLeft(
   return { x: content[0], y: content[1] };
 }
 
-// ============================================================================
-// Click Operations
-// ============================================================================
-
-/**
- * Click an element at its center using CDP's backendNodeId.
- *
- * Bypasses Playwright's locator system to avoid strict mode violations
- * when multiple elements match the same selector.
- */
-export async function clickByBackendNodeId(cdp: CdpClient, backendNodeId: number): Promise<void> {
-  const { x, y } = await getElementCenter(cdp, backendNodeId);
-  await clickAtCoordinates(cdp, x, y);
-}
-
-/**
- * Click at absolute viewport coordinates using CDP.
- */
-export async function clickAtCoordinates(cdp: CdpClient, x: number, y: number): Promise<void> {
-  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
-    throw new Error(
-      `Invalid click coordinates (x: ${x}, y: ${y}). Coordinates must be non-negative finite numbers.`
-    );
-  }
-
-  await cdp.send('Input.dispatchMouseEvent', {
-    type: 'mousePressed',
-    x,
-    y,
-    button: 'left',
-    clickCount: 1,
-  });
-
-  await cdp.send('Input.dispatchMouseEvent', {
-    type: 'mouseReleased',
-    x,
-    y,
-    button: 'left',
-    clickCount: 1,
-  });
-}
-
-/**
- * Click at an offset relative to an element's top-left corner.
- * Scrolls element into view, computes absolute coordinates, then clicks.
- */
-export async function clickAtElementOffset(
-  cdp: CdpClient,
-  backendNodeId: number,
-  offsetX: number,
-  offsetY: number
-): Promise<void> {
-  const { x, y } = await getElementTopLeft(cdp, backendNodeId);
-  await clickAtCoordinates(cdp, x + offsetX, y + offsetY);
-}
-
-// ============================================================================
-// Modifier Bitmask Constants
-// ============================================================================
-
-/**
- * CDP Input modifier bitmask values.
- * These are ORed together for combined modifiers.
- */
-export const MODIFIER_ALT = 1;
-export const MODIFIER_CTRL = 2;
-export const MODIFIER_META = 4;
-export const MODIFIER_SHIFT = 8;
-
-// ============================================================================
-// Key Code Mapping
-// ============================================================================
-
-/**
- * Maps key names to their DOM key codes.
- * Used for Input.dispatchKeyEvent CDP commands.
- */
-const KEY_DEFINITIONS: Record<
-  string,
-  { code: string; keyCode: number; key: string; text?: string }
-> = {
-  Enter: { code: 'Enter', keyCode: 13, key: 'Enter', text: '\r' },
-  Tab: { code: 'Tab', keyCode: 9, key: 'Tab' },
-  Escape: { code: 'Escape', keyCode: 27, key: 'Escape' },
-  Backspace: { code: 'Backspace', keyCode: 8, key: 'Backspace' },
-  Delete: { code: 'Delete', keyCode: 46, key: 'Delete' },
-  Space: { code: 'Space', keyCode: 32, key: ' ', text: ' ' },
-  ArrowUp: { code: 'ArrowUp', keyCode: 38, key: 'ArrowUp' },
-  ArrowDown: { code: 'ArrowDown', keyCode: 40, key: 'ArrowDown' },
-  ArrowLeft: { code: 'ArrowLeft', keyCode: 37, key: 'ArrowLeft' },
-  ArrowRight: { code: 'ArrowRight', keyCode: 39, key: 'ArrowRight' },
-  Home: { code: 'Home', keyCode: 36, key: 'Home' },
-  End: { code: 'End', keyCode: 35, key: 'End' },
-  PageUp: { code: 'PageUp', keyCode: 33, key: 'PageUp' },
-  PageDown: { code: 'PageDown', keyCode: 34, key: 'PageDown' },
-};
-
-/**
- * Convert modifier names to CDP modifier bitmask.
- */
-function computeModifiers(modifiers?: string[]): number {
-  if (!modifiers) return 0;
-  let bits = 0;
-  for (const mod of modifiers) {
-    switch (mod.toLowerCase()) {
-      case 'alt':
-        bits |= MODIFIER_ALT;
-        break;
-      case 'control':
-      case 'ctrl':
-        bits |= MODIFIER_CTRL;
-        break;
-      case 'meta':
-      case 'cmd':
-      case 'command':
-        bits |= MODIFIER_META;
-        break;
-      case 'shift':
-        bits |= MODIFIER_SHIFT;
-        break;
-    }
-  }
-  return bits;
-}
-
-// ============================================================================
-// Helper: Get Element Center Coordinates
-// ============================================================================
-
 /**
  * Get the center coordinates of an element by its backendNodeId.
  * Scrolls the element into view first.
@@ -212,6 +152,76 @@ async function getElementCenter(
   }
 
   return { x, y };
+}
+
+// ============================================================================
+// Click Operations
+// ============================================================================
+
+/**
+ * Click an element at its center using CDP's backendNodeId.
+ *
+ * Bypasses Playwright's locator system to avoid strict mode violations
+ * when multiple elements match the same selector.
+ */
+export async function clickByBackendNodeId(
+  cdp: CdpClient,
+  backendNodeId: number,
+  modifiers?: string[]
+): Promise<void> {
+  const { x, y } = await getElementCenter(cdp, backendNodeId);
+  await clickAtCoordinates(cdp, x, y, modifiers);
+}
+
+/**
+ * Click at absolute viewport coordinates using CDP.
+ */
+export async function clickAtCoordinates(
+  cdp: CdpClient,
+  x: number,
+  y: number,
+  modifiers?: string[]
+): Promise<void> {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
+    throw new Error(
+      `Invalid click coordinates (x: ${x}, y: ${y}). Coordinates must be non-negative finite numbers.`
+    );
+  }
+
+  const modifierBits = computeModifiers(modifiers);
+
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+    modifiers: modifierBits,
+  });
+
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+    modifiers: modifierBits,
+  });
+}
+
+/**
+ * Click at an offset relative to an element's top-left corner.
+ * Scrolls element into view, computes absolute coordinates, then clicks.
+ */
+export async function clickAtElementOffset(
+  cdp: CdpClient,
+  backendNodeId: number,
+  offsetX: number,
+  offsetY: number,
+  modifiers?: string[]
+): Promise<void> {
+  const { x, y } = await getElementTopLeft(cdp, backendNodeId);
+  await clickAtCoordinates(cdp, x + offsetX, y + offsetY, modifiers);
 }
 
 // ============================================================================
@@ -471,7 +481,7 @@ export async function scrollPage(
  * @param targetX - End X coordinate
  * @param targetY - End Y coordinate
  * @param steps - Number of intermediate mouseMoved events (default: 10)
- * @throws Error if coordinates are invalid
+ * @param modifiers - Optional modifier keys (e.g., ['Shift', 'Control'])
  */
 export async function dragBetweenCoordinates(
   cdp: CdpClient,
@@ -479,7 +489,8 @@ export async function dragBetweenCoordinates(
   sourceY: number,
   targetX: number,
   targetY: number,
-  steps = 10
+  steps = 10,
+  modifiers?: string[]
 ): Promise<void> {
   // Validate all coordinates
   for (const [name, val] of [
@@ -495,6 +506,8 @@ export async function dragBetweenCoordinates(
     }
   }
 
+  const modifierBits = computeModifiers(modifiers);
+
   // Mouse down at source
   await cdp.send('Input.dispatchMouseEvent', {
     type: 'mousePressed',
@@ -502,6 +515,7 @@ export async function dragBetweenCoordinates(
     y: sourceY,
     button: 'left',
     clickCount: 1,
+    modifiers: modifierBits,
   });
 
   // Interpolate mouse moves from source to target
@@ -515,6 +529,7 @@ export async function dragBetweenCoordinates(
       x,
       y,
       button: 'left',
+      modifiers: modifierBits,
     });
   }
 
@@ -525,5 +540,44 @@ export async function dragBetweenCoordinates(
     y: targetY,
     button: 'left',
     clickCount: 1,
+    modifiers: modifierBits,
+  });
+}
+
+// ============================================================================
+// Wheel Event
+// ============================================================================
+
+/**
+ * Dispatch a mouse wheel event at the given coordinates using CDP.
+ *
+ * @param cdp - CDP client instance
+ * @param x - X coordinate where the wheel event occurs
+ * @param y - Y coordinate where the wheel event occurs
+ * @param deltaX - Horizontal scroll delta (positive = right)
+ * @param deltaY - Vertical scroll delta (positive = down)
+ * @param modifiers - Optional modifier keys (e.g., ['Control'] for zoom)
+ */
+export async function dispatchWheelEvent(
+  cdp: CdpClient,
+  x: number,
+  y: number,
+  deltaX: number,
+  deltaY: number,
+  modifiers?: string[]
+): Promise<void> {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) {
+    throw new Error(
+      `Invalid wheel coordinates (x: ${x}, y: ${y}). Coordinates must be non-negative finite numbers.`
+    );
+  }
+
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseWheel',
+    x,
+    y,
+    deltaX,
+    deltaY,
+    modifiers: computeModifiers(modifiers),
   });
 }

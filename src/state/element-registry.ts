@@ -21,7 +21,7 @@ import type {
 } from './element-ref.types.js';
 import { computeEid, resolveEidCollision } from './element-identity.js';
 import { generateLocator } from './locator-generator.js';
-import { isInteractiveKind } from './actionables-filter.js';
+import { isInteractiveKind, isLiveRegionKind } from './actionables-filter.js';
 
 // ============================================================================
 // Element Registry Class
@@ -64,10 +64,10 @@ export class ElementRegistry {
     const added: string[] = [];
     const updated: string[] = [];
 
-    // Process all interactive nodes
+    // Process all interactive and live region nodes
     for (const node of snapshot.nodes) {
-      // Track interactive elements and implicitly interactive elements
-      if (!isInteractiveKind(node.kind) && !node.implicitly_interactive) continue;
+      // Track interactive elements, implicitly interactive elements, and live regions
+      if (!isInteractiveKind(node.kind) && !node.implicitly_interactive && !isLiveRegionKind(node.kind)) continue;
 
       // Compute eid (with collision resolution)
       const baseEid = computeEid(node, activeLayer);

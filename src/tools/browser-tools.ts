@@ -11,6 +11,7 @@ import {
   clickAtElementOffset,
   getElementTopLeft,
   dragBetweenCoordinates,
+  dispatchWheelEvent,
   typeByBackendNodeId,
   pressKey,
   selectOption,
@@ -40,14 +41,16 @@ import {
   HoverInputSchema,
   TakeScreenshotInputSchema,
   DragInputSchema,
+  WheelInputSchema,
 } from './tool-schemas.js';
 import { captureScreenshot, getElementBoundingBox } from '../screenshot/index.js';
 import { cleanupTempFiles } from '../lib/temp-file.js';
 import { QueryEngine } from '../query/query-engine.js';
 import type { FindElementsRequest } from '../query/types/query.types.js';
 import type { BaseSnapshot, NodeKind, SemanticRegion } from '../snapshot/snapshot.types.js';
-import { isReadableNode, isStructuralNode } from '../snapshot/snapshot.types.js';
+import { isReadableNode, isStructuralNode, isLiveRegionNode } from '../snapshot/snapshot.types.js';
 import { computeEid } from '../state/element-identity.js';
+import { LIVE_REGION_KINDS } from '../state/actionables-filter.js';
 import {
   captureWithStabilization,
   determineHealthCode,
@@ -196,6 +199,7 @@ async function prepareActionContext(pageId: string | undefined): Promise<ActionC
   const resolvedPageId = handleRef.current.page_id;
 
   handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  await handleRef.current.page.bringToFront();
   const captureSnapshot = createActionCapture(session, handleRef, resolvedPageId);
 
   return { handleRef, pageId: resolvedPageId, captureSnapshot, session };
@@ -276,11 +280,29 @@ export async function listPages(): Promise<import('./tool-schemas.js').ListPages
   const session = getSessionManager();
   // Sync to pick up any unregistered browser tabs
   const pages = await session.syncPages();
-  const pageInfos = pages.map((h) => ({
-    page_id: h.page_id,
-    url: h.url ?? '',
-    title: h.title ?? '',
-  }));
+  const pageInfos = await Promise.all(
+    pages.map(async (h) => {
+      const liveUrl = h.page.url?.() ?? h.url ?? '';
+      let liveTitle = h.title ?? '';
+
+      if (typeof h.page.title === 'function') {
+        try {
+          liveTitle = await h.page.title();
+        } catch {
+          // Ignore pages that cannot expose title in the current state.
+        }
+      }
+
+      h.url = liveUrl;
+      h.title = liveTitle;
+
+      return {
+        page_id: h.page_id,
+        url: liveUrl,
+        title: liveTitle,
+      };
+    })
+  );
   return buildListPagesResponse(pageInfos);
 }
 
@@ -435,17 +457,19 @@ export async function captureSnapshot(
 /**
  * Map schema kind values to internal NodeKind values.
  *
- * The find_elements schema uses user-friendly names that don't always match
+ * The find schema uses user-friendly names that don't always match
  * internal NodeKind values. For example, 'textbox' in the schema maps to
  * both 'input' and 'textarea' internally.
  *
- * @param schemaKind - Kind value from the find_elements schema
+ * @param schemaKind - Kind value from the find schema
  * @returns Matching NodeKind value(s)
  */
 export function mapSchemaKindToNodeKind(schemaKind: string): NodeKind | NodeKind[] {
   switch (schemaKind) {
     case 'textbox':
       return ['input', 'textarea'];
+    case 'alert':
+      return [...LIVE_REGION_KINDS];
     default:
       return schemaKind as NodeKind;
   }
@@ -494,7 +518,7 @@ export function findElements(rawInput: unknown): import('./tool-schemas.js').Fin
 
   const matches: FindElementsMatch[] = response.matches.map((m) => {
     // Check if this is a readable/structural (non-interactive) node
-    const isNonInteractive = isReadableNode(m.node) || isStructuralNode(m.node);
+    const isNonInteractive = isReadableNode(m.node) || isStructuralNode(m.node) || isLiveRegionNode(m.node);
 
     // Look up EID from registry (for interactive nodes)
     const registryEid = registry.getEidBySnapshotAndBackendNodeId(
@@ -711,9 +735,15 @@ export async function click(rawInput: unknown): Promise<import('./tool-schemas.j
       node,
       async (backendNodeId) => {
         if (hasCoords) {
-          await clickAtElementOffset(handleRef.current.cdp, backendNodeId, input.x!, input.y!);
+          await clickAtElementOffset(
+            handleRef.current.cdp,
+            backendNodeId,
+            input.x!,
+            input.y!,
+            input.modifiers
+          );
         } else {
-          await clickByBackendNodeId(handleRef.current.cdp, backendNodeId);
+          await clickByBackendNodeId(handleRef.current.cdp, backendNodeId, input.modifiers);
         }
       },
       snapshotStore,
@@ -724,7 +754,7 @@ export async function click(rawInput: unknown): Promise<import('./tool-schemas.j
     result = await executeAction(
       handleRef.current,
       async () => {
-        await clickAtCoordinates(handleRef.current.cdp, input.x!, input.y!);
+        await clickAtCoordinates(handleRef.current.cdp, input.x!, input.y!, input.modifiers);
       },
       captureSnapshot
     );
@@ -887,7 +917,59 @@ export async function drag(rawInput: unknown): Promise<import('./tool-schemas.js
   const result = await executeAction(
     handleRef.current,
     async () => {
-      await dragBetweenCoordinates(handleRef.current.cdp, sourceX, sourceY, targetX, targetY);
+      await dragBetweenCoordinates(
+        handleRef.current.cdp,
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+        10,
+        input.modifiers
+      );
+    },
+    captureSnapshot
+  );
+
+  snapshotStore.store(pageId, result.snapshot);
+  return result.state_response;
+}
+
+/**
+ * Dispatch a mouse wheel event.
+ *
+ * If eid is provided, x/y coordinates are relative to the element's top-left corner.
+ * Otherwise, x/y are absolute viewport coordinates.
+ *
+ * @param rawInput - Wheel options (will be validated)
+ * @returns Wheel result with updated snapshot
+ */
+export async function wheel(rawInput: unknown): Promise<import('./tool-schemas.js').WheelOutput> {
+  const input = WheelInputSchema.parse(rawInput);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+
+  let x = input.x;
+  let y = input.y;
+
+  if (input.eid) {
+    const snap = requireSnapshot(pageId);
+    const node = resolveElementByEid(pageId, input.eid, snap);
+
+    const topLeft = await getElementTopLeft(handleRef.current.cdp, node.backend_node_id);
+    x = topLeft.x + input.x;
+    y = topLeft.y + input.y;
+  }
+
+  const result = await executeAction(
+    handleRef.current,
+    async () => {
+      await dispatchWheelEvent(
+        handleRef.current.cdp,
+        x,
+        y,
+        input.deltaX,
+        input.deltaY,
+        input.modifiers
+      );
     },
     captureSnapshot
   );

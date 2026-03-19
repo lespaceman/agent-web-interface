@@ -120,7 +120,7 @@ export class ObservationAccumulator {
 
   /**
    * Get accumulated observations without action context.
-   * Used by capture_snapshot to report accumulated changes.
+   * Used by snapshot tool to report accumulated changes.
    */
   async getAccumulatedObservations(page: Page): Promise<ObservationGroups> {
     try {

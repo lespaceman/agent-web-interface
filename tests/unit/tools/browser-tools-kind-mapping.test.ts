@@ -1,5 +1,5 @@
 /**
- * Kind mapping tests for find_elements schema-to-internal kind conversion.
+ * Kind mapping tests for find schema-to-internal kind conversion.
  */
 import { describe, it, expect } from 'vitest';
 import { mapSchemaKindToNodeKind } from '../../../src/tools/browser-tools.js';
@@ -48,5 +48,10 @@ describe('mapSchemaKindToNodeKind', () => {
   it('passes through heading unchanged', () => {
     const result = mapSchemaKindToNodeKind('heading');
     expect(result).toBe('heading');
+  });
+
+  it('maps alert to all live region kinds', () => {
+    const result = mapSchemaKindToNodeKind('alert');
+    expect(result).toEqual(['alert', 'status', 'log', 'tooltip', 'progressbar', 'timer']);
   });
 });

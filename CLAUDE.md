@@ -6,13 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Agent Web Interface is an MCP (Model Context Protocol) server for AI-powered browser automation via Puppeteer and CDP (Chrome DevTools Protocol). It provides **semantic page snapshots** - compact, structured representations designed for LLM consumption with stable element IDs that survive DOM mutations.
 
-**20 Tools** across 6 categories:
+**22 Tools** across 7 categories:
 
-- **Session**: list_tabs, close_page, close_session
+- **Session**: list_pages, close_page, close_session
 - **Navigation**: navigate, go_back, go_forward, reload
-- **Observation**: capture_snapshot, find_elements, get_element_details, take_screenshot
-- **Interaction**: click, type, press, select, hover, scroll_element_into_view, scroll_page
-- **Form Understanding**: get_form_understanding, get_field_context
+- **Observation**: snapshot, find, get_element, screenshot
+- **Interaction**: click, type, press, select, hover, scroll_to, scroll, drag, wheel
+- **Canvas**: inspect_canvas
+- **Form Understanding**: get_form, get_field
 
 ## Build and Development Commands
 

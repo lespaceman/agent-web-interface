@@ -15,7 +15,7 @@ import type {
   StatusNode,
 } from './types.js';
 import { computeEid } from './element-identity.js';
-import { isInteractiveKind } from './actionables-filter.js';
+import { isInteractiveKind, isLiveRegionKind } from './actionables-filter.js';
 import { detectLayers } from './layer-detector.js';
 import { extractAtoms } from './atoms-extractor.js';
 
@@ -99,8 +99,8 @@ function buildEidMap(snapshot: BaseSnapshot): EidMap {
   const map: EidMap = new Map();
 
   for (const node of snapshot.nodes) {
-    // Only include visible interactive elements
-    if (!isInteractiveKind(node.kind) || !node.state?.visible) {
+    // Only include visible interactive and live region elements
+    if ((!isInteractiveKind(node.kind) && !isLiveRegionKind(node.kind)) || !node.state?.visible) {
       continue;
     }
 

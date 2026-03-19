@@ -36,6 +36,7 @@ import {
   resolveGrouping,
   classifyAxRole,
   extractAttributes,
+  LIVE_REGION_AX_ROLES,
   type RawNodeData,
   type RawDomNode,
   type RawAxNode,
@@ -408,6 +409,14 @@ function mapRoleToKind(role: string | undefined): NodeKind | undefined {
     banner: 'section',
     complementary: 'section',
     contentinfo: 'section',
+    // Live region / ephemeral feedback
+    alert: 'alert',
+    status: 'status',
+    log: 'log',
+    marquee: 'log',
+    timer: 'timer',
+    tooltip: 'tooltip',
+    progressbar: 'progressbar',
   };
 
   return kindMap[normalized];
@@ -557,8 +566,11 @@ export class SnapshotCompiler {
         const isEssentialStructural =
           classification === 'structural' &&
           essentialStructuralRoles.has(axNode.role?.toLowerCase() ?? '');
+        // Live region roles (alert, status, log, tooltip, progressbar, timer)
+        // are always included — they carry critical action feedback
+        const isLiveRegion = classification === 'live';
 
-        if (isInteractive || isReadable || isEssentialStructural) {
+        if (isInteractive || isReadable || isEssentialStructural || isLiveRegion) {
           const domNode = domResult?.nodes.get(backendNodeId);
           nodesToProcess.push({
             backendNodeId,
@@ -945,7 +957,13 @@ export class SnapshotCompiler {
     // Resolve label
     const scopedIdMap = getIdMapForNode(domNode, idMapsByContext);
     const labelResult = resolveLabel(domNode, axNode, scopedIdMap);
-    const label = labelResult.label;
+    let label = labelResult.label;
+
+    // Fallback for live region containers (alert, status, etc.) with empty labels:
+    // Their text typically lives in child StaticText/text nodes, not in the AX name.
+    if (!label && axNode?.role && LIVE_REGION_AX_ROLES.has(axNode.role.toLowerCase()) && domTree.size > 0) {
+      label = getTextContent(backendNodeId, domTree, 3) ?? '';
+    }
 
     // Resolve region (pass axTree for ancestor AX role lookup)
     const region = resolveRegion(domNode, axNode, domTree, axTree);

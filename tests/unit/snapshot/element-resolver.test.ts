@@ -8,6 +8,7 @@ import {
   clickAtCoordinates,
   clickAtElementOffset,
   dragBetweenCoordinates,
+  dispatchWheelEvent,
   typeByBackendNodeId,
   pressKey,
   selectOption,
@@ -671,6 +672,136 @@ describe('ElementResolver', () => {
       await expect(
         dragBetweenCoordinates(mockCdp as unknown as CdpClient, 0, 0, NaN, 100)
       ).rejects.toThrow('Invalid drag coordinate');
+    });
+
+    it('should pass modifier bitmask to all drag events', async () => {
+      await dragBetweenCoordinates(
+        mockCdp as unknown as CdpClient,
+        100,
+        200,
+        200,
+        400,
+        2,
+        ['Shift']
+      );
+
+      const calls = mockCdp.send.mock.calls;
+      // All calls (pressed, moved, released) should have modifiers: 8 (Shift)
+      for (const call of calls) {
+        expect(call[1]).toHaveProperty('modifiers', 8);
+      }
+    });
+
+    it('should default to zero modifiers when none provided', async () => {
+      await dragBetweenCoordinates(mockCdp as unknown as CdpClient, 100, 200, 200, 400, 1);
+
+      const calls = mockCdp.send.mock.calls;
+      for (const call of calls) {
+        expect(call[1]).toHaveProperty('modifiers', 0);
+      }
+    });
+  });
+
+  describe('clickAtCoordinates() with modifiers', () => {
+    let mockCdp: { send: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      mockCdp = {
+        send: vi.fn().mockResolvedValue(undefined),
+      };
+    });
+
+    it('should pass modifier bitmask to mouse events', async () => {
+      await clickAtCoordinates(mockCdp as unknown as CdpClient, 100, 200, ['Control', 'Shift']);
+
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mousePressed',
+          x: 100,
+          y: 200,
+          modifiers: 10, // Control (2) + Shift (8)
+        })
+      );
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mouseReleased',
+          modifiers: 10,
+        })
+      );
+    });
+
+    it('should default to zero modifiers when none provided', async () => {
+      await clickAtCoordinates(mockCdp as unknown as CdpClient, 100, 200);
+
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mousePressed',
+          modifiers: 0,
+        })
+      );
+    });
+  });
+
+  describe('dispatchWheelEvent()', () => {
+    let mockCdp: { send: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      mockCdp = { send: vi.fn().mockResolvedValue(undefined) };
+    });
+
+    it('should dispatch mouseWheel event with deltaX and deltaY', async () => {
+      await dispatchWheelEvent(mockCdp as unknown as CdpClient, 400, 300, 0, -120);
+
+      expect(mockCdp.send).toHaveBeenCalledWith('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: 400,
+        y: 300,
+        deltaX: 0,
+        deltaY: -120,
+        modifiers: 0,
+      });
+      expect(mockCdp.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('should pass modifier bitmask for ctrl+scroll zoom', async () => {
+      await dispatchWheelEvent(mockCdp as unknown as CdpClient, 400, 300, 0, -120, ['Control']);
+
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mouseWheel',
+          modifiers: 2, // Control
+          deltaY: -120,
+        })
+      );
+    });
+
+    it('should support horizontal scrolling', async () => {
+      await dispatchWheelEvent(mockCdp as unknown as CdpClient, 200, 150, 50, 0);
+
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
+          type: 'mouseWheel',
+          deltaX: 50,
+          deltaY: 0,
+        })
+      );
+    });
+
+    it('should reject negative coordinates', async () => {
+      await expect(
+        dispatchWheelEvent(mockCdp as unknown as CdpClient, -1, 300, 0, -120)
+      ).rejects.toThrow('Invalid wheel coordinates');
+    });
+
+    it('should reject NaN coordinates', async () => {
+      await expect(
+        dispatchWheelEvent(mockCdp as unknown as CdpClient, NaN, 300, 0, -120)
+      ).rejects.toThrow('Invalid wheel coordinates');
     });
   });
 });

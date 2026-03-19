@@ -135,7 +135,7 @@ export function buildFindElementsResponse(
   const lines: string[] = [];
 
   lines.push(
-    `<result type="find_elements" page_id="${escapeXml(pageId)}" snapshot_id="${escapeXml(snapshotId)}" count="${matches.length}">`
+    `<result type="find" page_id="${escapeXml(pageId)}" snapshot_id="${escapeXml(snapshotId)}" count="${matches.length}">`
   );
 
   for (const m of matches) {

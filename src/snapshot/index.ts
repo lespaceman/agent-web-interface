@@ -27,7 +27,12 @@ export type {
 } from './snapshot.types.js';
 
 // Type guards
-export { isInteractiveNode, isReadableNode, isStructuralNode } from './snapshot.types.js';
+export {
+  isInteractiveNode,
+  isReadableNode,
+  isStructuralNode,
+  isLiveRegionNode,
+} from './snapshot.types.js';
 
 // Store
 export {
@@ -44,6 +49,7 @@ export {
   clickAtElementOffset,
   getElementTopLeft,
   dragBetweenCoordinates,
+  dispatchWheelEvent,
   typeByBackendNodeId,
   pressKey,
   selectOption,

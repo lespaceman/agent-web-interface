@@ -184,7 +184,7 @@ export function renderStateXml(response: StateResponseObject, options?: RenderOp
 
       if (trimmedCount > 0) {
         lines.push(
-          `    <!-- trimmed ${trimmedCount} items. Use find_elements with region=${regionName} to see all -->`
+          `    <!-- trimmed ${trimmedCount} items. Use find with region=${regionName} to see all -->`
         );
       }
 
@@ -247,9 +247,13 @@ function renderActionable(item: ActionableInfo, _diff?: StateResponseObject['dif
   const tag = mapKindToTag(item.kind);
   const attrs: string[] = [`id="${item.eid}"`];
 
-  // Add kind attribute for non-standard tags to give the agent context
+  // Add kind attribute when the tag is a catch-all that loses specificity:
+  // - 'elt' is the fallback for unmapped kinds (show the ARIA role)
+  // - 'alert' is shared by alert/status/log/tooltip/progressbar/timer (show the specific kind)
   if (tag === 'elt' && item.role && item.role !== 'none' && item.role !== 'generic') {
     attrs.push(`kind="${escapeXml(item.role)}"`);
+  } else if (tag === 'alert' && item.kind !== 'alert') {
+    attrs.push(`kind="${escapeXml(item.kind)}"`);
   }
 
   // State flags (descriptive names with boolean values)
@@ -294,6 +298,13 @@ function mapKindToTag(kind: string): string {
       return 'h';
     case 'canvas':
       return 'canvas';
+    case 'alert':
+    case 'status':
+    case 'log':
+    case 'tooltip':
+    case 'progressbar':
+    case 'timer':
+      return 'alert';
     default:
       return 'elt';
   }

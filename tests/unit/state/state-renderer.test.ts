@@ -772,6 +772,69 @@ describe('renderActionable kind attribute', () => {
     expect(xml).not.toContain('kind=');
   });
 
+  it('should render alert tag for alert kind elements', () => {
+    const actionable: ActionableInfo = {
+      eid: 'abc123def456',
+      kind: 'alert',
+      name: 'Login failed. Please check your credentials.',
+      role: 'alert',
+      vis: true,
+      ena: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'alert "Login failed"' } },
+      ctx: { layer: 'main', region: 'alert' },
+    };
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain(
+      '<alert id="abc123def456">Login failed. Please check your credentials.</alert>'
+    );
+  });
+
+  it('should render alert tag with kind attribute for status elements', () => {
+    const actionable: ActionableInfo = {
+      eid: 'abc123def456',
+      kind: 'status',
+      name: '3 items added to cart',
+      role: 'status',
+      vis: true,
+      ena: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'status "3 items added"' } },
+      ctx: { layer: 'main', region: 'alert' },
+    };
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain(
+      '<alert id="abc123def456" kind="status">3 items added to cart</alert>'
+    );
+  });
+
+  it('should render alert tag with kind attribute for tooltip elements', () => {
+    const actionable: ActionableInfo = {
+      eid: 'abc123def456',
+      kind: 'tooltip',
+      name: 'Click to submit the form',
+      role: 'tooltip',
+      vis: true,
+      ena: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'tooltip "Click to submit"' } },
+      ctx: { layer: 'main', region: 'alert' },
+    };
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain(
+      '<alert id="abc123def456" kind="tooltip">Click to submit the form</alert>'
+    );
+  });
+
   it('should escape XML special characters in kind attribute', () => {
     const actionable: ActionableInfo = {
       eid: 'abc123def456',
@@ -964,7 +1027,7 @@ describe('renderStateXml region trimming', () => {
     const xml = renderStateXml(response, { trimRegions: true });
 
     expect(xml).toContain(
-      '<!-- trimmed 10 items. Use find_elements with region=main to see all -->'
+      '<!-- trimmed 10 items. Use find with region=main to see all -->'
     );
   });
 
@@ -1013,7 +1076,7 @@ describe('renderStateXml region trimming', () => {
     const xml = renderStateXml(response, { trimRegions: true });
 
     expect(xml).toContain(
-      '<!-- trimmed 4 items. Use find_elements with region=custom-region to see all -->'
+      '<!-- trimmed 4 items. Use find with region=custom-region to see all -->'
     );
     // Head: cst-1 through cst-5
     for (let i = 1; i <= 5; i++) {
@@ -1038,11 +1101,11 @@ describe('renderStateXml region trimming', () => {
 
     // header { head: 3, tail: 2 }: 10 elements, trims 5
     expect(xml).toContain(
-      '<!-- trimmed 5 items. Use find_elements with region=header to see all -->'
+      '<!-- trimmed 5 items. Use find with region=header to see all -->'
     );
     // main { head: 5, tail: 5 }: 15 elements, trims 5
     expect(xml).toContain(
-      '<!-- trimmed 5 items. Use find_elements with region=main to see all -->'
+      '<!-- trimmed 5 items. Use find with region=main to see all -->'
     );
   });
 
@@ -1109,7 +1172,7 @@ describe('AWI_TRIM_REGIONS env var', () => {
     const xml = await renderWithEnv(undefined);
 
     expect(xml).toContain(
-      '<!-- trimmed 10 items. Use find_elements with region=main to see all -->'
+      '<!-- trimmed 10 items. Use find with region=main to see all -->'
     );
   });
 });
@@ -1269,7 +1332,7 @@ describe('renderStateXml region deduplication', () => {
     expect(xml).toContain('<region name="nav" unchanged="true" count="3" />');
     // Main should be trimmed (changed, 20 elements with head=5, tail=5)
     expect(xml).toContain(
-      '<!-- trimmed 10 items. Use find_elements with region=main to see all -->'
+      '<!-- trimmed 10 items. Use find with region=main to see all -->'
     );
   });
 

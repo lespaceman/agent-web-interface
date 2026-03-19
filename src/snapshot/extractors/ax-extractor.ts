@@ -11,7 +11,12 @@
  */
 
 import type { ExtractorContext, AxExtractionResult, RawAxNode, AxProperty } from './types.js';
-import { INTERACTIVE_AX_ROLES, READABLE_AX_ROLES, STRUCTURAL_AX_ROLES } from './types.js';
+import {
+  INTERACTIVE_AX_ROLES,
+  READABLE_AX_ROLES,
+  STRUCTURAL_AX_ROLES,
+  LIVE_REGION_AX_ROLES,
+} from './types.js';
 
 /**
  * CDP AX node value structure
@@ -52,7 +57,7 @@ interface AxGetFullTreeResponse {
 /**
  * Role classification result
  */
-export type RoleClassification = 'interactive' | 'readable' | 'structural' | 'unknown';
+export type RoleClassification = 'interactive' | 'readable' | 'structural' | 'live' | 'unknown';
 
 /**
  * Classify an AX role into category.
@@ -77,6 +82,10 @@ export function classifyAxRole(role: string | undefined): RoleClassification {
 
   if (STRUCTURAL_AX_ROLES.has(normalized)) {
     return 'structural';
+  }
+
+  if (LIVE_REGION_AX_ROLES.has(normalized)) {
+    return 'live';
   }
 
   return 'unknown';

@@ -461,7 +461,7 @@ export interface ObservedEffect {
 // ============================================================================
 
 /**
- * Response from get_form_understanding tool.
+ * Response from get_form tool.
  */
 export interface FormUnderstandingResponse {
   /** Page ID */
@@ -478,7 +478,7 @@ export interface FormUnderstandingResponse {
 }
 
 /**
- * Response from get_field_context tool.
+ * Response from get_field tool.
  */
 export interface FieldContextResponse {
   /** The requested field */

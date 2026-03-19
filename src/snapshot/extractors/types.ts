@@ -381,3 +381,20 @@ export const STRUCTURAL_AX_ROLES = new Set([
   'article',
   'section',
 ]);
+
+/**
+ * AX roles that indicate live region / ephemeral feedback elements.
+ * These are ARIA roles for elements that communicate dynamic status,
+ * alerts, and notifications — critical for understanding action outcomes.
+ *
+ * @see https://www.w3.org/TR/wai-aria-1.2/#live_region_roles
+ */
+export const LIVE_REGION_AX_ROLES = new Set([
+  'alert',
+  'status',
+  'log',
+  'marquee',
+  'timer',
+  'tooltip',
+  'progressbar',
+]);

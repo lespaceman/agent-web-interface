@@ -506,7 +506,7 @@ export type ReloadInput = z.infer<typeof ReloadInputSchema>;
 export type ReloadOutput = z.infer<typeof ReloadOutputSchema>;
 
 // ============================================================================
-// capture_snapshot - Capture a fresh snapshot of the current page
+// snapshot - Capture a fresh snapshot of the current page
 // ============================================================================
 
 export const CaptureSnapshotInputSchema = z.object({
@@ -521,7 +521,7 @@ export type CaptureSnapshotInput = z.infer<typeof CaptureSnapshotInputSchema>;
 export type CaptureSnapshotOutput = z.infer<typeof CaptureSnapshotOutputSchema>;
 
 // ============================================================================
-// find_elements - Find elements by semantic criteria
+// find - Find elements by semantic criteria
 // ============================================================================
 
 export const FindElementsInputSchema = z.object({
@@ -540,10 +540,11 @@ export const FindElementsInputSchema = z.object({
       'image',
       'heading',
       'canvas',
+      'alert',
     ])
     .optional()
     .describe(
-      "Filter by element type: 'button' for clickable buttons, 'link' for hyperlinks, 'textbox' for input fields, 'checkbox'/'radio' for toggles, 'combobox' for dropdowns, 'heading' for section titles, 'image' for images, 'canvas' for canvas elements."
+      "Filter by element type: 'button' for clickable buttons, 'link' for hyperlinks, 'textbox' for input fields, 'checkbox'/'radio' for toggles, 'combobox' for dropdowns, 'heading' for section titles, 'image' for images, 'canvas' for canvas elements, 'alert' for notifications/toasts/alerts/status messages."
     ),
   /** Search text to match against element labels. */
   label: z
@@ -597,11 +598,11 @@ export type GetNodeDetailsOutput = z.infer<typeof GetNodeDetailsOutputSchema>;
 // ============================================================================
 
 const ScrollElementIntoViewInputSchemaBase = z.object({
-  /** Stable element ID from find_elements or snapshot */
+  /** Stable element ID from find or snapshot */
   eid: z
     .string()
     .describe(
-      'Element ID of the off-screen element from find_elements results or the page snapshot.'
+      'Element ID of the off-screen element from find results or the page snapshot.'
     ),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
@@ -661,12 +662,12 @@ export const SupportedKeys = [
 const ClickInputSchemaBase = z.object({
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page containing the element.'),
-  /** Stable element ID from find_elements or snapshot */
+  /** Stable element ID from find or snapshot */
   eid: z
     .string()
     .optional()
     .describe(
-      'Element ID from find_elements results or the page snapshot. Every interactive element has a unique eid.'
+      'Element ID from find results or the page snapshot. Every interactive element has a unique eid.'
     ),
   /** X coordinate. If eid is also provided, relative to element top-left. Otherwise absolute viewport coordinate. */
   x: z
@@ -681,6 +682,13 @@ const ClickInputSchemaBase = z.object({
     .optional()
     .describe(
       'Y coordinate for the click. When used with eid, relative to the element top-left corner. When used without eid, absolute viewport coordinate.'
+    ),
+  /** Modifier keys to hold during the click */
+  modifiers: z
+    .array(z.enum(['Control', 'Shift', 'Alt', 'Meta']))
+    .optional()
+    .describe(
+      'Modifier keys to hold during the click (e.g., Shift for multi-select, Control for ctrl-click).'
     ),
 });
 export const ClickInputSchema = ClickInputSchemaBase;
@@ -697,10 +705,10 @@ export type ClickOutput = z.infer<typeof ClickOutputSchema>;
 const TypeInputSchemaBase = z.object({
   /** Text to type */
   text: z.string().describe('The text to type into the element.'),
-  /** Stable element ID from find_elements or snapshot */
+  /** Stable element ID from find or snapshot */
   eid: z
     .string()
-    .describe('Element ID of the input field from find_elements results or the page snapshot.'),
+    .describe('Element ID of the input field from find results or the page snapshot.'),
   /** Clear existing text before typing (default: false) */
   clear: z
     .boolean()
@@ -738,10 +746,10 @@ export type PressOutput = z.infer<typeof PressOutputSchema>;
 
 // select - Select a dropdown option (no agent_version)
 const SelectInputSchemaBase = z.object({
-  /** Stable element ID from find_elements or snapshot */
+  /** Stable element ID from find or snapshot */
   eid: z
     .string()
-    .describe('Element ID of the dropdown from find_elements results or the page snapshot.'),
+    .describe('Element ID of the dropdown from find results or the page snapshot.'),
   /** Option value or visible text to select */
   value: z
     .string()
@@ -762,8 +770,8 @@ export type SelectOutput = z.infer<typeof SelectOutputSchema>;
 
 // hover - Hover over an element (no agent_version)
 const HoverInputSchemaBase = z.object({
-  /** Stable element ID from find_elements or snapshot */
-  eid: z.string().describe('Element ID from find_elements results or the page snapshot.'),
+  /** Stable element ID from find or snapshot */
+  eid: z.string().describe('Element ID from find results or the page snapshot.'),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
 });
@@ -857,6 +865,13 @@ const DragInputSchemaBase = z.object({
     .describe(
       'Optional element ID. When provided, coordinates are relative to the element top-left corner.'
     ),
+  /** Modifier keys to hold during the drag */
+  modifiers: z
+    .array(z.enum(['Control', 'Shift', 'Alt', 'Meta']))
+    .optional()
+    .describe(
+      'Modifier keys to hold during the drag (e.g., Shift for constrained rotation, Control for copy-drag).'
+    ),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional().describe('The ID of the page.'),
 });
@@ -870,12 +885,56 @@ export type DragInput = z.infer<typeof DragInputSchema>;
 export type DragOutput = z.infer<typeof DragOutputSchema>;
 
 // ============================================================================
+// wheel - Dispatch a mouse wheel event
+// ============================================================================
+
+const WheelInputSchemaBase = z.object({
+  /** X coordinate where wheel event is dispatched */
+  x: z.number().describe('X coordinate where the wheel event is dispatched.'),
+  /** Y coordinate where wheel event is dispatched */
+  y: z.number().describe('Y coordinate where the wheel event is dispatched.'),
+  /** Horizontal scroll delta (positive = scroll right) */
+  deltaX: z
+    .number()
+    .default(0)
+    .describe('Horizontal scroll delta in pixels. Positive scrolls right.'),
+  /** Vertical scroll delta (positive = scroll down/zoom out) */
+  deltaY: z
+    .number()
+    .describe(
+      'Vertical scroll delta in pixels. Positive scrolls down, negative scrolls up. For zoom: negative typically zooms in, positive zooms out.'
+    ),
+  /** Optional element ID. When provided, x/y are relative to element top-left. */
+  eid: z
+    .string()
+    .optional()
+    .describe(
+      'Optional element ID. When provided, x/y coordinates are relative to the element top-left corner.'
+    ),
+  /** Modifier keys (e.g., Control for ctrl+scroll zoom) */
+  modifiers: z
+    .array(z.enum(['Control', 'Shift', 'Alt', 'Meta']))
+    .optional()
+    .describe('Modifier keys to hold during the wheel event (e.g., Control for zoom).'),
+  /** Page ID. If omitted, operates on the most recently used page */
+  page_id: z.string().optional().describe('The ID of the page.'),
+});
+export const WheelInputSchema = WheelInputSchemaBase;
+export { WheelInputSchemaBase };
+
+/** Returns XML state response string directly */
+export const WheelOutputSchema = z.string();
+
+export type WheelInput = z.infer<typeof WheelInputSchema>;
+export type WheelOutput = z.infer<typeof WheelOutputSchema>;
+
+// ============================================================================
 // inspect_canvas - Inspect canvas element for objects and coordinates
 // ============================================================================
 
 const InspectCanvasInputSchemaBase = z.object({
   /** Stable element ID of the canvas element */
-  eid: z.string().describe('Element ID of the canvas element from find_elements results.'),
+  eid: z.string().describe('Element ID of the canvas element from find results.'),
   /** Grid line spacing in pixels (default: 50) */
   grid_spacing: z
     .number()

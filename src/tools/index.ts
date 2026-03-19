@@ -30,6 +30,7 @@ export {
   select,
   hover,
   drag,
+  wheel,
   takeScreenshot,
   mapSchemaKindToNodeKind,
 } from './browser-tools.js';
@@ -74,28 +75,28 @@ export {
   ReloadOutputSchema,
   type ReloadInput,
   type ReloadOutput,
-  // capture_snapshot
+  // snapshot
   CaptureSnapshotInputSchema,
   CaptureSnapshotOutputSchema,
   type CaptureSnapshotInput,
   type CaptureSnapshotOutput,
-  // find_elements
+  // find
   FindElementsInputSchema,
   FindElementsOutputSchema,
   type FindElementsInput,
   type FindElementsOutput,
-  // get_element_details
+  // get_element
   GetNodeDetailsInputSchema,
   GetNodeDetailsOutputSchema,
   type GetNodeDetailsInput,
   type GetNodeDetailsOutput,
-  // scroll_element_into_view
+  // scroll_to
   ScrollElementIntoViewInputSchema,
   ScrollElementIntoViewInputSchemaBase,
   ScrollElementIntoViewOutputSchema,
   type ScrollElementIntoViewInput,
   type ScrollElementIntoViewOutput,
-  // scroll_page
+  // scroll
   ScrollPageInputSchema,
   ScrollPageOutputSchema,
   type ScrollPageInput,
@@ -135,13 +136,19 @@ export {
   DragOutputSchema,
   type DragInput,
   type DragOutput,
-  // take_screenshot
+  // wheel
+  WheelInputSchema,
+  WheelInputSchemaBase,
+  WheelOutputSchema,
+  type WheelInput,
+  type WheelOutput,
+  // screenshot
   TakeScreenshotInputSchema,
   TakeScreenshotInputSchemaBase,
   TakeScreenshotOutputSchema,
   type TakeScreenshotInput,
   type TakeScreenshotOutput,
-  // inspect_canvas
+  // inspect_canvas (unchanged)
   InspectCanvasInputSchema,
   InspectCanvasInputSchemaBase,
   type InspectCanvasInput,
