@@ -7,12 +7,8 @@
  * @module form/submit-detection
  */
 
-import type { BaseSnapshot, ReadableNode, NodeKind } from '../snapshot/snapshot.types.js';
-
-/**
- * Button kinds that could be submit buttons
- */
-const BUTTON_KINDS = new Set<NodeKind>(['button']);
+import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
+import { BUTTON_KINDS } from './form-actions.js';
 
 /**
  * Submit button keywords

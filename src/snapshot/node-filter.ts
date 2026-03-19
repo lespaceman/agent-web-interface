@@ -8,6 +8,7 @@
 
 import type { ReadableNode } from './snapshot.types.js';
 import type { RawNodeData, RawDomNode, RawAxNode } from './extractors/index.js';
+import { isInteractiveKind } from '../state/actionables-filter.js';
 
 /**
  * Filter out noise nodes to reduce snapshot size.
@@ -22,23 +23,8 @@ export function filterNoiseNodes(
   axTree: Map<number, RawAxNode>
 ): ReadableNode[] {
   // Build set of interactive node backend IDs for descendant checking
-  const interactiveKinds = new Set([
-    'button',
-    'link',
-    'input',
-    'textarea',
-    'select',
-    'combobox',
-    'checkbox',
-    'radio',
-    'switch',
-    'slider',
-    'tab',
-    'menuitem',
-    'canvas',
-  ]);
   const interactiveBackendIds = new Set(
-    nodes.filter((n) => interactiveKinds.has(n.kind)).map((n) => n.backend_node_id)
+    nodes.filter((n) => isInteractiveKind(n.kind)).map((n) => n.backend_node_id)
   );
 
   // Build parent-child relationship from DOM tree
