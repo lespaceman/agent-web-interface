@@ -877,13 +877,18 @@ describe('SessionManager', () => {
       // Use a deferred promise to control launch timing
       let resolveLaunch!: (value: typeof mockBrowser) => void;
       (puppeteer.launch as Mock).mockImplementation(
-        () => new Promise((resolve) => { resolveLaunch = resolve; })
+        () =>
+          new Promise((resolve) => {
+            resolveLaunch = resolve;
+          })
       );
 
       const launchPromise = sessionManager.launch({ isolated: true });
 
       // Yield to let _doLaunch progress past sync work to puppeteer.launch()
-      await new Promise((r) => { setTimeout(r, 0); });
+      await new Promise((r) => {
+        setTimeout(r, 0);
+      });
 
       // During launch, connectionPromise should be set
       expect(sessionManager.connectionPromise).not.toBeNull();
@@ -917,9 +922,8 @@ describe('SessionManager', () => {
 
     it('should produce a CONNECTION_TIMEOUT error on timeout', async () => {
       // Verify the error factory used by launch timeout produces the right code
-      const { BrowserSessionError } = await import(
-        '../../../src/shared/errors/browser-session.error.js'
-      );
+      const { BrowserSessionError } =
+        await import('../../../src/shared/errors/browser-session.error.js');
       const err = BrowserSessionError.connectionTimeout('chrome launch', 30000);
       expect(err.code).toBe('CONNECTION_TIMEOUT');
       expect(err.message).toContain('chrome launch');
@@ -931,14 +935,19 @@ describe('SessionManager', () => {
       // Use a deferred promise to control launch timing
       let resolveLaunch!: (value: typeof mockBrowser) => void;
       (puppeteer.launch as Mock).mockImplementation(
-        () => new Promise((resolve) => { resolveLaunch = resolve; })
+        () =>
+          new Promise((resolve) => {
+            resolveLaunch = resolve;
+          })
       );
 
       // First caller starts launch
       const launch1 = sessionManager.launch({ isolated: true });
 
       // Yield to let _doLaunch progress to puppeteer.launch()
-      await new Promise((r) => { setTimeout(r, 0); });
+      await new Promise((r) => {
+        setTimeout(r, 0);
+      });
 
       expect(sessionManager.connectionState).toBe('connecting');
 
@@ -986,14 +995,19 @@ describe('SessionManager', () => {
     it('should wait for in-flight connection then shut down', async () => {
       let resolveLaunch!: (value: typeof mockBrowser) => void;
       (puppeteer.launch as Mock).mockImplementation(
-        () => new Promise((resolve) => { resolveLaunch = resolve; })
+        () =>
+          new Promise((resolve) => {
+            resolveLaunch = resolve;
+          })
       );
 
       // Start launch (non-awaited)
       const launchPromise = sessionManager.launch({ isolated: true });
 
       // Yield to let _doLaunch progress
-      await new Promise((r) => { setTimeout(r, 0); });
+      await new Promise((r) => {
+        setTimeout(r, 0);
+      });
       expect(sessionManager.connectionState).toBe('connecting');
 
       // Start shutdown while connecting
@@ -1011,14 +1025,21 @@ describe('SessionManager', () => {
     it('should handle shutdown when in-flight connection fails', async () => {
       let rejectLaunch!: (reason: Error) => void;
       (puppeteer.launch as Mock).mockImplementation(
-        () => new Promise((_, reject) => { rejectLaunch = reject; })
+        () =>
+          new Promise((_, reject) => {
+            rejectLaunch = reject;
+          })
       );
 
       // Start launch (will fail)
-      const launchPromise = sessionManager.launch({ isolated: true }).catch(() => { /* expected */ });
+      const launchPromise = sessionManager.launch({ isolated: true }).catch(() => {
+        /* expected */
+      });
 
       // Yield to let _doLaunch progress
-      await new Promise((r) => { setTimeout(r, 0); });
+      await new Promise((r) => {
+        setTimeout(r, 0);
+      });
 
       // Start shutdown
       const shutdownPromise = sessionManager.shutdown();

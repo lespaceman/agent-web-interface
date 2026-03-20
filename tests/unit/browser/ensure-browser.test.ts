@@ -167,14 +167,19 @@ describe('ensureBrowserReady', () => {
       // Use a deferred promise to control launch timing
       let resolveLaunch!: (value: typeof mockBrowser) => void;
       (puppeteer.launch as Mock).mockImplementation(
-        () => new Promise((resolve) => { resolveLaunch = resolve; })
+        () =>
+          new Promise((resolve) => {
+            resolveLaunch = resolve;
+          })
       );
 
       // First call starts the launch (use isolated to skip fs.promises.mkdir)
       const call1 = ensureBrowserReady(sessionManager, { isolated: true });
 
       // Yield to let _doLaunch progress to puppeteer.launch()
-      await new Promise((r) => { setTimeout(r, 0); });
+      await new Promise((r) => {
+        setTimeout(r, 0);
+      });
 
       // Second call should detect 'connecting' state and await the promise
       const call2 = ensureBrowserReady(sessionManager, { isolated: true });

@@ -214,7 +214,9 @@ export class SessionManager {
       });
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(BrowserSessionError.connectionTimeout('chrome launch', DEFAULT_CONNECTION_TIMEOUT));
+          reject(
+            BrowserSessionError.connectionTimeout('chrome launch', DEFAULT_CONNECTION_TIMEOUT)
+          );
         }, DEFAULT_CONNECTION_TIMEOUT);
       });
 
@@ -222,7 +224,11 @@ export class SessionManager {
         browser = await Promise.race([launchPromise, timeoutPromise]);
       } catch (raceError) {
         // If timeout won the race, the launch may complete later — clean up the orphan
-        launchPromise.then((b) => b.close()).catch(() => {/* best-effort */});
+        launchPromise
+          .then((b) => b.close())
+          .catch(() => {
+            /* best-effort */
+          });
         throw raceError;
       }
 
@@ -387,7 +393,11 @@ export class SessionManager {
         browser = await Promise.race([connectionPromise, timeoutPromise]);
       } catch (raceError) {
         // If timeout won the race, the connect may complete later — clean up the orphan
-        connectionPromise.then((b) => b.disconnect()).catch(() => {/* best-effort */});
+        connectionPromise
+          .then((b) => b.disconnect())
+          .catch(() => {
+            /* best-effort */
+          });
         throw raceError;
       }
 
