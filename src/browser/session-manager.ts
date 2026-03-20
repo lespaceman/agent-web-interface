@@ -57,6 +57,9 @@ const DEFAULT_USER_DATA_DIR = path.join(
  * Supports two modes:
  * - launch(): Start a new browser instance
  * - connect(): Connect to an existing browser via CDP
+ *
+ * @deprecated Use SessionController for per-session state management and BrowserPool for browser lifecycle.
+ * SessionManager is retained for backward compatibility during the multi-tenancy migration.
  */
 export class SessionManager {
   private browser: Browser | null = null;
@@ -72,6 +75,8 @@ export class SessionManager {
   private browserDisconnectHandler: (() => void) | null = null;
   /** Last known WebSocket endpoint, saved during detach() for potential reconnection */
   private _lastWsEndpoint: string | undefined;
+  /** Promise for in-flight launch/connect operation */
+  private _connectionPromise: Promise<void> | null = null;
 
   constructor() {
     this.registry = new PageRegistry();
@@ -82,6 +87,14 @@ export class SessionManager {
    */
   get connectionState(): ConnectionState {
     return this._connectionState;
+  }
+
+  /**
+   * Get the in-flight connection promise, if any.
+   * Callers can await this instead of starting a duplicate launch/connect.
+   */
+  get connectionPromise(): Promise<void> | null {
+    return this._connectionPromise;
   }
 
   /**
@@ -139,6 +152,18 @@ export class SessionManager {
       throw BrowserSessionError.invalidState(this._connectionState, 'launch');
     }
 
+    this._connectionPromise = this._doLaunch(options);
+    try {
+      await this._connectionPromise;
+    } finally {
+      this._connectionPromise = null;
+    }
+  }
+
+  /**
+   * Internal launch implementation with timeout.
+   */
+  private async _doLaunch(options: LaunchOptions): Promise<void> {
     this.transitionTo('connecting');
     const {
       headless = true,
@@ -167,6 +192,7 @@ export class SessionManager {
     });
 
     let browser: Browser | null = null;
+    let timeoutId: NodeJS.Timeout | undefined;
 
     try {
       // Build Chrome args
@@ -177,7 +203,7 @@ export class SessionManager {
         ...args,
       ];
 
-      browser = await puppeteer.launch({
+      const launchPromise = puppeteer.launch({
         channel: executablePath ? undefined : channel,
         executablePath,
         headless,
@@ -186,6 +212,19 @@ export class SessionManager {
         pipe,
         args: chromeArgs,
       });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(BrowserSessionError.connectionTimeout('chrome launch', DEFAULT_CONNECTION_TIMEOUT));
+        }, DEFAULT_CONNECTION_TIMEOUT);
+      });
+
+      try {
+        browser = await Promise.race([launchPromise, timeoutPromise]);
+      } catch (raceError) {
+        // If timeout won the race, the launch may complete later — clean up the orphan
+        launchPromise.then((b) => b.close()).catch(() => {/* best-effort */});
+        throw raceError;
+      }
 
       // Get the default context (first one)
       this.context = browser.defaultBrowserContext();
@@ -205,10 +244,19 @@ export class SessionManager {
         });
       }
       this.transitionTo('failed');
+
+      // Re-throw BrowserSessionError as-is, wrap others
+      if (BrowserSessionError.isBrowserSessionError(error)) {
+        throw error;
+      }
       throw BrowserSessionError.connectionFailed(
         error instanceof Error ? error : new Error(extractErrorMessage(error)),
         { operation: 'launch' }
       );
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 
@@ -240,6 +288,18 @@ export class SessionManager {
       throw BrowserSessionError.invalidState(this._connectionState, 'connect');
     }
 
+    this._connectionPromise = this._doConnect(options);
+    try {
+      await this._connectionPromise;
+    } finally {
+      this._connectionPromise = null;
+    }
+  }
+
+  /**
+   * Internal connect implementation.
+   */
+  private async _doConnect(options: ConnectOptions): Promise<void> {
     const timeout = options.timeout ?? DEFAULT_CONNECTION_TIMEOUT;
     let connectOptions: { browserWSEndpoint?: string; browserURL?: string };
     let endpointForLogging: string;
@@ -323,7 +383,13 @@ export class SessionManager {
         }, timeout);
       });
 
-      browser = await Promise.race([connectionPromise, timeoutPromise]);
+      try {
+        browser = await Promise.race([connectionPromise, timeoutPromise]);
+      } catch (raceError) {
+        // If timeout won the race, the connect may complete later — clean up the orphan
+        connectionPromise.then((b) => b.disconnect()).catch(() => {/* best-effort */});
+        throw raceError;
+      }
 
       // Get the default context (existing browser's context)
       const contexts = browser.browserContexts();
@@ -623,8 +689,24 @@ export class SessionManager {
    * For connected browsers: disconnects but does NOT close the browser.
    */
   async shutdown(): Promise<void> {
-    // Check if there's anything to shut down
-    if (!this.browser || this._connectionState === 'disconnecting') {
+    // Already shutting down - avoid re-entrant calls
+    if (this._connectionState === 'disconnecting') {
+      return;
+    }
+
+    // If connection is in progress, wait for it to complete/fail first
+    if (this._connectionPromise) {
+      try {
+        await this._connectionPromise;
+      } catch {
+        // Connection failed — that's fine, we're shutting down anyway
+      }
+    }
+
+    // No browser to shut down - just reset state so we can reconnect
+    if (!this.browser) {
+      this.registry.clear();
+      this.transitionTo('idle');
       return;
     }
 
@@ -1032,9 +1114,12 @@ export class SessionManager {
 
     // Store reference for cleanup
     this.browserDisconnectHandler = () => {
-      // Only handle if we're in connected state (not during intentional shutdown)
-      if (this._connectionState === 'connected') {
-        this.logger.warning('Browser disconnected unexpectedly');
+      // Handle unexpected disconnect during connected or connecting states
+      // (not during intentional shutdown/disconnecting)
+      if (this._connectionState === 'connected' || this._connectionState === 'connecting') {
+        this.logger.warning('Browser disconnected unexpectedly', {
+          state: this._connectionState,
+        });
         this.browser = null;
         this.context = null;
         this.registry.clear();

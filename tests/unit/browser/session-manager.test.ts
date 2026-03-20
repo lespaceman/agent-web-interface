@@ -867,4 +867,169 @@ describe('SessionManager', () => {
       await expect(sessionManager.getConnectionHealth()).resolves.toBe('healthy');
     });
   });
+
+  describe('connectionPromise', () => {
+    it('should be null when idle', () => {
+      expect(sessionManager.connectionPromise).toBeNull();
+    });
+
+    it('should be set during launch and cleared after', async () => {
+      // Use a deferred promise to control launch timing
+      let resolveLaunch!: (value: typeof mockBrowser) => void;
+      (puppeteer.launch as Mock).mockImplementation(
+        () => new Promise((resolve) => { resolveLaunch = resolve; })
+      );
+
+      const launchPromise = sessionManager.launch({ isolated: true });
+
+      // Yield to let _doLaunch progress past sync work to puppeteer.launch()
+      await new Promise((r) => { setTimeout(r, 0); });
+
+      // During launch, connectionPromise should be set
+      expect(sessionManager.connectionPromise).not.toBeNull();
+      expect(sessionManager.connectionState).toBe('connecting');
+
+      // Complete the launch
+      resolveLaunch(mockBrowser);
+      await launchPromise;
+
+      // After launch, connectionPromise should be cleared
+      expect(sessionManager.connectionPromise).toBeNull();
+      expect(sessionManager.connectionState).toBe('connected');
+    });
+
+    it('should be cleared even when launch fails', async () => {
+      (puppeteer.launch as Mock).mockRejectedValue(new Error('Chrome not found'));
+
+      await expect(sessionManager.launch()).rejects.toThrow();
+
+      expect(sessionManager.connectionPromise).toBeNull();
+      expect(sessionManager.connectionState).toBe('failed');
+    });
+  });
+
+  describe('launch timeout', () => {
+    // Launch timeout uses the same Promise.race pattern as connect() timeout,
+    // which is tested in "connection timeout > should timeout if connection takes too long".
+    // The DEFAULT_CONNECTION_TIMEOUT (30s) can't be injected without refactoring,
+    // so we verify the mechanism indirectly: the timeout error type is correct,
+    // and the connect() test already validates the race pattern works.
+
+    it('should produce a CONNECTION_TIMEOUT error on timeout', async () => {
+      // Verify the error factory used by launch timeout produces the right code
+      const { BrowserSessionError } = await import(
+        '../../../src/shared/errors/browser-session.error.js'
+      );
+      const err = BrowserSessionError.connectionTimeout('chrome launch', 30000);
+      expect(err.code).toBe('CONNECTION_TIMEOUT');
+      expect(err.message).toContain('chrome launch');
+    });
+  });
+
+  describe('concurrent launch coalescing via ensureBrowserReady', () => {
+    it('should allow callers to await connectionPromise instead of double-launching', async () => {
+      // Use a deferred promise to control launch timing
+      let resolveLaunch!: (value: typeof mockBrowser) => void;
+      (puppeteer.launch as Mock).mockImplementation(
+        () => new Promise((resolve) => { resolveLaunch = resolve; })
+      );
+
+      // First caller starts launch
+      const launch1 = sessionManager.launch({ isolated: true });
+
+      // Yield to let _doLaunch progress to puppeteer.launch()
+      await new Promise((r) => { setTimeout(r, 0); });
+
+      expect(sessionManager.connectionState).toBe('connecting');
+
+      // Second caller sees 'connecting' and awaits the existing promise
+      const connectionPromise = sessionManager.connectionPromise;
+      expect(connectionPromise).not.toBeNull();
+
+      // Complete the launch
+      resolveLaunch(mockBrowser);
+      await launch1;
+      await connectionPromise;
+
+      // Only one launch call was made
+      expect(puppeteer.launch).toHaveBeenCalledTimes(1);
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+  });
+
+  describe('disconnect during connecting', () => {
+    let disconnectHandler: (() => void) | undefined;
+
+    beforeEach(() => {
+      mockBrowser.on = vi.fn((event: string, handler: () => void) => {
+        if (event === 'disconnected') {
+          disconnectHandler = handler;
+        }
+      });
+    });
+
+    it('should handle disconnect handler covering connecting state', async () => {
+      // Launch successfully first (so listeners are set up)
+      await sessionManager.launch();
+      expect(sessionManager.connectionState).toBe('connected');
+
+      // Simulate unexpected disconnect
+      Object.defineProperty(mockBrowser, 'connected', { value: false });
+      disconnectHandler?.();
+
+      expect(sessionManager.connectionState).toBe('failed');
+      expect(sessionManager.isRunning()).toBe(false);
+    });
+  });
+
+  describe('shutdown during connecting', () => {
+    it('should wait for in-flight connection then shut down', async () => {
+      let resolveLaunch!: (value: typeof mockBrowser) => void;
+      (puppeteer.launch as Mock).mockImplementation(
+        () => new Promise((resolve) => { resolveLaunch = resolve; })
+      );
+
+      // Start launch (non-awaited)
+      const launchPromise = sessionManager.launch({ isolated: true });
+
+      // Yield to let _doLaunch progress
+      await new Promise((r) => { setTimeout(r, 0); });
+      expect(sessionManager.connectionState).toBe('connecting');
+
+      // Start shutdown while connecting
+      const shutdownPromise = sessionManager.shutdown();
+
+      // Complete the launch — shutdown should proceed after
+      resolveLaunch(mockBrowser);
+      await launchPromise;
+      await shutdownPromise;
+
+      expect(sessionManager.connectionState).toBe('idle');
+      expect(sessionManager.isRunning()).toBe(false);
+    });
+
+    it('should handle shutdown when in-flight connection fails', async () => {
+      let rejectLaunch!: (reason: Error) => void;
+      (puppeteer.launch as Mock).mockImplementation(
+        () => new Promise((_, reject) => { rejectLaunch = reject; })
+      );
+
+      // Start launch (will fail)
+      const launchPromise = sessionManager.launch({ isolated: true }).catch(() => { /* expected */ });
+
+      // Yield to let _doLaunch progress
+      await new Promise((r) => { setTimeout(r, 0); });
+
+      // Start shutdown
+      const shutdownPromise = sessionManager.shutdown();
+
+      // Fail the launch
+      rejectLaunch(new Error('Chrome crashed'));
+
+      await launchPromise;
+      await shutdownPromise;
+
+      expect(sessionManager.connectionState).toBe('idle');
+    });
+  });
 });

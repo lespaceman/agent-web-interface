@@ -64,6 +64,14 @@ export async function ensureBrowserReady(
     return;
   }
 
+  // Connection in progress: wait for it instead of starting another
+  const inFlightPromise = session.connectionPromise;
+  if (session.connectionState === 'connecting' && inFlightPromise) {
+    logger.info('Awaiting in-flight browser connection');
+    await inFlightPromise;
+    return;
+  }
+
   const mode = shouldConnect(options) ? 'connect' : 'launch';
   logger.info('Lazy browser initialization triggered', { mode });
 
