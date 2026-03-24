@@ -15,7 +15,8 @@ import {
   type McpNotificationSender,
 } from '../shared/services/logging.service.js';
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { isCompositeResult, isImageResult, isFileResult } from '../tools/tool-result.types.js';
+import type { ToolRegistrar } from './tool-registrar.types.js';
+import { wrapToolHandler } from './tool-result-handler.js';
 
 export interface ServerConfig {
   name: string;
@@ -36,7 +37,10 @@ export interface BrowserAutomationServerEvents {
   'session:end': [];
 }
 
-export class BrowserAutomationServer extends EventEmitter implements McpNotificationSender {
+export class BrowserAutomationServer
+  extends EventEmitter
+  implements McpNotificationSender, ToolRegistrar
+{
   private server: McpServer;
   private transport: StdioServerTransport;
 
@@ -99,6 +103,7 @@ export class BrowserAutomationServer extends EventEmitter implements McpNotifica
     },
     handler: (input: unknown) => Promise<unknown>
   ): void {
+    const wrapped = wrapToolHandler(name, handler, !!definition.outputSchema);
     this.server.registerTool(
       name,
       {
@@ -107,103 +112,7 @@ export class BrowserAutomationServer extends EventEmitter implements McpNotifica
         inputSchema: definition.inputSchema,
         outputSchema: definition.outputSchema,
       },
-      async (input) => {
-        const logger = getLogger();
-        const startTime = Date.now();
-
-        try {
-          logger.debug(`Executing tool: ${name}`);
-          const result = await handler(input);
-          const executionTime = Date.now() - startTime;
-          logger.debug(`Tool ${name} completed in ${executionTime}ms`);
-
-          // Composite result - return as multi-content (text + image)
-          if (isCompositeResult(result)) {
-            if (isImageResult(result.image)) {
-              return {
-                content: [
-                  { type: 'text' as const, text: result.text },
-                  {
-                    type: 'image' as const,
-                    data: result.image.data,
-                    mimeType: result.image.mimeType,
-                  },
-                ],
-              };
-            } else {
-              // FileResult fallback - return text + file path
-              const sizeMB = (result.image.sizeBytes / 1024 / 1024).toFixed(2);
-              return {
-                content: [
-                  { type: 'text' as const, text: result.text },
-                  {
-                    type: 'text' as const,
-                    text: `Screenshot saved to: ${result.image.path} (${sizeMB} MB, ${result.image.mimeType})`,
-                  },
-                ],
-              };
-            }
-          }
-
-          // Image result - return as MCP ImageContent (inline base64)
-          if (isImageResult(result)) {
-            return {
-              content: [
-                {
-                  type: 'image' as const,
-                  data: result.data,
-                  mimeType: result.mimeType,
-                },
-              ],
-            };
-          }
-
-          // File result - return file path as text (for large screenshots)
-          if (isFileResult(result)) {
-            const sizeMB = (result.sizeBytes / 1024 / 1024).toFixed(2);
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Screenshot saved to: ${result.path} (${sizeMB} MB, ${result.mimeType})`,
-                },
-              ],
-            };
-          }
-
-          // When outputSchema is defined, return structuredContent for MCP validation
-          if (definition.outputSchema) {
-            return {
-              content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-              structuredContent: result as Record<string, unknown>,
-            };
-          }
-
-          // If result is already a string (e.g., XML), use it directly
-          // Otherwise JSON.stringify it
-          const textContent = typeof result === 'string' ? result : JSON.stringify(result);
-          return {
-            content: [{ type: 'text' as const, text: textContent }],
-          };
-        } catch (error) {
-          const executionTime = Date.now() - startTime;
-          logger.error(
-            `Tool ${name} failed after ${executionTime}ms`,
-            error instanceof Error ? error : undefined
-          );
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({
-                  error: error instanceof Error ? error.message : String(error),
-                }),
-              },
-            ],
-            isError: true,
-          };
-        }
-      }
+      wrapped
     );
   }
 

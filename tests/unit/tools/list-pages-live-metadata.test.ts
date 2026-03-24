@@ -56,12 +56,6 @@ vi.mock('../../../src/tools/execute-action.js', () => ({
   executeActionWithOutcome: vi.fn(),
 }));
 
-vi.mock('../../../src/tools/state-manager-registry.js', () => ({
-  getStateManager: vi.fn(),
-  removeStateManager: vi.fn(),
-  clearAllStateManagers: vi.fn(),
-}));
-
 vi.mock('../../../src/tools/action-stabilization.js', () => ({
   stabilizeAfterNavigation: vi.fn(),
   captureSnapshotFallback: vi.fn(),
@@ -89,9 +83,14 @@ vi.mock('../../../src/lib/temp-file.js', () => ({
   cleanupTempFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { initializeTools, listPages } from '../../../src/tools/browser-tools.js';
+import { listPages } from '../../../src/tools/navigation-tools.js';
+import { createTestToolContext } from '../../helpers/test-tool-context.js';
 
 describe('listPages live metadata', () => {
+  const ctx = createTestToolContext({
+    getSessionManager: vi.fn().mockReturnValue(mockSessionManager),
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -110,9 +109,7 @@ describe('listPages live metadata', () => {
         created_at: new Date(),
       },
     ]);
-    initializeTools(mockSessionManager);
-
-    const result = await listPages();
+    const result = await listPages(undefined, ctx);
 
     expect(result).toContain('page_id="page-live"');
     expect(result).toContain('url="https://live.example.com"');

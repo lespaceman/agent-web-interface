@@ -1,9 +1,13 @@
 /**
  * Navigation Cleanup Tests
  *
- * Verifies that navigation tools properly clear the dependency tracker.
+ * Verifies that navigation tools properly clear the dependency tracker
+ * via the ToolContext interface.
  */
+/* eslint-disable @typescript-eslint/unbound-method */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createTestToolContext } from '../../helpers/test-tool-context.js';
+import type { ToolContext } from '../../../src/tools/tool-context.types.js';
 
 // Create mock tracker instance at module level for reference in tests
 const mockClearPage = vi.fn();
@@ -11,12 +15,11 @@ const mockClearAll = vi.fn();
 const mockTracker = {
   clearPage: mockClearPage,
   clearAll: mockClearAll,
+  recordEffect: vi.fn(),
+  getDependenciesFor: vi.fn().mockReturnValue([]),
+  getDependentsOf: vi.fn().mockReturnValue([]),
+  getAllDependencies: vi.fn().mockReturnValue(new Map()),
 };
-
-// Mock modules before importing the module under test
-vi.mock('../../../src/form/index.js', () => ({
-  getDependencyTracker: vi.fn(() => mockTracker),
-}));
 
 const mockNavigateTo = vi.fn().mockResolvedValue(undefined);
 const mockClosePage = vi.fn().mockResolvedValue(undefined);
@@ -47,92 +50,29 @@ const mockSessionManager = {
   touchPage: mockTouchPage,
   closePage: mockClosePage,
   shutdown: mockShutdown,
+  listPages: vi.fn().mockReturnValue([]),
+  syncPages: vi.fn().mockResolvedValue([]),
+  createPage: vi.fn(),
+  resolvePage: vi.fn(),
+  rebindCdpSession: vi.fn(),
 };
 
-vi.mock('../../../src/browser/session-manager.js', () => ({
-  SessionManager: vi.fn(() => mockSessionManager),
-}));
-
-vi.mock('../../../src/snapshot/index.js', () => {
-  // Create a proper class mock for SnapshotStore
-  class MockSnapshotStore {
-    store = vi.fn();
-    getByPageId = vi.fn().mockReturnValue(null);
-    removeByPageId = vi.fn();
-    clear = vi.fn();
-  }
-  return {
-    SnapshotStore: MockSnapshotStore,
-    compileSnapshot: vi.fn().mockResolvedValue({
-      snapshot_id: 'snap-test',
-      url: 'https://example.com',
-      title: 'Test',
-      captured_at: new Date().toISOString(),
-      viewport: { width: 1280, height: 720 },
-      nodes: [],
-      meta: { node_count: 0, interactive_count: 0 },
-    }),
-    clickByBackendNodeId: vi.fn(),
-    typeByBackendNodeId: vi.fn(),
-    pressKey: vi.fn(),
-    selectOption: vi.fn(),
-    hoverByBackendNodeId: vi.fn(),
-    scrollIntoView: vi.fn(),
-    scrollPage: vi.fn(),
-  };
-});
-
-vi.mock('../../../src/tools/execute-action.js', () => ({
-  executeAction: vi.fn(),
-  executeActionWithRetry: vi.fn(),
-  executeActionWithOutcome: vi.fn(),
-}));
-
-vi.mock('../../../src/tools/state-manager-registry.js', () => ({
-  getStateManager: vi.fn(() => ({
-    generateResponse: vi.fn().mockReturnValue('<state>test</state>'),
-    getElementRegistry: vi.fn(() => ({
-      getByEid: vi.fn(),
-      getEidBySnapshotAndBackendNodeId: vi.fn(),
-    })),
-    getActiveLayer: vi.fn().mockReturnValue(null),
-  })),
-  removeStateManager: vi.fn(),
-  clearAllStateManagers: vi.fn(),
-}));
-
+// Mock only the modules that are still directly imported by navigation-tools
 vi.mock('../../../src/tools/action-stabilization.js', () => ({
   stabilizeAfterNavigation: vi.fn().mockResolvedValue(undefined),
   captureSnapshotFallback: vi.fn(),
 }));
 
-vi.mock('../../../src/observation/index.js', () => ({
-  observationAccumulator: {
-    inject: vi.fn().mockResolvedValue(undefined),
-    ensureInjected: vi.fn().mockResolvedValue(undefined),
-    getObservations: vi.fn().mockResolvedValue({ duringAction: [], sincePrevious: [] }),
-    getAccumulatedObservations: vi.fn().mockResolvedValue({ duringAction: [], sincePrevious: [] }),
-    reset: vi.fn().mockResolvedValue(undefined),
-    filterBySignificance: vi.fn().mockImplementation(<T>(obs: T): T => obs),
-  },
-  ATTACHMENT_SIGNIFICANCE_THRESHOLD: 5,
+vi.mock('../../../src/tools/response-builder.js', () => ({
+  buildClosePageResponse: vi.fn().mockReturnValue({ success: true }),
+  buildCloseSessionResponse: vi.fn().mockReturnValue({ success: true }),
+  buildFindElementsResponse: vi.fn(),
+  buildGetElementDetailsResponse: vi.fn(),
+  buildListPagesResponse: vi.fn(),
 }));
 
-vi.mock('../../../src/snapshot/snapshot-health.js', () => ({
-  captureWithStabilization: vi.fn().mockResolvedValue({
-    snapshot: {
-      snapshot_id: 'snap-test',
-      url: 'https://example.com',
-      title: 'Test',
-      captured_at: new Date().toISOString(),
-      viewport: { width: 1280, height: 720 },
-      nodes: [],
-      meta: { node_count: 0, interactive_count: 0 },
-    },
-    attempts: 1,
-    health: { valid: true, message: 'OK' },
-  }),
-  determineHealthCode: vi.fn().mockReturnValue('HEALTHY'),
+vi.mock('../../../src/lib/temp-file.js', () => ({
+  cleanupTempFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../../src/state/health.types.js', () => ({
@@ -146,13 +86,6 @@ vi.mock('../../../src/state/health.types.js', () => ({
   }),
 }));
 
-vi.mock('../../../src/tools/response-builder.js', () => ({
-  buildClosePageResponse: vi.fn().mockReturnValue({ success: true }),
-  buildCloseSessionResponse: vi.fn().mockReturnValue({ success: true }),
-  buildFindElementsResponse: vi.fn(),
-  buildGetElementDetailsResponse: vi.fn(),
-}));
-
 // Import module under test AFTER mocks are set up
 import {
   navigate,
@@ -161,16 +94,23 @@ import {
   reload,
   closePage,
   closeSession,
-  initializeTools,
-} from '../../../src/tools/browser-tools.js';
-import { getDependencyTracker } from '../../../src/form/index.js';
+} from '../../../src/tools/navigation-tools.js';
 
 describe('Navigation tools dependency tracker cleanup', () => {
+  let ctx: ToolContext;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    // Initialize tools with our mock session manager
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any
-    initializeTools(mockSessionManager as any);
+
+    // Wire mock session manager and dependency tracker through ctx
+    ctx = createTestToolContext({
+      getSessionManager: vi
+        .fn()
+        .mockReturnValue(mockSessionManager) as ToolContext['getSessionManager'],
+      getDependencyTracker: vi
+        .fn()
+        .mockReturnValue(mockTracker) as ToolContext['getDependencyTracker'],
+    });
   });
 
   afterEach(() => {
@@ -179,9 +119,9 @@ describe('Navigation tools dependency tracker cleanup', () => {
 
   describe('navigate()', () => {
     it('should clear dependency tracker for the page before navigation', async () => {
-      await navigate({ url: 'https://example.com', page_id: 'test-page' });
+      await navigate({ url: 'https://example.com', page_id: 'test-page' }, ctx);
 
-      expect(getDependencyTracker).toHaveBeenCalled();
+      expect(ctx.getDependencyTracker).toHaveBeenCalled();
       expect(mockClearPage).toHaveBeenCalledWith('test-page');
     });
 
@@ -196,7 +136,7 @@ describe('Navigation tools dependency tracker cleanup', () => {
         return Promise.resolve(undefined);
       });
 
-      await navigate({ url: 'https://example.com', page_id: 'test-page' });
+      await navigate({ url: 'https://example.com', page_id: 'test-page' }, ctx);
 
       expect(callOrder).toEqual(['clearPage', 'navigateTo']);
     });
@@ -204,45 +144,45 @@ describe('Navigation tools dependency tracker cleanup', () => {
 
   describe('goBack()', () => {
     it('should clear dependency tracker for the page', async () => {
-      await goBack({ page_id: 'test-page' });
+      await goBack({ page_id: 'test-page' }, ctx);
 
-      expect(getDependencyTracker).toHaveBeenCalled();
+      expect(ctx.getDependencyTracker).toHaveBeenCalled();
       expect(mockClearPage).toHaveBeenCalledWith('test-page');
     });
   });
 
   describe('goForward()', () => {
     it('should clear dependency tracker for the page', async () => {
-      await goForward({ page_id: 'test-page' });
+      await goForward({ page_id: 'test-page' }, ctx);
 
-      expect(getDependencyTracker).toHaveBeenCalled();
+      expect(ctx.getDependencyTracker).toHaveBeenCalled();
       expect(mockClearPage).toHaveBeenCalledWith('test-page');
     });
   });
 
   describe('reload()', () => {
     it('should clear dependency tracker for the page', async () => {
-      await reload({ page_id: 'test-page' });
+      await reload({ page_id: 'test-page' }, ctx);
 
-      expect(getDependencyTracker).toHaveBeenCalled();
+      expect(ctx.getDependencyTracker).toHaveBeenCalled();
       expect(mockClearPage).toHaveBeenCalledWith('test-page');
     });
   });
 
   describe('closePage()', () => {
     it('should clear dependency tracker for the closed page', async () => {
-      await closePage({ page_id: 'test-page' });
+      await closePage({ page_id: 'test-page' }, ctx);
 
-      expect(getDependencyTracker).toHaveBeenCalled();
+      expect(ctx.getDependencyTracker).toHaveBeenCalled();
       expect(mockClearPage).toHaveBeenCalledWith('test-page');
     });
   });
 
   describe('closeSession()', () => {
     it('should clear all dependency data', async () => {
-      await closeSession({});
+      await closeSession({}, ctx);
 
-      expect(getDependencyTracker).toHaveBeenCalled();
+      expect(ctx.getDependencyTracker).toHaveBeenCalled();
       expect(mockClearAll).toHaveBeenCalled();
     });
   });

@@ -61,12 +61,6 @@ vi.mock('../../../src/tools/execute-action.js', () => ({
   executeActionWithOutcome: vi.fn(),
 }));
 
-vi.mock('../../../src/tools/state-manager-registry.js', () => ({
-  getStateManager: vi.fn(),
-  removeStateManager: vi.fn(),
-  clearAllStateManagers: vi.fn(),
-}));
-
 vi.mock('../../../src/tools/action-stabilization.js', () => ({
   stabilizeAfterNavigation: vi.fn(),
   captureSnapshotFallback: vi.fn(),
@@ -94,18 +88,21 @@ vi.mock('../../../src/lib/temp-file.js', () => ({
   cleanupTempFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { initializeTools, listPages } from '../../../src/tools/browser-tools.js';
+import { listPages } from '../../../src/tools/navigation-tools.js';
+import { createTestToolContext } from '../../helpers/test-tool-context.js';
 
 describe('listPages', () => {
+  const ctx = createTestToolContext({
+    getSessionManager: vi.fn().mockReturnValue(mockSessionManager),
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should return empty pages list when no pages are registered', async () => {
     mockSyncPages.mockResolvedValue([]);
-    initializeTools(mockSessionManager);
-
-    const result = await listPages();
+    const result = await listPages(undefined, ctx);
 
     expect(result).toContain('type="list_pages"');
     expect(result).toContain('status="success"');
@@ -132,9 +129,7 @@ describe('listPages', () => {
         created_at: new Date(),
       },
     ]);
-    initializeTools(mockSessionManager);
-
-    const result = await listPages();
+    const result = await listPages(undefined, ctx);
 
     expect(result).toContain('count="2"');
     expect(result).toContain('page_id="page-abc"');
@@ -154,9 +149,7 @@ describe('listPages', () => {
         created_at: new Date(),
       },
     ]);
-    initializeTools(mockSessionManager);
-
-    const result = await listPages();
+    const result = await listPages(undefined, ctx);
 
     expect(result).toContain('count="1"');
     expect(result).toContain('page_id="page-new"');
@@ -175,9 +168,7 @@ describe('listPages', () => {
         created_at: new Date(),
       },
     ]);
-    initializeTools(mockSessionManager);
-
-    const result = await listPages();
+    const result = await listPages(undefined, ctx);
 
     expect(result).toContain('&amp;');
     expect(result).toContain('&lt;Page&gt;');

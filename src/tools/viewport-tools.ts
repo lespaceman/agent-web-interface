@@ -12,18 +12,8 @@ import {
 import { DragInputSchema, WheelInputSchema, TakeScreenshotInputSchema } from './tool-schemas.js';
 import { captureScreenshot, getElementBoundingBox } from '../screenshot/index.js';
 import { executeAction } from './execute-action.js';
-import {
-  getSessionManager,
-  getSnapshotStore,
-  resolveExistingPage,
-  ensureCdpSession,
-  requireSnapshot,
-  resolveElementByEid,
-} from './tool-context.js';
+import type { ToolContext } from './tool-context.types.js';
 import { prepareActionContext } from './action-context.js';
-
-// Convenience alias for module-internal use
-const snapshotStore = getSnapshotStore();
 
 /**
  * Drag from one point to another.
@@ -34,9 +24,12 @@ const snapshotStore = getSnapshotStore();
  * @param rawInput - Drag options (will be validated)
  * @returns Drag result with updated snapshot
  */
-export async function drag(rawInput: unknown): Promise<import('./tool-schemas.js').DragOutput> {
+export async function drag(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').DragOutput> {
   const input = DragInputSchema.parse(rawInput);
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
   let sourceX = input.source_x;
   let sourceY = input.source_y;
@@ -44,8 +37,8 @@ export async function drag(rawInput: unknown): Promise<import('./tool-schemas.js
   let targetY = input.target_y;
 
   if (input.eid) {
-    const snap = requireSnapshot(pageId);
-    const node = resolveElementByEid(pageId, input.eid, snap);
+    const snap = ctx.requireSnapshot(pageId);
+    const node = ctx.resolveElementByEid(pageId, input.eid, snap);
 
     const { x, y } = await getElementTopLeft(handleRef.current.cdp, node.backend_node_id);
     sourceX = x + input.source_x;
@@ -67,10 +60,11 @@ export async function drag(rawInput: unknown): Promise<import('./tool-schemas.js
         input.modifiers
       );
     },
+    ctx,
     captureSnapshot
   );
 
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
   return result.state_response;
 }
 
@@ -83,16 +77,19 @@ export async function drag(rawInput: unknown): Promise<import('./tool-schemas.js
  * @param rawInput - Wheel options (will be validated)
  * @returns Wheel result with updated snapshot
  */
-export async function wheel(rawInput: unknown): Promise<import('./tool-schemas.js').WheelOutput> {
+export async function wheel(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').WheelOutput> {
   const input = WheelInputSchema.parse(rawInput);
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
   let x = input.x;
   let y = input.y;
 
   if (input.eid) {
-    const snap = requireSnapshot(pageId);
-    const node = resolveElementByEid(pageId, input.eid, snap);
+    const snap = ctx.requireSnapshot(pageId);
+    const node = ctx.resolveElementByEid(pageId, input.eid, snap);
 
     const topLeft = await getElementTopLeft(handleRef.current.cdp, node.backend_node_id);
     x = topLeft.x + input.x;
@@ -111,10 +108,11 @@ export async function wheel(rawInput: unknown): Promise<import('./tool-schemas.j
         input.modifiers
       );
     },
+    ctx,
     captureSnapshot
   );
 
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
   return result.state_response;
 }
 
@@ -128,7 +126,8 @@ export async function wheel(rawInput: unknown): Promise<import('./tool-schemas.j
  * @returns ImageResult or FileResult
  */
 export async function takeScreenshot(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): Promise<import('./tool-schemas.js').TakeScreenshotOutput> {
   const input = TakeScreenshotInputSchema.parse(rawInput);
 
@@ -138,18 +137,17 @@ export async function takeScreenshot(
     );
   }
 
-  const session = getSessionManager();
-  let handle = resolveExistingPage(session, input.page_id);
+  let handle = ctx.resolveExistingPage(input.page_id);
   const pageId = handle.page_id;
 
   // Ensure CDP session is healthy (auto-repair if needed)
-  const ensureResult = await ensureCdpSession(session, handle);
+  const ensureResult = await ctx.ensureCdpSession(handle);
   handle = ensureResult.handle;
 
   let clip: import('devtools-protocol').Protocol.Page.Viewport | undefined;
   if (input.eid) {
-    const snapshot = requireSnapshot(pageId);
-    const node = resolveElementByEid(pageId, input.eid, snapshot);
+    const snapshot = ctx.requireSnapshot(pageId);
+    const node = ctx.resolveElementByEid(pageId, input.eid, snapshot);
     clip = await getElementBoundingBox(handle.cdp, node.backend_node_id);
   }
 

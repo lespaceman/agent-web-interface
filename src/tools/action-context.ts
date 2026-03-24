@@ -6,7 +6,6 @@
  * runtime health building, and tool initialization.
  */
 
-import type { SessionManager } from '../browser/session-manager.js';
 import type { PageHandle } from '../browser/page-registry.js';
 import type { BaseSnapshot } from '../snapshot/snapshot.types.js';
 import type { RuntimeHealth } from '../state/health.types.js';
@@ -16,20 +15,7 @@ import {
   type CaptureWithStabilizationResult,
 } from '../snapshot/snapshot-health.js';
 import type { CaptureSnapshotFn } from './execute-action.js';
-import {
-  initializeToolContext,
-  getSessionManager,
-  resolveExistingPage,
-  ensureCdpSession,
-} from './tool-context.js';
-
-/**
- * Initialize tools with a session manager instance.
- * Must be called before using any tool handlers.
- */
-export function initializeTools(manager: SessionManager): void {
-  initializeToolContext(manager);
-}
+import type { ToolContext } from './tool-context.types.js';
 
 /**
  * Build runtime health details from a capture attempt.
@@ -55,11 +41,11 @@ export function buildRuntimeHealth(
  * Capture a snapshot with stabilization and CDP recovery when empty.
  */
 export async function captureSnapshotWithRecovery(
-  session: SessionManager,
+  ctx: ToolContext,
   handle: PageHandle,
   pageId: string
 ): Promise<{ snapshot: BaseSnapshot; handle: PageHandle; runtime_health: RuntimeHealth }> {
-  const ensureResult = await ensureCdpSession(session, handle);
+  const ensureResult = await ctx.ensureCdpSession(handle);
   handle = ensureResult.handle;
 
   let result = await captureWithStabilization(handle.cdp, handle.page, pageId);
@@ -69,7 +55,7 @@ export async function captureSnapshotWithRecovery(
     const healthCode = determineHealthCode(result);
     console.warn(`[RECOVERY] Empty snapshot for ${pageId} (${healthCode}); rebinding CDP session`);
 
-    handle = await session.rebindCdpSession(pageId);
+    handle = await ctx.getSessionManager().rebindCdpSession(pageId);
     result = await captureWithStabilization(handle.cdp, handle.page, pageId, { maxRetries: 1 });
     runtime_health = buildRuntimeHealth(
       { ok: true, recovered: true, recovery_method: 'rebind' },
@@ -84,12 +70,12 @@ export async function captureSnapshotWithRecovery(
  * Create a capture function that keeps the handle updated after recovery.
  */
 export function createActionCapture(
-  session: SessionManager,
+  ctx: ToolContext,
   handleRef: { current: PageHandle },
   pageId: string
 ): CaptureSnapshotFn {
   return async () => {
-    const captureResult = await captureSnapshotWithRecovery(session, handleRef.current, pageId);
+    const captureResult = await captureSnapshotWithRecovery(ctx, handleRef.current, pageId);
     handleRef.current = captureResult.handle;
     return {
       snapshot: captureResult.snapshot,
@@ -112,8 +98,8 @@ export interface ActionContext {
   pageId: string;
   /** Snapshot capture function */
   captureSnapshot: CaptureSnapshotFn;
-  /** Session manager instance */
-  session: SessionManager;
+  /** Tool context instance */
+  ctx: ToolContext;
 }
 
 /**
@@ -123,14 +109,16 @@ export interface ActionContext {
  * @param pageId - Optional page ID to resolve
  * @returns Action context with handle, capture function, and session
  */
-export async function prepareActionContext(pageId: string | undefined): Promise<ActionContext> {
-  const session = getSessionManager();
-  const handleRef = { current: resolveExistingPage(session, pageId) };
+export async function prepareActionContext(
+  pageId: string | undefined,
+  ctx: ToolContext
+): Promise<ActionContext> {
+  const handleRef = { current: ctx.resolveExistingPage(pageId) };
   const resolvedPageId = handleRef.current.page_id;
 
-  handleRef.current = (await ensureCdpSession(session, handleRef.current)).handle;
+  handleRef.current = (await ctx.ensureCdpSession(handleRef.current)).handle;
   await handleRef.current.page.bringToFront();
-  const captureSnapshot = createActionCapture(session, handleRef, resolvedPageId);
+  const captureSnapshot = createActionCapture(ctx, handleRef, resolvedPageId);
 
-  return { handleRef, pageId: resolvedPageId, captureSnapshot, session };
+  return { handleRef, pageId: resolvedPageId, captureSnapshot, ctx };
 }

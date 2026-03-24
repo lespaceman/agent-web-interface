@@ -4,7 +4,6 @@
  * MCP tool handlers for browser navigation and session management.
  */
 
-import { observationAccumulator } from '../observation/index.js';
 import {
   ClosePageInputSchema,
   CloseSessionInputSchema,
@@ -14,23 +13,13 @@ import {
   ReloadInputSchema,
 } from './tool-schemas.js';
 import { cleanupTempFiles } from '../lib/temp-file.js';
-import {
-  getStateManager,
-  removeStateManager,
-  clearAllStateManagers,
-} from './state-manager-registry.js';
 import { stabilizeAfterNavigation } from './action-stabilization.js';
 import {
   buildClosePageResponse,
   buildCloseSessionResponse,
   buildListPagesResponse,
 } from './response-builder.js';
-import { getDependencyTracker } from '../form/index.js';
-import { getSessionManager, getSnapshotStore } from './tool-context.js';
-import { captureSnapshotWithRecovery } from './action-context.js';
-
-// Convenience alias for module-internal use
-const snapshotStore = getSnapshotStore();
+import type { ToolContext } from './tool-context.types.js';
 
 /**
  * Navigation action types.
@@ -50,16 +39,17 @@ type NavigationAction = 'back' | 'forward' | 'reload';
  */
 async function executeNavigationAction(
   pageId: string | undefined,
+  ctx: ToolContext,
   action: NavigationAction
 ): Promise<string> {
-  const session = getSessionManager();
+  const session = ctx.getSessionManager();
 
   let handle = await session.resolvePageOrCreate(pageId);
   const page_id = handle.page_id;
   session.touchPage(page_id);
 
   // Clear dependency tracker before navigation (old dependencies no longer valid)
-  getDependencyTracker().clearPage(page_id);
+  ctx.getDependencyTracker().clearPage(page_id);
 
   // Execute navigation
   switch (action) {
@@ -78,16 +68,16 @@ async function executeNavigationAction(
   await stabilizeAfterNavigation(handle.page);
 
   // Re-inject observation accumulator (new document context after navigation)
-  await observationAccumulator.inject(handle.page);
+  await ctx.getObservationAccumulator().inject(handle.page);
 
   // Auto-capture snapshot after navigation
-  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  const captureResult = await ctx.captureSnapshotWithRecovery(handle, page_id);
   handle = captureResult.handle;
   const snapshot = captureResult.snapshot;
-  snapshotStore.store(page_id, snapshot);
+  ctx.getSnapshotStore().store(page_id, snapshot);
 
   // Return XML state response (trimmed for navigation snapshots)
-  const stateManager = getStateManager(page_id);
+  const stateManager = ctx.getStateManager(page_id);
   return stateManager.generateResponse(snapshot, { trimRegions: true });
 }
 
@@ -99,8 +89,11 @@ async function executeNavigationAction(
  *
  * @returns XML result with page list
  */
-export async function listPages(): Promise<import('./tool-schemas.js').ListPagesOutput> {
-  const session = getSessionManager();
+export async function listPages(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').ListPagesOutput> {
+  const session = ctx.getSessionManager();
   // Sync to pick up any unregistered browser tabs
   const pages = await session.syncPages();
   const pageInfos = await Promise.all(
@@ -136,15 +129,16 @@ export async function listPages(): Promise<import('./tool-schemas.js').ListPages
  * @returns Close result
  */
 export async function closePage(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): Promise<import('./tool-schemas.js').ClosePageOutput> {
   const input = ClosePageInputSchema.parse(rawInput);
-  const session = getSessionManager();
+  const session = ctx.getSessionManager();
 
   await session.closePage(input.page_id);
-  snapshotStore.removeByPageId(input.page_id);
-  removeStateManager(input.page_id); // Clean up state manager
-  getDependencyTracker().clearPage(input.page_id); // Clean up dependencies
+  ctx.getSnapshotStore().removeByPageId(input.page_id);
+  ctx.removeStateManager(input.page_id); // Clean up state manager
+  ctx.getDependencyTracker().clearPage(input.page_id); // Clean up dependencies
 
   return buildClosePageResponse(input.page_id);
 }
@@ -156,15 +150,16 @@ export async function closePage(
  * @returns Close result
  */
 export async function closeSession(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): Promise<import('./tool-schemas.js').CloseSessionOutput> {
   CloseSessionInputSchema.parse(rawInput);
-  const session = getSessionManager();
+  const session = ctx.getSessionManager();
 
   await session.shutdown();
-  snapshotStore.clear();
-  clearAllStateManagers(); // Clean up all state managers
-  getDependencyTracker().clearAll(); // Clean up all dependencies
+  ctx.getSnapshotStore().clear();
+  ctx.clearAllStateManagers(); // Clean up all state managers
+  ctx.getDependencyTracker().clearAll(); // Clean up all dependencies
   await cleanupTempFiles(); // Clean up screenshot temp files
 
   return buildCloseSessionResponse();
@@ -177,28 +172,29 @@ export async function closeSession(
  * @returns Navigation result with snapshot data
  */
 export async function navigate(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): Promise<import('./tool-schemas.js').NavigateOutput> {
   const input = NavigateInputSchema.parse(rawInput);
-  const session = getSessionManager();
+  const session = ctx.getSessionManager();
 
   let handle = await session.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
   session.touchPage(page_id);
 
   // Clear dependency tracker before navigation (old dependencies no longer valid)
-  getDependencyTracker().clearPage(page_id);
+  ctx.getDependencyTracker().clearPage(page_id);
 
   await session.navigateTo(page_id, input.url);
 
   // Auto-capture snapshot after navigation
-  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  const captureResult = await ctx.captureSnapshotWithRecovery(handle, page_id);
   handle = captureResult.handle;
   const snapshot = captureResult.snapshot;
-  snapshotStore.store(page_id, snapshot);
+  ctx.getSnapshotStore().store(page_id, snapshot);
 
   // Return XML state response directly (trimmed for navigation snapshots)
-  const stateManager = getStateManager(page_id);
+  const stateManager = ctx.getStateManager(page_id);
   return stateManager.generateResponse(snapshot, { trimRegions: true });
 }
 
@@ -208,9 +204,12 @@ export async function navigate(
  * @param rawInput - Navigation options (will be validated)
  * @returns Navigation result with snapshot data
  */
-export async function goBack(rawInput: unknown): Promise<import('./tool-schemas.js').GoBackOutput> {
+export async function goBack(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').GoBackOutput> {
   const input = GoBackInputSchema.parse(rawInput);
-  return executeNavigationAction(input.page_id, 'back');
+  return executeNavigationAction(input.page_id, ctx, 'back');
 }
 
 /**
@@ -220,10 +219,11 @@ export async function goBack(rawInput: unknown): Promise<import('./tool-schemas.
  * @returns Navigation result with snapshot data
  */
 export async function goForward(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): Promise<import('./tool-schemas.js').GoForwardOutput> {
   const input = GoForwardInputSchema.parse(rawInput);
-  return executeNavigationAction(input.page_id, 'forward');
+  return executeNavigationAction(input.page_id, ctx, 'forward');
 }
 
 /**
@@ -232,7 +232,10 @@ export async function goForward(
  * @param rawInput - Navigation options (will be validated)
  * @returns Navigation result with snapshot data
  */
-export async function reload(rawInput: unknown): Promise<import('./tool-schemas.js').ReloadOutput> {
+export async function reload(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').ReloadOutput> {
   const input = ReloadInputSchema.parse(rawInput);
-  return executeNavigationAction(input.page_id, 'reload');
+  return executeNavigationAction(input.page_id, ctx, 'reload');
 }

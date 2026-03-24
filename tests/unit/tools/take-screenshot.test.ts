@@ -2,7 +2,6 @@
  * take_screenshot Tool Handler Tests
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { SessionManager } from '../../../src/browser/session-manager.js';
 
 // ============================================================================
 // Hoisted mocks (accessible inside vi.mock factories)
@@ -10,24 +9,17 @@ import type { SessionManager } from '../../../src/browser/session-manager.js';
 
 const {
   mockResolvePage,
-  mockTouchPage,
   mockStoreGetByPageId,
   mockGetStateManager,
   mockCaptureScreenshot,
   mockGetElementBoundingBox,
 } = vi.hoisted(() => ({
   mockResolvePage: vi.fn(),
-  mockTouchPage: vi.fn(),
   mockStoreGetByPageId: vi.fn(),
   mockGetStateManager: vi.fn(),
   mockCaptureScreenshot: vi.fn(),
   mockGetElementBoundingBox: vi.fn(),
 }));
-
-const mockSessionManager = {
-  resolvePage: mockResolvePage,
-  touchPage: mockTouchPage,
-} as unknown as SessionManager;
 
 // ============================================================================
 // Module mocks
@@ -80,12 +72,6 @@ vi.mock('../../../src/tools/execute-action.js', () => ({
   executeActionWithOutcome: vi.fn(),
 }));
 
-vi.mock('../../../src/tools/state-manager-registry.js', () => ({
-  getStateManager: mockGetStateManager,
-  removeStateManager: vi.fn(),
-  clearAllStateManagers: vi.fn(),
-}));
-
 vi.mock('../../../src/tools/action-stabilization.js', () => ({
   stabilizeAfterNavigation: vi.fn(),
   captureSnapshotFallback: vi.fn(),
@@ -113,8 +99,10 @@ vi.mock('../../../src/lib/temp-file.js', () => ({
   cleanupTempFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { initializeTools, takeScreenshot } from '../../../src/tools/browser-tools.js';
+import { takeScreenshot } from '../../../src/tools/viewport-tools.js';
 import { TakeScreenshotInputSchema } from '../../../src/tools/tool-schemas.js';
+import { createTestToolContext } from '../../helpers/test-tool-context.js';
+import type { ToolContext } from '../../../src/tools/tool-context.types.js';
 
 // ============================================================================
 // Tests
@@ -148,14 +136,46 @@ describe('takeScreenshot', () => {
     isActive: vi.fn().mockReturnValue(true),
   };
 
+  let ctx: ToolContext;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    initializeTools(mockSessionManager);
     mockResolvePage.mockReturnValue({
       page_id: 'page-1',
       page: {},
       cdp: mockCdp,
       created_at: new Date(),
+    });
+    ctx = createTestToolContext({
+      resolvePage: mockResolvePage as ToolContext['resolvePage'],
+      resolveExistingPage: vi.fn().mockImplementation((pageId?: string) => {
+        const result = mockResolvePage(pageId) as ReturnType<
+          ToolContext['resolveExistingPage']
+        > | null;
+        if (!result) throw new Error('Page not found');
+        return result;
+      }) as ToolContext['resolveExistingPage'],
+      ensureCdpSession: vi.fn().mockResolvedValue({
+        handle: { page_id: 'page-1', page: {}, cdp: mockCdp, created_at: new Date() },
+        recovered: false,
+        runtime_health: {},
+      }) as ToolContext['ensureCdpSession'],
+      getStateManager: mockGetStateManager as ToolContext['getStateManager'],
+      getSnapshotStore: vi
+        .fn()
+        .mockReturnValue({ getByPageId: mockStoreGetByPageId }) as ToolContext['getSnapshotStore'],
+      requireSnapshot: vi.fn().mockImplementation((pageId: string) => {
+        const snap = mockStoreGetByPageId(pageId) as ReturnType<
+          ToolContext['requireSnapshot']
+        > | null;
+        if (!snap) throw new Error('No snapshot available');
+        return snap;
+      }) as ToolContext['requireSnapshot'],
+      resolveElementByEid: vi.fn().mockReturnValue({
+        backend_node_id: 42,
+        kind: 'button',
+        label: 'Submit',
+      }) as unknown as ToolContext['resolveElementByEid'],
     });
   });
 
@@ -167,7 +187,7 @@ describe('takeScreenshot', () => {
       sizeBytes: 1024,
     });
 
-    const result = await takeScreenshot({});
+    const result = await takeScreenshot({}, ctx);
 
     expect(result.type).toBe('image');
     expect(mockCaptureScreenshot).toHaveBeenCalledWith(mockCdp, {
@@ -186,7 +206,7 @@ describe('takeScreenshot', () => {
       sizeBytes: 1024,
     });
 
-    await takeScreenshot({ fullPage: true });
+    await takeScreenshot({ fullPage: true }, ctx);
 
     expect(mockCaptureScreenshot).toHaveBeenCalledWith(
       mockCdp,
@@ -202,7 +222,7 @@ describe('takeScreenshot', () => {
       sizeBytes: 512,
     });
 
-    await takeScreenshot({ format: 'jpeg', quality: 60 });
+    await takeScreenshot({ format: 'jpeg', quality: 60 }, ctx);
 
     expect(mockCaptureScreenshot).toHaveBeenCalledWith(
       mockCdp,
@@ -233,14 +253,14 @@ describe('takeScreenshot', () => {
       sizeBytes: 512,
     });
 
-    await takeScreenshot({ eid: 'btn-submit' });
+    await takeScreenshot({ eid: 'btn-submit' }, ctx);
 
     expect(mockGetElementBoundingBox).toHaveBeenCalledWith(mockCdp, 42);
     expect(mockCaptureScreenshot).toHaveBeenCalledWith(mockCdp, expect.objectContaining({ clip }));
   });
 
   it('should reject when both eid and fullPage are provided', async () => {
-    await expect(takeScreenshot({ eid: 'btn-1', fullPage: true })).rejects.toThrow(
+    await expect(takeScreenshot({ eid: 'btn-1', fullPage: true }, ctx)).rejects.toThrow(
       "Cannot use both 'eid' and 'fullPage'"
     );
   });
@@ -253,7 +273,7 @@ describe('takeScreenshot', () => {
       sizeBytes: 3 * 1024 * 1024,
     });
 
-    const result = await takeScreenshot({});
+    const result = await takeScreenshot({}, ctx);
 
     expect(result.type).toBe('file');
     if (result.type === 'file') {
@@ -264,13 +284,13 @@ describe('takeScreenshot', () => {
   it('should throw when page not found', async () => {
     mockResolvePage.mockReturnValue(null);
 
-    await expect(takeScreenshot({ page_id: 'nonexistent' })).rejects.toThrow('Page not found');
+    await expect(takeScreenshot({ page_id: 'nonexistent' }, ctx)).rejects.toThrow('Page not found');
   });
 
   it('should throw when eid provided but no snapshot exists', async () => {
     mockStoreGetByPageId.mockReturnValue(null);
 
-    await expect(takeScreenshot({ eid: 'btn-1' })).rejects.toThrow();
+    await expect(takeScreenshot({ eid: 'btn-1' }, ctx)).rejects.toThrow();
   });
 
   it('should resolve page_id correctly', async () => {
@@ -281,9 +301,9 @@ describe('takeScreenshot', () => {
       sizeBytes: 3,
     });
 
-    await takeScreenshot({ page_id: 'page-1' });
+    await takeScreenshot({ page_id: 'page-1' }, ctx);
 
-    expect(mockResolvePage).toHaveBeenCalledWith('page-1');
-    expect(mockTouchPage).toHaveBeenCalledWith('page-1');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(ctx.resolveExistingPage).toHaveBeenCalledWith('page-1');
   });
 });

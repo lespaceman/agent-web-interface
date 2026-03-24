@@ -8,7 +8,16 @@
 /**
  * Server configuration from CLI arguments
  */
+/** Transport mode for the MCP server */
+export type TransportMode = 'stdio' | 'http';
+
 export interface ServerArgs {
+  /** Transport mode: stdio (default) or http */
+  transport: TransportMode;
+
+  /** Port for HTTP transport (default: 3000) */
+  port: number;
+
   /** Run browser in headless mode (default: false) */
   headless: boolean;
 
@@ -36,6 +45,8 @@ export interface ServerArgs {
 
 /** Known CLI argument base names for validation */
 const KNOWN_ARG_NAMES = new Set([
+  'transport',
+  'port',
   'headless',
   'isolated',
   'autoConnect',
@@ -64,6 +75,8 @@ function isKnownArg(arg: string): boolean {
  */
 export function parseArgs(argv: string[]): ServerArgs {
   const args: ServerArgs = {
+    transport: 'stdio',
+    port: 3000,
     headless: false,
     isolated: false,
     autoConnect: false,
@@ -72,7 +85,16 @@ export function parseArgs(argv: string[]): ServerArgs {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
 
-    if (arg === '--headless=false' || arg === '--headless=0') {
+    if (arg === '--transport' && argv[i + 1]) {
+      const value = argv[++i];
+      if (value === 'stdio' || value === 'http') {
+        args.transport = value;
+      } else {
+        console.warn(`Warning: Unknown transport "${value}" - defaulting to stdio`);
+      }
+    } else if (arg === '--port' && argv[i + 1]) {
+      args.port = parseInt(argv[++i], 10);
+    } else if (arg === '--headless=false' || arg === '--headless=0') {
       args.headless = false;
     } else if (arg === '--headless=true' || arg === '--headless=1' || arg === '--headless') {
       args.headless = true;
@@ -94,6 +116,14 @@ export function parseArgs(argv: string[]): ServerArgs {
       // Warn about unknown arguments to catch typos like --hedless
       console.warn(`Warning: Unknown argument "${arg}" - ignored`);
     }
+  }
+
+  // Environment variable overrides for transport settings
+  if (process.env.TRANSPORT === 'http') {
+    args.transport = 'http';
+  }
+  if (process.env.HTTP_PORT) {
+    args.port = parseInt(process.env.HTTP_PORT, 10);
   }
 
   return args;

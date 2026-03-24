@@ -7,15 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readPage } from '../../../src/tools/readability-tools.js';
 import { buildReadPageResponse } from '../../../src/tools/response-builder.js';
-
-// Mock tool-context (hoisted before imports)
-const mockResolveExistingPage = vi.fn();
-const mockGetSessionManager = vi.fn();
-
-vi.mock('../../../src/tools/tool-context.js', () => ({
-  getSessionManager: (...args: unknown[]): unknown => mockGetSessionManager(...args),
-  resolveExistingPage: (...args: unknown[]): unknown => mockResolveExistingPage(...args),
-}));
+import { createTestToolContext } from '../../helpers/test-tool-context.js';
+import type { ToolContext } from '../../../src/tools/tool-context.types.js';
 
 // ============================================================================
 // buildReadPageResponse Tests
@@ -110,8 +103,11 @@ describe('buildReadPageResponse', () => {
 // ============================================================================
 
 describe('readPage handler', () => {
+  let ctx: ToolContext;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    ctx = createTestToolContext();
   });
 
   function setupMockPage(html: string, url: string, pageId = 'page-1') {
@@ -124,8 +120,8 @@ describe('readPage handler', () => {
       page: mockPage,
       cdp: { isActive: () => true },
     };
-    mockGetSessionManager.mockReturnValue({});
-    mockResolveExistingPage.mockReturnValue(mockHandle);
+    ctx.getSessionManager = vi.fn().mockReturnValue({});
+    ctx.resolveExistingPage = vi.fn().mockReturnValue(mockHandle);
     return { mockPage, mockHandle };
   }
 
@@ -154,7 +150,7 @@ describe('readPage handler', () => {
       'https://example.com/article'
     );
 
-    const result = await readPage({});
+    const result = await readPage({}, ctx);
 
     expect(result).toContain('<result type="read_page">');
     expect(result).toContain('Test Article');
@@ -165,7 +161,7 @@ describe('readPage handler', () => {
     // An empty page with no meaningful content causes Readability to return null
     setupMockPage('<html><head></head><body></body></html>', 'https://example.com/app');
 
-    const result = await readPage({});
+    const result = await readPage({}, ctx);
 
     expect(result).toContain('<error>');
     expect(result).toContain('Could not extract readable content');
@@ -175,16 +171,18 @@ describe('readPage handler', () => {
   it('should pass page_id to resolveExistingPage', async () => {
     setupMockPage('<html><body>short</body></html>', 'https://example.com', 'custom-page');
 
-    await readPage({ page_id: 'custom-page' });
+    await readPage({ page_id: 'custom-page' }, ctx);
 
-    expect(mockResolveExistingPage).toHaveBeenCalledWith(expect.anything(), 'custom-page');
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(ctx.resolveExistingPage).toHaveBeenCalledWith('custom-page');
   });
 
   it('should default to MRU page when page_id is omitted', async () => {
     setupMockPage('<html><body>short</body></html>', 'https://example.com');
 
-    await readPage({});
+    await readPage({}, ctx);
 
-    expect(mockResolveExistingPage).toHaveBeenCalledWith(expect.anything(), undefined);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(ctx.resolveExistingPage).toHaveBeenCalledWith(undefined);
   });
 });

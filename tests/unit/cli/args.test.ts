@@ -12,6 +12,8 @@ describe('parseArgs', () => {
     const args: ServerArgs = parseArgs([]);
 
     expect(args).toEqual({
+      transport: 'stdio',
+      port: 3000,
       headless: false,
       isolated: false,
       browserUrl: undefined,
@@ -105,6 +107,8 @@ describe('parseArgs', () => {
     const args = parseArgs(['--unknownArg', 'value', '--anotherUnknown']);
 
     expect(args).toEqual({
+      transport: 'stdio',
+      port: 3000,
       headless: false,
       isolated: false,
       browserUrl: undefined,
@@ -136,6 +140,34 @@ describe('parseArgs', () => {
     expect(warnSpy).toHaveBeenCalledWith('Warning: Unknown argument "--autoconnect" - ignored');
 
     warnSpy.mockRestore();
+  });
+
+  it('should parse --transport stdio', () => {
+    const args = parseArgs(['--transport', 'stdio']);
+    expect(args.transport).toBe('stdio');
+  });
+
+  it('should parse --transport http', () => {
+    const args = parseArgs(['--transport', 'http']);
+    expect(args.transport).toBe('http');
+  });
+
+  it('should warn on unknown transport and default to stdio', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const args = parseArgs(['--transport', 'grpc']);
+    expect(args.transport).toBe('stdio');
+    expect(warnSpy).toHaveBeenCalledWith('Warning: Unknown transport "grpc" - defaulting to stdio');
+    warnSpy.mockRestore();
+  });
+
+  it('should parse --port', () => {
+    const args = parseArgs(['--port', '8080']);
+    expect(args.port).toBe(8080);
+  });
+
+  it('should default port to 3000', () => {
+    const args = parseArgs([]);
+    expect(args.port).toBe(3000);
   });
 
   it('should handle arguments in any order', () => {
