@@ -66,6 +66,34 @@ export async function main(): Promise<void> {
   // Parse JSON bodies for MCP protocol messages
   app.use(express.json());
 
+  // Origin validation to prevent DNS rebinding attacks (MCP spec MUST requirement).
+  // If Origin header is present, it must match the server's host.
+  app.use('/mcp', (req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        const allowedHosts = ['localhost', '127.0.0.1', '[::1]', host];
+        if (!allowedHosts.includes(originUrl.hostname)) {
+          res.status(403).json({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Forbidden: Origin not allowed' },
+            id: null,
+          });
+          return;
+        }
+      } catch {
+        res.status(403).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Forbidden: Invalid Origin header' },
+          id: null,
+        });
+        return;
+      }
+    }
+    next();
+  });
+
   // MCP endpoint
   app.all('/mcp', async (req, res) => {
     try {
