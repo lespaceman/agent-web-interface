@@ -25,6 +25,7 @@ import { drag, wheel, takeScreenshot } from './viewport-tools.js';
 import { inspectCanvas } from './canvas-tools.js';
 import { getFormUnderstanding, getFieldContext } from './form-tools.js';
 import { readPage } from './readability-tools.js';
+import { listNetworkCalls, searchNetworkCalls } from './network-tools.js';
 
 // Import all input schemas
 import {
@@ -51,6 +52,10 @@ import {
   ReadPageInputSchema,
 } from './tool-schemas.js';
 import { GetFormUnderstandingInputSchema, GetFieldContextInputSchema } from './form-tools.js';
+import {
+  ListNetworkCallsInputSchema,
+  SearchNetworkCallsInputSchema,
+} from './tool-schemas.js';
 
 /**
  * Context resolver function type.
@@ -351,5 +356,31 @@ export function registerAllTools(server: ToolRegistrar, resolveCtx: ContextResol
       inputSchema: ReadPageInputSchema.shape,
     },
     wrap(readPage)
+  );
+
+  // ============================================================================
+  // NETWORK TOOLS
+  // ============================================================================
+
+  server.registerTool(
+    'list_network_calls',
+    {
+      title: 'List Network Calls',
+      description:
+        'List HTTP requests and responses made by the page. Filter by resource type, method, status code, or URL pattern. Supports pagination.',
+      inputSchema: ListNetworkCallsInputSchema.shape,
+    },
+    wrap(listNetworkCalls)
+  );
+
+  server.registerTool(
+    'search_network_calls',
+    {
+      title: 'Search Network Calls',
+      description:
+        'Search network calls by URL pattern (substring or regex). Returns matching requests with optional headers and body details.',
+      inputSchema: SearchNetworkCallsInputSchema.shape,
+    },
+    wrap(searchNetworkCalls)
   );
 }

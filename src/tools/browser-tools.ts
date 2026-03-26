@@ -35,3 +35,6 @@ export { drag, wheel, takeScreenshot } from './viewport-tools.js';
 
 // Readability tools
 export { readPage } from './readability-tools.js';
+
+// Network tools
+export { listNetworkCalls, searchNetworkCalls } from './network-tools.js';

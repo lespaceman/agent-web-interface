@@ -656,3 +656,117 @@ export const ReadPageOutputSchema = z.string();
 
 export type ReadPageInput = z.infer<typeof ReadPageInputSchema>;
 export type ReadPageOutput = z.infer<typeof ReadPageOutputSchema>;
+
+// ============================================================================
+// list_network_calls - List network requests for a page
+// ============================================================================
+
+export const ListNetworkCallsInputSchema = z.object({
+  /** Page ID. If omitted, operates on the most recently used page */
+  page_id: z
+    .string()
+    .optional()
+    .describe('Page ID. If omitted, operates on the most recently used page.'),
+  /** Filter by resource type */
+  resource_type: z
+    .string()
+    .optional()
+    .describe(
+      'Filter by resource type: xhr, fetch, document, script, stylesheet, image, font, media, other.'
+    ),
+  /** Filter by HTTP method */
+  method: z
+    .string()
+    .optional()
+    .describe('Filter by HTTP method: GET, POST, PUT, DELETE, PATCH, etc.'),
+  /** Minimum status code (inclusive) */
+  status_min: z
+    .number()
+    .int()
+    .optional()
+    .describe('Minimum HTTP status code (inclusive). Use 400 to see only errors.'),
+  /** Maximum status code (inclusive) */
+  status_max: z
+    .number()
+    .int()
+    .optional()
+    .describe('Maximum HTTP status code (inclusive). Use with status_min for ranges like 200-299.'),
+  /** Only show failed requests (network errors, aborted) */
+  failed_only: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('When true, only show requests that failed due to network errors.'),
+  /** URL substring filter */
+  url_pattern: z.string().optional().describe('Filter URLs containing this substring.'),
+  /** Pagination offset (default: 0) */
+  offset: z.number().int().min(0).default(0).describe('Pagination offset (default: 0).'),
+  /** Number of results to return (default: 25, max: 100) */
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(25)
+    .describe('Number of results to return (default: 25, max: 100).'),
+});
+
+export const ListNetworkCallsOutputSchema = z.string();
+
+export type ListNetworkCallsInput = z.infer<typeof ListNetworkCallsInputSchema>;
+export type ListNetworkCallsOutput = z.infer<typeof ListNetworkCallsOutputSchema>;
+
+// ============================================================================
+// search_network_calls - Search network calls by URL pattern
+// ============================================================================
+
+export const SearchNetworkCallsInputSchema = z.object({
+  /** Page ID. If omitted, operates on the most recently used page */
+  page_id: z
+    .string()
+    .optional()
+    .describe('Page ID. If omitted, operates on the most recently used page.'),
+  /** URL pattern to search for (substring or regex) */
+  url_pattern: z
+    .string()
+    .describe('URL pattern to search for. Substring match by default; set url_regex=true for regex.'),
+  /** Treat url_pattern as regex (default: false) */
+  url_regex: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('When true, url_pattern is treated as a regular expression.'),
+  /** Filter by resource type */
+  resource_type: z.string().optional().describe('Filter by resource type.'),
+  /** Filter by HTTP method */
+  method: z.string().optional().describe('Filter by HTTP method.'),
+  /** Minimum status code (inclusive) */
+  status_min: z.number().int().optional().describe('Minimum HTTP status code (inclusive).'),
+  /** Maximum status code (inclusive) */
+  status_max: z.number().int().optional().describe('Maximum HTTP status code (inclusive).'),
+  /** Include request/response headers in results */
+  include_headers: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('When true, include request and response headers in results.'),
+  /** Include request body in results */
+  include_body: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('When true, include POST body in results.'),
+  /** Number of results to return (default: 25, max: 100) */
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(25)
+    .describe('Number of results to return (default: 25, max: 100).'),
+});
+
+export const SearchNetworkCallsOutputSchema = z.string();
+
+export type SearchNetworkCallsInput = z.infer<typeof SearchNetworkCallsInputSchema>;
+export type SearchNetworkCallsOutput = z.infer<typeof SearchNetworkCallsOutputSchema>;
