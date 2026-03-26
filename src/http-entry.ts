@@ -40,12 +40,21 @@ export async function main(): Promise<void> {
 
   const session = getSessionManager();
   const browserPool = new BrowserPool();
-  browserPool.initialize(session);
   const router = new SessionRouter(session, { browserPool });
+
+  // Wrap ensureBrowser to lazily initialize the pool after the browser is launched.
+  // The browser is started on-demand (first tool call), so BrowserPool.initialize()
+  // must wait until the browser is actually running.
+  const ensureBrowserAndPool = async () => {
+    await ensureBrowserForTools();
+    if (browserPool.state === 'idle') {
+      browserPool.initialize(session);
+    }
+  };
 
   const gateway = new HttpGateway({
     router,
-    ensureBrowser: ensureBrowserForTools,
+    ensureBrowser: ensureBrowserAndPool,
   });
 
   const app = express();

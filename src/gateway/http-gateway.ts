@@ -200,6 +200,9 @@ export class HttpGateway {
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: async (sid: string) => {
         sessionId = sid;
+        // Ensure browser is launched and pool is initialized before creating
+        // the session, since createSession() acquires a BrowserContext from the pool.
+        await this.ensureBrowser();
         controller = await this.router.createSession(sid);
         this.sessions.set(sid, { server: mcpServer, transport, controller });
         logger.info('HTTP session initialized', { sessionId: sid });
