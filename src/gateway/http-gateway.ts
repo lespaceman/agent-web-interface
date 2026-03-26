@@ -85,9 +85,9 @@ export class HttpGateway {
 
     // When the router evicts an idle session, clean up the gateway-owned
     // transport and McpServer so the sessions map does not leak entries.
-    this.router.onSessionDestroyed = (sessionId: string) => {
+    this.router.setOnSessionDestroyed((sessionId: string) => {
       void this.cleanupGatewaySession(sessionId);
-    };
+    });
   }
 
   /**
@@ -245,27 +245,14 @@ export class HttpGateway {
     try {
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
-      // Clean up if initialization failed (onsessioninitialized never fired)
-      if (!sessionId) {
-        await mcpServer.close().catch(() => {
-          /* intentionally swallowed */
-        });
-        await transport.close?.().catch(() => {
-          /* intentionally swallowed */
-        });
-      }
+      if (!sessionId) await this.teardownOrphanedSession(mcpServer, transport);
       throw err;
     }
 
     // If onsessioninitialized never fired (e.g., non-initialize request hit this path),
     // clean up the leaked server and transport.
     if (!sessionId) {
-      await mcpServer.close().catch(() => {
-        /* intentionally swallowed */
-      });
-      await transport.close?.().catch(() => {
-        /* intentionally swallowed */
-      });
+      await this.teardownOrphanedSession(mcpServer, transport);
     }
   }
 
@@ -296,6 +283,14 @@ export class HttpGateway {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
+    this.sessions.delete(sessionId);
+
+    try {
+      await session.transport.close?.();
+    } catch {
+      // Transport may already be closed
+    }
+
     try {
       await session.server.close();
     } catch (err) {
@@ -305,8 +300,19 @@ export class HttpGateway {
       );
     }
 
-    this.sessions.delete(sessionId);
     logger.info('Gateway session cleaned up after eviction', { sessionId });
+  }
+
+  private async teardownOrphanedSession(
+    mcpServer: McpServer,
+    transport: StreamableHTTPServerTransport
+  ): Promise<void> {
+    await mcpServer.close().catch(() => {
+      /* intentionally swallowed */
+    });
+    await transport.close?.().catch(() => {
+      /* intentionally swallowed */
+    });
   }
 
   /** Get count of active HTTP sessions */

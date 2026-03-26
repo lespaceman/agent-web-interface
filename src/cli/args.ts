@@ -93,7 +93,12 @@ export function parseArgs(argv: string[]): ServerArgs {
         console.warn(`Warning: Unknown transport "${value}" - defaulting to stdio`);
       }
     } else if (arg === '--port' && argv[i + 1]) {
-      args.port = parseInt(argv[++i], 10);
+      const parsed = parseInt(argv[++i], 10);
+      if (isNaN(parsed) || parsed < 1 || parsed > 65535) {
+        console.warn(`Warning: Invalid port "${argv[i]}" - defaulting to 3000`);
+      } else {
+        args.port = parsed;
+      }
     } else if (arg === '--headless=false' || arg === '--headless=0') {
       args.headless = false;
     } else if (arg === '--headless=true' || arg === '--headless=1' || arg === '--headless') {
@@ -123,7 +128,12 @@ export function parseArgs(argv: string[]): ServerArgs {
     args.transport = 'http';
   }
   if (process.env.HTTP_PORT) {
-    args.port = parseInt(process.env.HTTP_PORT, 10);
+    const parsed = parseInt(process.env.HTTP_PORT, 10);
+    if (isNaN(parsed) || parsed < 1 || parsed > 65535) {
+      console.warn(`Warning: Invalid HTTP_PORT "${process.env.HTTP_PORT}" - defaulting to 3000`);
+    } else {
+      args.port = parsed;
+    }
   }
 
   return args;

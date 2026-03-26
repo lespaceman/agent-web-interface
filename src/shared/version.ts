@@ -29,6 +29,7 @@ function findPackageVersion(): string {
       dir = dirname(dir);
     }
   }
+  console.warn('Warning: Could not find package.json to read version — defaulting to 0.0.0');
   return '0.0.0';
 }
 

@@ -42,11 +42,9 @@ async function executeNavigationAction(
   ctx: ToolContext,
   action: NavigationAction
 ): Promise<string> {
-  const session = ctx.getSessionManager();
-
-  let handle = await session.resolvePageOrCreate(pageId);
+  let handle = await ctx.resolvePageOrCreate(pageId);
   const page_id = handle.page_id;
-  session.touchPage(page_id);
+  ctx.touchPage(page_id);
 
   // Clear dependency tracker before navigation (old dependencies no longer valid)
   ctx.getDependencyTracker().clearPage(page_id);
@@ -93,9 +91,8 @@ export async function listPages(
   rawInput: unknown,
   ctx: ToolContext
 ): Promise<import('./tool-schemas.js').ListPagesOutput> {
-  const session = ctx.getSessionManager();
   // Sync to pick up any unregistered browser tabs
-  const pages = await session.syncPages();
+  const pages = await ctx.syncPages();
   const pageInfos = await Promise.all(
     pages.map(async (h) => {
       const liveUrl = h.page.url?.() ?? h.url ?? '';
@@ -133,9 +130,8 @@ export async function closePage(
   ctx: ToolContext
 ): Promise<import('./tool-schemas.js').ClosePageOutput> {
   const input = ClosePageInputSchema.parse(rawInput);
-  const session = ctx.getSessionManager();
 
-  await session.closePage(input.page_id);
+  await ctx.closePage(input.page_id);
   ctx.getSnapshotStore().removeByPageId(input.page_id);
   ctx.removeStateManager(input.page_id); // Clean up state manager
   ctx.getDependencyTracker().clearPage(input.page_id); // Clean up dependencies
@@ -154,9 +150,8 @@ export async function closeSession(
   ctx: ToolContext
 ): Promise<import('./tool-schemas.js').CloseSessionOutput> {
   CloseSessionInputSchema.parse(rawInput);
-  const session = ctx.getSessionManager();
 
-  await session.shutdown();
+  await ctx.getSessionManager().shutdown();
   ctx.getSnapshotStore().clear();
   ctx.clearAllStateManagers(); // Clean up all state managers
   ctx.getDependencyTracker().clearAll(); // Clean up all dependencies
@@ -176,16 +171,15 @@ export async function navigate(
   ctx: ToolContext
 ): Promise<import('./tool-schemas.js').NavigateOutput> {
   const input = NavigateInputSchema.parse(rawInput);
-  const session = ctx.getSessionManager();
 
-  let handle = await session.resolvePageOrCreate(input.page_id);
+  let handle = await ctx.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
-  session.touchPage(page_id);
+  ctx.touchPage(page_id);
 
   // Clear dependency tracker before navigation (old dependencies no longer valid)
   ctx.getDependencyTracker().clearPage(page_id);
 
-  await session.navigateTo(page_id, input.url);
+  await ctx.navigateTo(page_id, input.url);
 
   // Auto-capture snapshot after navigation
   const captureResult = await ctx.captureSnapshotWithRecovery(handle, page_id);

@@ -88,6 +88,7 @@ import { createTestToolContext } from '../../helpers/test-tool-context.js';
 
 describe('listPages live metadata', () => {
   const ctx = createTestToolContext({
+    syncPages: mockSyncPages,
     getSessionManager: vi.fn().mockReturnValue(mockSessionManager),
   });
 

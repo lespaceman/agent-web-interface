@@ -50,6 +50,9 @@ export async function main(): Promise<void> {
 
   const app = express();
 
+  // Parse JSON bodies for MCP protocol messages
+  app.use(express.json());
+
   // MCP endpoint
   app.all('/mcp', async (req, res) => {
     try {
@@ -87,13 +90,23 @@ export async function main(): Promise<void> {
 
   const shutdown = async (signal: string) => {
     console.error(`Shutting down... (${signal})`);
+
+    // Hard deadline — if graceful shutdown hangs, force exit
+    const deadline = setTimeout(() => {
+      console.error('Graceful shutdown timed out after 10s, forcing exit');
+      process.exit(1);
+    }, 10_000);
+    deadline.unref();
+
     try {
+      // Shut down gateway sessions first (closes MCP servers + transports)
       await gateway.shutdown();
       await cleanupTempFiles();
+      // Release browser contexts before shutting down the browser itself
+      await browserPool.shutdown();
       if (isSessionManagerInitialized()) {
         await session.shutdown();
       }
-      await browserPool.shutdown();
       server.close();
       process.exit(0);
     } catch (err) {

@@ -68,6 +68,27 @@ export interface ToolContext {
    */
   resolveExistingPage(pageId?: string): PageHandle;
 
+  /**
+   * Touch a page to mark it as most recently used.
+   */
+  touchPage(pageId: string): void;
+
+  /**
+   * Close a page and clean up its resources.
+   */
+  closePage(pageId: string): Promise<boolean>;
+
+  /**
+   * Sync with browser context to pick up unregistered pages.
+   * Returns all registered pages after sync.
+   */
+  syncPages(): Promise<PageHandle[]>;
+
+  /**
+   * Navigate a page to a URL.
+   */
+  navigateTo(pageId: string, url: string): Promise<void>;
+
   // ---------------------------------------------------------------------------
   // State access
   // ---------------------------------------------------------------------------

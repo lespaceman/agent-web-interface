@@ -170,10 +170,13 @@ export class SessionRouter {
 
   /**
    * Register a callback invoked after a session is destroyed.
-   * Allows the gateway layer to clean up resources (transports,
+   * Used by the gateway layer to clean up resources (transports,
    * MCP servers) that the router does not own.
+   *
+   * Can be set via constructor options or this method (for cases
+   * where the gateway is created after the router).
    */
-  set onSessionDestroyed(cb: ((sessionId: string) => void | Promise<void>) | undefined) {
+  setOnSessionDestroyed(cb: (sessionId: string) => void | Promise<void>): void {
     this._onSessionDestroyed = cb;
   }
 

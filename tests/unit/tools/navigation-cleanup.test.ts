@@ -102,8 +102,12 @@ describe('Navigation tools dependency tracker cleanup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Wire mock session manager and dependency tracker through ctx
+    // Wire mock session manager, page methods, and dependency tracker through ctx
     ctx = createTestToolContext({
+      resolvePageOrCreate: mockResolvePageOrCreate as ToolContext['resolvePageOrCreate'],
+      touchPage: mockTouchPage as ToolContext['touchPage'],
+      closePage: mockClosePage as ToolContext['closePage'],
+      navigateTo: mockNavigateTo as ToolContext['navigateTo'],
       getSessionManager: vi
         .fn()
         .mockReturnValue(mockSessionManager) as ToolContext['getSessionManager'],

@@ -15,7 +15,8 @@
  */
 
 import type { BrowserContext } from 'puppeteer-core';
-import type { PageHandle } from '../browser/page-registry.js';
+import { PageRegistry, type PageHandle } from '../browser/page-registry.js';
+import { PuppeteerCdpClient } from '../cdp/puppeteer-cdp-client.js';
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
 import type { SessionManager } from '../browser/session-manager.js';
 import { SnapshotStore } from '../snapshot/snapshot-store.js';
@@ -65,10 +66,14 @@ export class SessionController implements ToolContext {
 
   private readonly _sessionManager: SessionManager;
   private readonly _browserContext?: BrowserContext;
+  private readonly _pageRegistry?: PageRegistry;
   private readonly _snapshotStore: SnapshotStore;
   private readonly _stateManagers = new Map<string, StateManager>();
   private readonly _dependencyTracker: DependencyTracker;
   private readonly _observationAccumulator: ObservationAccumulator;
+
+  /** Whether this session owns its own pages (HTTP multi-tenant mode). */
+  private readonly _isolatedPages: boolean;
 
   private _state: SessionState = 'initializing';
   private _lastActivity: number = Date.now();
@@ -80,6 +85,14 @@ export class SessionController implements ToolContext {
     this._snapshotStore = new SnapshotStore();
     this._dependencyTracker = new DependencyTracker();
     this._observationAccumulator = new ObservationAccumulator();
+
+    // In HTTP mode, each session has its own BrowserContext and PageRegistry
+    // to prevent cross-session page leakage.
+    this._isolatedPages = !!options.browserContext;
+    if (this._isolatedPages) {
+      this._pageRegistry = new PageRegistry();
+    }
+
     this._state = 'active';
   }
 
@@ -126,17 +139,121 @@ export class SessionController implements ToolContext {
 
   resolvePage(pageId?: string): PageHandle | undefined {
     this.touch();
-    return this._sessionManager.resolvePage(pageId);
+    if (!this._isolatedPages) {
+      return this._sessionManager.resolvePage(pageId);
+    }
+    if (pageId) {
+      return this._pageRegistry!.get(pageId);
+    }
+    return this._pageRegistry!.getMostRecent();
   }
 
   async resolvePageOrCreate(pageId?: string): Promise<PageHandle> {
     this.touch();
-    return this._sessionManager.resolvePageOrCreate(pageId);
+    if (!this._isolatedPages) {
+      return this._sessionManager.resolvePageOrCreate(pageId);
+    }
+    if (pageId) {
+      const handle = this._pageRegistry!.get(pageId);
+      if (!handle) throw new Error(`Page not found: ${pageId}`);
+      return handle;
+    }
+    return this._pageRegistry!.getMostRecent() ?? (await this.createPageInContext());
   }
 
   resolveExistingPage(pageId?: string): PageHandle {
     this.touch();
-    return resolveExistingPageImpl(this._sessionManager, pageId);
+    if (!this._isolatedPages) {
+      return resolveExistingPageImpl(this._sessionManager, pageId);
+    }
+    const handle = this.resolvePage(pageId);
+    if (!handle) {
+      throw new Error(
+        pageId ? `Page not found: ${pageId}` : 'No page available. Navigate to a URL first.'
+      );
+    }
+    this._pageRegistry!.touch(handle.page_id);
+    return handle;
+  }
+
+  touchPage(pageId: string): void {
+    if (this._isolatedPages) {
+      this._pageRegistry!.touch(pageId);
+    } else {
+      this._sessionManager.touchPage(pageId);
+    }
+  }
+
+  async closePage(pageId: string): Promise<boolean> {
+    if (!this._isolatedPages) {
+      return this._sessionManager.closePage(pageId);
+    }
+    const handle = this._pageRegistry!.get(pageId);
+    if (!handle) return false;
+
+    this._pageRegistry!.remove(pageId);
+    try {
+      await handle.cdp.close();
+    } catch {
+      // CDP session may already be closed
+    }
+    try {
+      await handle.page.close();
+    } catch {
+      // Page may already be closed
+    }
+    return true;
+  }
+
+  async syncPages(): Promise<PageHandle[]> {
+    if (!this._isolatedPages) {
+      return this._sessionManager.syncPages();
+    }
+    if (!this._browserContext) {
+      return this._pageRegistry!.list();
+    }
+    // Adopt any unregistered pages in the isolated context
+    const browserPages = await this._browserContext.pages();
+    for (const page of browserPages) {
+      if (this._pageRegistry!.findByPage(page)) continue;
+      if (page.isClosed()) continue;
+      try {
+        const cdpSession = await page.createCDPSession();
+        const cdpClient = new PuppeteerCdpClient(cdpSession);
+        const handle = this._pageRegistry!.register(page, cdpClient);
+        this._pageRegistry!.updateMetadata(handle.page_id, { url: page.url() });
+      } catch {
+        // Skip pages that can't be adopted
+      }
+    }
+    return this._pageRegistry!.list();
+  }
+
+  async navigateTo(pageId: string, url: string): Promise<void> {
+    if (!this._isolatedPages) {
+      await this._sessionManager.navigateTo(pageId, url);
+      return;
+    }
+    const handle = this._pageRegistry!.get(pageId);
+    if (!handle) throw new Error(`Page not found: ${pageId}`);
+    await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
+    this._pageRegistry!.updateMetadata(pageId, { url: handle.page.url() });
+  }
+
+  /**
+   * Create a new page in the isolated BrowserContext.
+   */
+  private async createPageInContext(): Promise<PageHandle> {
+    if (!this._browserContext) {
+      throw new Error('No browser context available');
+    }
+    const page = await this._browserContext.newPage();
+    const cdpSession = await page.createCDPSession();
+    const cdpClient = new PuppeteerCdpClient(cdpSession);
+    const handle = this._pageRegistry!.register(page, cdpClient);
+    // Inject observation accumulator for the new page
+    await this._observationAccumulator.inject(page);
+    return handle;
   }
 
   // ---------------------------------------------------------------------------
