@@ -112,7 +112,12 @@ export class HttpGateway {
         // New connection: create transport + McpServer + SessionController
         await this.createNewSession(req, res);
       } else if (sessionId && !this.sessions.has(sessionId)) {
-        sendJsonRpcError(res, 404, -32000, 'Session not found. The session may have expired or been closed.');
+        sendJsonRpcError(
+          res,
+          404,
+          -32000,
+          'Session not found. The session may have expired or been closed.'
+        );
       } else {
         sendJsonRpcError(res, 400, -32000, 'Bad Request: No valid session ID provided');
       }
