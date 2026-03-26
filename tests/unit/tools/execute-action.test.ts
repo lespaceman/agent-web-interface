@@ -5,22 +5,18 @@
  * retry logic, and navigation-aware outcomes.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   executeAction,
   executeActionWithRetry,
   executeActionWithOutcome,
   type CaptureSnapshotFn,
 } from '../../../src/tools/execute-action.js';
-import {
-  getStateManager,
-  removeStateManager,
-  clearAllStateManagers,
-} from '../../../src/tools/state-manager-registry.js';
 import type { PageHandle } from '../../../src/browser/page-registry.js';
 import type { BaseSnapshot, ReadableNode } from '../../../src/snapshot/snapshot.types.js';
 import type { RuntimeHealth } from '../../../src/state/health.types.js';
 import { createHealthyRuntime } from '../../../src/state/health.types.js';
+import { StateManager } from '../../../src/state/state-manager.js';
 import { createMockPage } from '../../mocks/puppeteer.mock.js';
 import { createTestToolContext } from '../../helpers/test-tool-context.js';
 
@@ -112,59 +108,18 @@ function createMockCapture(snapshot?: BaseSnapshot): CaptureSnapshotFn {
 }
 
 describe('Execute Action', () => {
-  const ctx = createTestToolContext({
-    getStateManager: (pageId: string) => getStateManager(pageId),
-  });
+  const stateManagers = new Map<string, StateManager>();
+  function getStateManager(pageId: string): StateManager {
+    if (!stateManagers.has(pageId)) {
+      stateManagers.set(pageId, new StateManager({ pageId }));
+    }
+    return stateManagers.get(pageId)!;
+  }
 
-  beforeEach(() => {
-    // Clear state managers before each test
-    clearAllStateManagers();
-  });
+  const ctx = createTestToolContext({ getStateManager });
 
   afterEach(() => {
-    // Clean up state managers after each test
-    clearAllStateManagers();
-  });
-
-  describe('StateManager Registry', () => {
-    it('should create new state manager for unknown page', () => {
-      const manager = getStateManager('page-new');
-      expect(manager).toBeDefined();
-    });
-
-    it('should return same state manager for same page', () => {
-      const manager1 = getStateManager('page-1');
-      const manager2 = getStateManager('page-1');
-      expect(manager1).toBe(manager2);
-    });
-
-    it('should return different managers for different pages', () => {
-      const manager1 = getStateManager('page-1');
-      const manager2 = getStateManager('page-2');
-      expect(manager1).not.toBe(manager2);
-    });
-
-    it('should remove state manager', () => {
-      const manager1 = getStateManager('page-remove');
-      removeStateManager('page-remove');
-      const manager2 = getStateManager('page-remove');
-      expect(manager1).not.toBe(manager2);
-    });
-
-    it('should clear all state managers', () => {
-      const manager1 = getStateManager('page-a');
-      const manager2 = getStateManager('page-b');
-      clearAllStateManagers();
-      const manager1After = getStateManager('page-a');
-      const manager2After = getStateManager('page-b');
-      expect(manager1).not.toBe(manager1After);
-      expect(manager2).not.toBe(manager2After);
-    });
-
-    it('should handle removing non-existent manager', () => {
-      // Should not throw
-      expect(() => removeStateManager('non-existent')).not.toThrow();
-    });
+    stateManagers.clear();
   });
 
   describe('executeAction', () => {
