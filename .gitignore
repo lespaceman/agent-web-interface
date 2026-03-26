@@ -19,6 +19,7 @@ build/
 .vscode/
 .idea/
 .gemini/
+.claude/
 *.swp
 *.swo
 *~
