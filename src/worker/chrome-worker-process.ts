@@ -34,7 +34,7 @@ export interface ChromeWorkerProcessConfig {
 /**
  * Default Chrome executable paths by platform
  */
-const DEFAULT_CHROME_PATHS: Record<string, string[]> = {
+export const DEFAULT_CHROME_PATHS: Record<string, string[]> = {
   linux: [
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',

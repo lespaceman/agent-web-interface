@@ -4,12 +4,6 @@
  * Browser automation tools exposed via MCP protocol.
  */
 
-// Shared tool context
-export { initializeToolContext, getSnapshotStore } from './tool-context.js';
-
-// Legacy exports for backward compatibility
-export { initializeTools } from './browser-tools.js';
-
 // Tool handlers - Simplified API
 export {
   listPages,
@@ -167,7 +161,6 @@ export {
 
 // Form tools
 export {
-  initializeFormTools,
   getFormUnderstanding,
   getFieldContext,
   GetFormUnderstandingInputSchema,

@@ -2,7 +2,7 @@
   "mcpServers": {
     "agent-web-interface-dev": {
       "command": "node",
-      "args": ["dist/src/index.js", "--autoConnect"],
+      "args": ["dist/src/index.js", "--headless"],
       "cwd": "/home/nadeemm/athena/agent-web-interface"
     }
   }

@@ -26,11 +26,8 @@ import {
   executeActionWithRetry,
   executeActionWithOutcome,
 } from './execute-action.js';
-import { getSnapshotStore, requireSnapshot, resolveElementByEid } from './tool-context.js';
 import { prepareActionContext } from './action-context.js';
-
-// Convenience alias for module-internal use
-const snapshotStore = getSnapshotStore();
+import type { ToolContext } from './tool-context.types.js';
 
 /**
  * Click an element or at viewport coordinates.
@@ -43,7 +40,10 @@ const snapshotStore = getSnapshotStore();
  * @param rawInput - Click options (will be validated)
  * @returns Click result with navigation-aware outcome
  */
-export async function click(rawInput: unknown): Promise<import('./tool-schemas.js').ClickOutput> {
+export async function click(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').ClickOutput> {
   const input = ClickInputSchema.parse(rawInput);
   const hasEid = input.eid !== undefined;
   const hasCoords = input.x !== undefined && input.y !== undefined;
@@ -56,14 +56,14 @@ export async function click(rawInput: unknown): Promise<import('./tool-schemas.j
     throw new Error('Both x and y coordinates must be provided together.');
   }
 
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
   let result: { snapshot: BaseSnapshot; state_response: string };
 
   if (hasEid) {
     // Mode 1 & 2: element-based click (center or offset)
-    const snap = requireSnapshot(pageId);
-    const node = resolveElementByEid(pageId, input.eid!, snap);
+    const snap = ctx.requireSnapshot(pageId);
+    const node = ctx.resolveElementByEid(pageId, input.eid!, snap);
 
     result = await executeActionWithOutcome(
       handleRef.current,
@@ -81,7 +81,8 @@ export async function click(rawInput: unknown): Promise<import('./tool-schemas.j
           await clickByBackendNodeId(handleRef.current.cdp, backendNodeId, input.modifiers);
         }
       },
-      snapshotStore,
+      ctx,
+      ctx.getSnapshotStore(),
       captureSnapshot
     );
   } else {
@@ -91,11 +92,12 @@ export async function click(rawInput: unknown): Promise<import('./tool-schemas.j
       async () => {
         await clickAtCoordinates(handleRef.current.cdp, input.x!, input.y!, input.modifiers);
       },
+      ctx,
       captureSnapshot
     );
   }
 
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
   return result.state_response;
 }
 
@@ -105,12 +107,15 @@ export async function click(rawInput: unknown): Promise<import('./tool-schemas.j
  * @param rawInput - Type options (will be validated)
  * @returns Type result with delta
  */
-export async function type(rawInput: unknown): Promise<import('./tool-schemas.js').TypeOutput> {
+export async function type(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').TypeOutput> {
   const input = TypeInputSchema.parse(rawInput);
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
-  const snap = requireSnapshot(pageId);
-  const node = resolveElementByEid(pageId, input.eid, snap);
+  const snap = ctx.requireSnapshot(pageId);
+  const node = ctx.resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
@@ -121,12 +126,13 @@ export async function type(rawInput: unknown): Promise<import('./tool-schemas.js
         clear: input.clear,
       });
     },
-    snapshotStore,
+    ctx,
+    ctx.getSnapshotStore(),
     captureSnapshot
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -138,9 +144,12 @@ export async function type(rawInput: unknown): Promise<import('./tool-schemas.js
  * @param rawInput - Press options (will be validated)
  * @returns Press result with delta
  */
-export async function press(rawInput: unknown): Promise<import('./tool-schemas.js').PressOutput> {
+export async function press(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').PressOutput> {
   const input = PressInputSchema.parse(rawInput);
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
   // Execute action with new simplified wrapper
   const result = await executeAction(
@@ -148,11 +157,12 @@ export async function press(rawInput: unknown): Promise<import('./tool-schemas.j
     async () => {
       await pressKey(handleRef.current.cdp, input.key, input.modifiers);
     },
+    ctx,
     captureSnapshot
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -164,12 +174,15 @@ export async function press(rawInput: unknown): Promise<import('./tool-schemas.j
  * @param rawInput - Select options (will be validated)
  * @returns Select result with delta
  */
-export async function select(rawInput: unknown): Promise<import('./tool-schemas.js').SelectOutput> {
+export async function select(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').SelectOutput> {
   const input = SelectInputSchema.parse(rawInput);
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
-  const snap = requireSnapshot(pageId);
-  const node = resolveElementByEid(pageId, input.eid, snap);
+  const snap = ctx.requireSnapshot(pageId);
+  const node = ctx.resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
@@ -178,12 +191,13 @@ export async function select(rawInput: unknown): Promise<import('./tool-schemas.
     async (backendNodeId) => {
       await selectOption(handleRef.current.cdp, backendNodeId, input.value);
     },
-    snapshotStore,
+    ctx,
+    ctx.getSnapshotStore(),
     captureSnapshot
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -195,12 +209,15 @@ export async function select(rawInput: unknown): Promise<import('./tool-schemas.
  * @param rawInput - Hover options (will be validated)
  * @returns Hover result with delta
  */
-export async function hover(rawInput: unknown): Promise<import('./tool-schemas.js').HoverOutput> {
+export async function hover(
+  rawInput: unknown,
+  ctx: ToolContext
+): Promise<import('./tool-schemas.js').HoverOutput> {
   const input = HoverInputSchema.parse(rawInput);
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
-  const snap = requireSnapshot(pageId);
-  const node = resolveElementByEid(pageId, input.eid, snap);
+  const snap = ctx.requireSnapshot(pageId);
+  const node = ctx.resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
@@ -209,12 +226,13 @@ export async function hover(rawInput: unknown): Promise<import('./tool-schemas.j
     async (backendNodeId) => {
       await hoverByBackendNodeId(handleRef.current.cdp, backendNodeId);
     },
-    snapshotStore,
+    ctx,
+    ctx.getSnapshotStore(),
     captureSnapshot
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;

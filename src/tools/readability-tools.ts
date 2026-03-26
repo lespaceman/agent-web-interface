@@ -8,7 +8,7 @@
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import { ReadPageInputSchema, type ReadPageOutput } from './tool-schemas.js';
-import { getSessionManager, resolveExistingPage } from './tool-context.js';
+import type { ToolContext } from './tool-context.types.js';
 import { buildReadPageResponse } from './response-builder.js';
 
 /**
@@ -17,11 +17,10 @@ import { buildReadPageResponse } from './response-builder.js';
  * Uses Mozilla Readability (Firefox Reader View engine) to strip
  * navigation, ads, and clutter, returning clean text with metadata.
  */
-export async function readPage(rawInput: unknown): Promise<ReadPageOutput> {
+export async function readPage(rawInput: unknown, ctx: ToolContext): Promise<ReadPageOutput> {
   const input = ReadPageInputSchema.parse(rawInput);
 
-  const session = getSessionManager();
-  const handle = resolveExistingPage(session, input.page_id);
+  const handle = ctx.resolveExistingPage(input.page_id);
 
   // Get full page HTML and URL
   const html = await handle.page.content();

@@ -2,21 +2,14 @@
  * inspect_canvas Tool Handler Tests
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { SessionManager } from '../../../src/browser/session-manager.js';
 
 // ============================================================================
 // Hoisted mocks (accessible inside vi.mock factories)
 // ============================================================================
 
-const { mockResolvePage, mockTouchPage } = vi.hoisted(() => ({
+const { mockResolvePage } = vi.hoisted(() => ({
   mockResolvePage: vi.fn(),
-  mockTouchPage: vi.fn(),
 }));
-
-const mockSessionManager = {
-  resolvePage: mockResolvePage,
-  touchPage: mockTouchPage,
-} as unknown as SessionManager;
 
 const { mockGetElementBoundingBox, mockCaptureScreenshot } = vi.hoisted(() => ({
   mockGetElementBoundingBox: vi.fn(),
@@ -86,12 +79,6 @@ vi.mock('../../../src/tools/execute-action.js', () => ({
   executeActionWithOutcome: vi.fn(),
 }));
 
-vi.mock('../../../src/tools/state-manager-registry.js', () => ({
-  getStateManager: mockGetStateManager,
-  removeStateManager: vi.fn(),
-  clearAllStateManagers: vi.fn(),
-}));
-
 vi.mock('../../../src/tools/action-stabilization.js', () => ({
   stabilizeAfterNavigation: vi.fn(),
   captureSnapshotFallback: vi.fn(),
@@ -130,15 +117,18 @@ vi.mock('../../../src/tools/response-builder.js', () => ({
   buildGetElementDetailsResponse: vi.fn(),
 }));
 
-import { initializeToolContext } from '../../../src/tools/tool-context.js';
 import { inspectCanvas } from '../../../src/tools/canvas-tools.js';
 import { isCompositeResult } from '../../../src/tools/tool-result.types.js';
+import { createTestToolContext } from '../../helpers/test-tool-context.js';
+import type { ToolContext } from '../../../src/tools/tool-context.types.js';
 
 // ============================================================================
 // Tests
 // ============================================================================
 
 describe('inspectCanvas', () => {
+  let ctx: ToolContext;
+
   const mockCdp = {
     send: vi.fn(),
     on: vi.fn(),
@@ -191,14 +181,29 @@ describe('inspectCanvas', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    initializeToolContext(mockSessionManager);
-
-    mockResolvePage.mockReturnValue({
+    const mockHandle = {
       page_id: 'page-1',
       page: {},
       cdp: mockCdp,
       created_at: new Date(),
+    };
+
+    ctx = createTestToolContext({
+      resolveExistingPage: vi.fn().mockReturnValue(mockHandle),
+      ensureCdpSession: vi.fn().mockResolvedValue({
+        handle: mockHandle,
+        recovered: false,
+        runtime_health: { cdp: { ok: true }, snapshot: { ok: true, code: 'HEALTHY' } },
+      }),
+      requireSnapshot: vi.fn().mockReturnValue(mockSnapshot),
+      resolveElementByEid: vi.fn().mockReturnValue({
+        backend_node_id: 100,
+        kind: 'canvas',
+        label: 'game-canvas',
+      }),
     });
+
+    mockResolvePage.mockReturnValue(mockHandle);
 
     // CDP probe succeeds
     mockCdp.send.mockResolvedValue({});
@@ -234,13 +239,13 @@ describe('inspectCanvas', () => {
   });
 
   it('throws when eid is missing', async () => {
-    await expect(inspectCanvas({})).rejects.toThrow();
+    await expect(inspectCanvas({}, ctx)).rejects.toThrow();
   });
 
   it('returns CompositeResult with type composite', async () => {
     setupDefaultCdpMock();
 
-    const result = await inspectCanvas({ eid: 'cv-1' });
+    const result = await inspectCanvas({ eid: 'cv-1' }, ctx);
 
     expect(result.type).toBe('composite');
     expect(typeof result.text).toBe('string');
@@ -251,7 +256,7 @@ describe('inspectCanvas', () => {
   it('uses Runtime.callFunctionOn for detection (not Runtime.evaluate)', async () => {
     setupDefaultCdpMock();
 
-    await inspectCanvas({ eid: 'cv-1' });
+    await inspectCanvas({ eid: 'cv-1' }, ctx);
 
     const callFunctionOnCalls = mockCdp.send.mock.calls.filter(
       (c: string[]) => c[0] === 'Runtime.callFunctionOn'
@@ -264,7 +269,7 @@ describe('inspectCanvas', () => {
   it('removes overlay after screenshot (cleanup)', async () => {
     setupDefaultCdpMock();
 
-    await inspectCanvas({ eid: 'cv-1' });
+    await inspectCanvas({ eid: 'cv-1' }, ctx);
 
     const evalCalls = mockCdp.send.mock.calls.filter((c: unknown[]) => c[0] === 'Runtime.evaluate');
     expect(evalCalls.length).toBeGreaterThanOrEqual(1);
@@ -276,7 +281,7 @@ describe('inspectCanvas', () => {
   it('uses canvas bounding box as screenshot clip', async () => {
     setupDefaultCdpMock();
 
-    await inspectCanvas({ eid: 'cv-1' });
+    await inspectCanvas({ eid: 'cv-1' }, ctx);
 
     expect(mockCaptureScreenshot).toHaveBeenCalledWith(
       mockCdp,
@@ -289,7 +294,7 @@ describe('inspectCanvas', () => {
   it('forwards grid_spacing to overlay script', async () => {
     setupDefaultCdpMock();
 
-    await inspectCanvas({ eid: 'cv-1', grid_spacing: 100 });
+    await inspectCanvas({ eid: 'cv-1', grid_spacing: 100 }, ctx);
 
     const overlayCalls = mockCdp.send.mock.calls.filter(
       (c: unknown[]) => c[0] === 'Runtime.callFunctionOn'
@@ -302,7 +307,7 @@ describe('inspectCanvas', () => {
     setupDefaultCdpMock();
     mockCaptureScreenshot.mockRejectedValueOnce(new Error('Screenshot failed'));
 
-    await expect(inspectCanvas({ eid: 'cv-1' })).rejects.toThrow('Screenshot failed');
+    await expect(inspectCanvas({ eid: 'cv-1' }, ctx)).rejects.toThrow('Screenshot failed');
 
     const evalCalls = mockCdp.send.mock.calls.filter((c: unknown[]) => c[0] === 'Runtime.evaluate');
     expect(evalCalls.length).toBeGreaterThanOrEqual(1);
@@ -314,7 +319,7 @@ describe('inspectCanvas', () => {
   it('releases CDP object reference in cleanup', async () => {
     setupDefaultCdpMock();
 
-    await inspectCanvas({ eid: 'cv-1' });
+    await inspectCanvas({ eid: 'cv-1' }, ctx);
 
     const releaseCalls = mockCdp.send.mock.calls.filter(
       (c: unknown[]) => c[0] === 'Runtime.releaseObject'
@@ -326,7 +331,7 @@ describe('inspectCanvas', () => {
   it('scrolls canvas into view before screenshot', async () => {
     setupDefaultCdpMock();
 
-    await inspectCanvas({ eid: 'cv-1' });
+    await inspectCanvas({ eid: 'cv-1' }, ctx);
 
     const scrollCalls = mockCdp.send.mock.calls.filter(
       (c: unknown[]) => c[0] === 'DOM.scrollIntoViewIfNeeded'

@@ -9,13 +9,7 @@
 import { InspectCanvasInputSchema } from './tool-schemas.js';
 import { captureScreenshot, getElementBoundingBox } from '../screenshot/index.js';
 import type { CompositeResult, ImageResult, FileResult } from './tool-result.types.js';
-import {
-  getSessionManager,
-  resolveExistingPage,
-  ensureCdpSession,
-  requireSnapshot,
-  resolveElementByEid,
-} from './tool-context.js';
+import type { ToolContext } from './tool-context.types.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -356,18 +350,17 @@ async function cleanupInspection(
  * Inspect a canvas element: detect library, query scene graph, and return
  * an annotated screenshot with coordinate grid + object bounding boxes.
  */
-export async function inspectCanvas(rawInput: unknown): Promise<CompositeResult> {
+export async function inspectCanvas(rawInput: unknown, ctx: ToolContext): Promise<CompositeResult> {
   const input = InspectCanvasInputSchema.parse(rawInput);
 
-  const session = getSessionManager();
-  let handle = resolveExistingPage(session, input.page_id);
+  let handle = ctx.resolveExistingPage(input.page_id);
   const pageId = handle.page_id;
 
-  const ensureResult = await ensureCdpSession(session, handle);
+  const ensureResult = await ctx.ensureCdpSession(handle);
   handle = ensureResult.handle;
 
-  const snapshot = requireSnapshot(pageId);
-  const node = resolveElementByEid(pageId, input.eid, snapshot);
+  const snapshot = ctx.requireSnapshot(pageId);
+  const node = ctx.resolveElementByEid(pageId, input.eid, snapshot);
 
   // Scroll canvas into view before computing bounding box and overlay
   await handle.cdp.send('DOM.scrollIntoViewIfNeeded', {

@@ -5,9 +5,8 @@
  * The actual implementations live in category-specific modules.
  */
 
-// Action context & initialization
+// Action context
 export {
-  initializeTools,
   type ActionContext,
   prepareActionContext,
   captureSnapshotWithRecovery,

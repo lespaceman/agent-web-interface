@@ -6,10 +6,9 @@
  */
 
 import { z } from 'zod';
-import { getSessionManager, getSnapshotStore, resolveExistingPage } from './tool-context.js';
+import type { ToolContext } from './tool-context.types.js';
 import {
   detectForms,
-  getDependencyTracker,
   computeFormState,
   readRuntimeValues,
   type FormRegion,
@@ -19,16 +18,6 @@ import {
   type FieldValueRequest,
 } from '../form/index.js';
 import { escapeXml } from '../lib/text-utils.js';
-import type { SessionManager } from '../browser/session-manager.js';
-
-/**
- * Initialize form tools with a session manager instance.
- * @deprecated Use initializeToolContext() instead. Kept for backward compatibility.
- */
-export function initializeFormTools(_manager: SessionManager): void {
-  // No-op: tool context is now initialized centrally via initializeToolContext()
-}
-
 // ============================================================================
 // Input/Output Schemas
 // ============================================================================
@@ -365,13 +354,12 @@ export const _testExports = {
  * dependencies, and state. Reads actual runtime values via CDP
  * to provide accurate filled/has_value status.
  */
-export async function getFormUnderstanding(rawInput: unknown): Promise<string> {
+export async function getFormUnderstanding(rawInput: unknown, ctx: ToolContext): Promise<string> {
   const input = GetFormUnderstandingInputSchema.parse(rawInput);
-  const session = getSessionManager();
-  const snapshotStore = getSnapshotStore();
+  const snapshotStore = ctx.getSnapshotStore();
 
   // Resolve page with CDP client for runtime value reading
-  const handle = resolveExistingPage(session, input.page_id);
+  const handle = ctx.resolveExistingPage(input.page_id);
   const pageId = handle.page_id;
 
   // Get snapshot for the page
@@ -442,7 +430,7 @@ export async function getFormUnderstanding(rawInput: unknown): Promise<string> {
   }
 
   // Enrich fields with observed dependencies
-  const tracker = getDependencyTracker();
+  const tracker = ctx.getDependencyTracker();
   for (const form of forms) {
     for (const field of form.fields) {
       const deps = tracker.getDependenciesFor(pageId, field.eid);
@@ -465,13 +453,12 @@ export async function getFormUnderstanding(rawInput: unknown): Promise<string> {
  * Returns detailed information about a field including purpose inference,
  * constraints, dependencies, and suggested next action.
  */
-export function getFieldContext(rawInput: unknown): string {
+export function getFieldContext(rawInput: unknown, ctx: ToolContext): string {
   const input = GetFieldContextInputSchema.parse(rawInput);
-  const session = getSessionManager();
-  const snapshotStore = getSnapshotStore();
+  const snapshotStore = ctx.getSnapshotStore();
 
   // Resolve page
-  const handle = resolveExistingPage(session, input.page_id);
+  const handle = ctx.resolveExistingPage(input.page_id);
   const pageId = handle.page_id;
 
   // Get snapshot for the page
@@ -499,7 +486,7 @@ export function getFieldContext(rawInput: unknown): string {
   }
 
   // Get dependencies
-  const tracker = getDependencyTracker();
+  const tracker = ctx.getDependencyTracker();
   const dependencies = tracker.getDependenciesFor(pageId, input.eid);
 
   return buildFieldContextXml(targetField, targetForm, dependencies);

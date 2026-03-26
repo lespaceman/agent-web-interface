@@ -5,23 +5,20 @@
  * retry logic, and navigation-aware outcomes.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   executeAction,
   executeActionWithRetry,
   executeActionWithOutcome,
   type CaptureSnapshotFn,
 } from '../../../src/tools/execute-action.js';
-import {
-  getStateManager,
-  removeStateManager,
-  clearAllStateManagers,
-} from '../../../src/tools/state-manager-registry.js';
 import type { PageHandle } from '../../../src/browser/page-registry.js';
 import type { BaseSnapshot, ReadableNode } from '../../../src/snapshot/snapshot.types.js';
 import type { RuntimeHealth } from '../../../src/state/health.types.js';
 import { createHealthyRuntime } from '../../../src/state/health.types.js';
+import { StateManager } from '../../../src/state/state-manager.js';
 import { createMockPage } from '../../mocks/puppeteer.mock.js';
+import { createTestToolContext } from '../../helpers/test-tool-context.js';
 
 // Mock the stabilizeDom function
 vi.mock('../../../src/delta/dom-stabilizer.js', () => ({
@@ -111,55 +108,18 @@ function createMockCapture(snapshot?: BaseSnapshot): CaptureSnapshotFn {
 }
 
 describe('Execute Action', () => {
-  beforeEach(() => {
-    // Clear state managers before each test
-    clearAllStateManagers();
-  });
+  const stateManagers = new Map<string, StateManager>();
+  function getStateManager(pageId: string): StateManager {
+    if (!stateManagers.has(pageId)) {
+      stateManagers.set(pageId, new StateManager({ pageId }));
+    }
+    return stateManagers.get(pageId)!;
+  }
+
+  const ctx = createTestToolContext({ getStateManager });
 
   afterEach(() => {
-    // Clean up state managers after each test
-    clearAllStateManagers();
-  });
-
-  describe('StateManager Registry', () => {
-    it('should create new state manager for unknown page', () => {
-      const manager = getStateManager('page-new');
-      expect(manager).toBeDefined();
-    });
-
-    it('should return same state manager for same page', () => {
-      const manager1 = getStateManager('page-1');
-      const manager2 = getStateManager('page-1');
-      expect(manager1).toBe(manager2);
-    });
-
-    it('should return different managers for different pages', () => {
-      const manager1 = getStateManager('page-1');
-      const manager2 = getStateManager('page-2');
-      expect(manager1).not.toBe(manager2);
-    });
-
-    it('should remove state manager', () => {
-      const manager1 = getStateManager('page-remove');
-      removeStateManager('page-remove');
-      const manager2 = getStateManager('page-remove');
-      expect(manager1).not.toBe(manager2);
-    });
-
-    it('should clear all state managers', () => {
-      const manager1 = getStateManager('page-a');
-      const manager2 = getStateManager('page-b');
-      clearAllStateManagers();
-      const manager1After = getStateManager('page-a');
-      const manager2After = getStateManager('page-b');
-      expect(manager1).not.toBe(manager1After);
-      expect(manager2).not.toBe(manager2After);
-    });
-
-    it('should handle removing non-existent manager', () => {
-      // Should not throw
-      expect(() => removeStateManager('non-existent')).not.toThrow();
-    });
+    stateManagers.clear();
   });
 
   describe('executeAction', () => {
@@ -168,7 +128,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture();
 
-      const result = await executeAction(handle, action, capture);
+      const result = await executeAction(handle, action, ctx, capture);
 
       expect(result.success).toBe(true);
       expect(result.error).toBeUndefined();
@@ -180,7 +140,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture();
 
-      const result = await executeAction(handle, action, capture);
+      const result = await executeAction(handle, action, ctx, capture);
 
       expect(capture).toHaveBeenCalledTimes(1);
       expect(result.snapshot_id).toBeDefined();
@@ -192,7 +152,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture();
 
-      const result = await executeAction(handle, action, capture);
+      const result = await executeAction(handle, action, ctx, capture);
 
       expect(result.state_response).toBeDefined();
       expect(typeof result.state_response).toBe('string');
@@ -203,7 +163,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockRejectedValue(new Error('Click failed'));
       const capture = createMockCapture();
 
-      const result = await executeAction(handle, action, capture);
+      const result = await executeAction(handle, action, ctx, capture);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Click failed');
@@ -218,7 +178,7 @@ describe('Execute Action', () => {
         runtime_health: healthyRuntime,
       });
 
-      const result = await executeAction(handle, action, capture);
+      const result = await executeAction(handle, action, ctx, capture);
 
       expect(result.runtime_health).toBeDefined();
     });
@@ -231,7 +191,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture();
 
-      const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+      const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(true);
       expect(action).toHaveBeenCalledTimes(1);
@@ -252,7 +212,7 @@ describe('Execute Action', () => {
 
       const capture = createMockCapture(freshSnapshot);
 
-      const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+      const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(true);
       expect(action).toHaveBeenCalledTimes(2);
@@ -275,7 +235,7 @@ describe('Execute Action', () => {
 
       const capture = createMockCapture(freshSnapshot);
 
-      await executeActionWithRetry(handle, node, action, snapshotStore, capture);
+      await executeActionWithRetry(handle, node, action, ctx, snapshotStore, capture);
 
       expect(snapshotStore.store).toHaveBeenCalledWith(handle.page_id, freshSnapshot);
     });
@@ -291,7 +251,7 @@ describe('Execute Action', () => {
 
       const capture = createMockCapture(emptySnapshot);
 
-      const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+      const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Retry failed');
@@ -310,7 +270,7 @@ describe('Execute Action', () => {
 
       const capture = createMockCapture(freshSnapshot);
 
-      const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+      const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Retry failed');
@@ -322,7 +282,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockRejectedValue(new Error('Permission denied'));
       const capture = createMockCapture();
 
-      const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+      const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Permission denied');
@@ -348,7 +308,7 @@ describe('Execute Action', () => {
           .mockRejectedValueOnce(new Error(errorMsg))
           .mockResolvedValueOnce(undefined);
 
-        const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+        const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
         expect(result.success).toBe(true);
         expect(action).toHaveBeenCalledTimes(2);
@@ -364,7 +324,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture();
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(true);
       expect(result.outcome.status).toBe('success');
@@ -393,7 +353,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture();
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       expect(result.outcome.status).toBe('success');
       if (result.outcome.status === 'success') {
@@ -424,7 +384,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture();
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       expect(result.outcome.status).toBe('success');
       if (result.outcome.status === 'success') {
@@ -456,7 +416,7 @@ describe('Execute Action', () => {
 
       const capture = createMockCapture();
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       // Should be classified as successful navigation, not as error
       expect(result.outcome.status).toBe('success');
@@ -494,7 +454,7 @@ describe('Execute Action', () => {
 
       const capture = createMockCapture(freshSnapshot);
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(true);
       expect(result.outcome.status).toBe('stale_element');
@@ -529,7 +489,7 @@ describe('Execute Action', () => {
 
       const capture = createMockCapture(emptySnapshot);
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(false);
       expect(result.outcome.status).toBe('element_not_found');
@@ -571,7 +531,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture(snapshot);
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       // Verify navigation was detected
       expect(result.outcome.status).toBe('success');
@@ -619,7 +579,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture(snapshot);
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       // Verify late navigation detection caught it
       expect(result.outcome.status).toBe('success');
@@ -651,7 +611,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture(snapshot);
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       // Verify no navigation
       expect(result.outcome.status).toBe('success');
@@ -669,7 +629,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockRejectedValue(new Error('Network timeout'));
       const capture = createMockCapture();
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(false);
       expect(result.outcome.status).toBe('error');
@@ -691,7 +651,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockResolvedValue(undefined);
       const capture = createMockCapture();
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       // Should still work - falls back to URL-only navigation detection
       expect(result.success).toBe(true);
@@ -705,7 +665,7 @@ describe('Execute Action', () => {
       const mockSnapshot = createMockSnapshot([createMockNode(), createMockNode()]);
       const capture = createMockCapture(mockSnapshot);
 
-      const result = await executeActionWithOutcome(handle, node, action, undefined, capture);
+      const result = await executeActionWithOutcome(handle, node, action, ctx, undefined, capture);
 
       expect(result.snapshot).toBeDefined();
       expect(result.snapshot.nodes).toHaveLength(2);
@@ -724,7 +684,7 @@ describe('Execute Action', () => {
         .mockResolvedValueOnce(undefined);
 
       const capture = createMockCapture(freshSnapshot);
-      const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+      const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(true);
       expect(action).toHaveBeenCalledTimes(2);
@@ -745,7 +705,7 @@ describe('Execute Action', () => {
         .mockResolvedValueOnce(undefined);
 
       const capture = createMockCapture(freshSnapshot);
-      const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+      const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(true);
     });
@@ -757,7 +717,7 @@ describe('Execute Action', () => {
       const action = vi.fn().mockRejectedValue(new Error('Timeout 30000ms exceeded'));
       const capture = createMockCapture();
 
-      const result = await executeActionWithRetry(handle, node, action, undefined, capture);
+      const result = await executeActionWithRetry(handle, node, action, ctx, undefined, capture);
 
       expect(result.success).toBe(false);
       expect(action).toHaveBeenCalledTimes(1); // No retry

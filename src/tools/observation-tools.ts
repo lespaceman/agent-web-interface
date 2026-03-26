@@ -5,7 +5,6 @@
  */
 
 import { scrollIntoView, scrollPage as scrollPageByAmount } from '../snapshot/index.js';
-import { observationAccumulator } from '../observation/index.js';
 import { ATTACHMENT_SIGNIFICANCE_THRESHOLD } from '../observation/observation.types.js';
 import type { NodeDetails } from './tool-schemas.js';
 import {
@@ -22,23 +21,13 @@ import { isReadableNode, isStructuralNode, isLiveRegionNode } from '../snapshot/
 import { computeEid } from '../state/element-identity.js';
 import { LIVE_REGION_KINDS } from '../state/actionables-filter.js';
 import { executeAction, executeActionWithRetry } from './execute-action.js';
-import { getStateManager } from './state-manager-registry.js';
 import {
   buildFindElementsResponse,
   buildGetElementDetailsResponse,
   type FindElementsMatch,
 } from './response-builder.js';
-import {
-  getSessionManager,
-  getSnapshotStore,
-  resolveExistingPage,
-  requireSnapshot,
-  resolveElementByEid,
-} from './tool-context.js';
-import { captureSnapshotWithRecovery, prepareActionContext } from './action-context.js';
-
-// Convenience alias for module-internal use
-const snapshotStore = getSnapshotStore();
+import { prepareActionContext } from './action-context.js';
+import type { ToolContext } from './tool-context.types.js';
 
 /**
  * Capture a fresh snapshot of the current page.
@@ -47,36 +36,37 @@ const snapshotStore = getSnapshotStore();
  * @returns Snapshot data for the current page
  */
 export async function captureSnapshot(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): Promise<import('./tool-schemas.js').CaptureSnapshotOutput> {
   const input = CaptureSnapshotInputSchema.parse(rawInput);
-  const session = getSessionManager();
 
-  let handle = resolveExistingPage(session, input.page_id);
+  let handle = ctx.resolveExistingPage(input.page_id);
   const page_id = handle.page_id;
 
   // Capture any accumulated observations (no action window)
-  const observations = await observationAccumulator.getAccumulatedObservations(handle.page);
+  const observations = await ctx
+    .getObservationAccumulator()
+    .getAccumulatedObservations(handle.page);
 
-  const captureResult = await captureSnapshotWithRecovery(session, handle, page_id);
+  const captureResult = await ctx.captureSnapshotWithRecovery(handle, page_id);
   handle = captureResult.handle;
   const snapshot = captureResult.snapshot;
 
   // Filter observations to reduce noise (threshold 5 requires semantic signals)
-  const filteredObservations = observationAccumulator.filterBySignificance(
-    observations,
-    ATTACHMENT_SIGNIFICANCE_THRESHOLD
-  );
+  const filteredObservations = ctx
+    .getObservationAccumulator()
+    .filterBySignificance(observations, ATTACHMENT_SIGNIFICANCE_THRESHOLD);
 
   // Attach accumulated observations to snapshot if any
   if (filteredObservations.sincePrevious.length > 0) {
     snapshot.observations = filteredObservations;
   }
 
-  snapshotStore.store(page_id, snapshot);
+  ctx.getSnapshotStore().store(page_id, snapshot);
 
   // Return XML state response directly (trimmed for observation snapshots)
-  const stateManager = getStateManager(page_id);
+  const stateManager = ctx.getStateManager(page_id);
   return stateManager.generateResponse(snapshot, { trimRegions: true });
 }
 
@@ -107,14 +97,16 @@ export function mapSchemaKindToNodeKind(schemaKind: string): NodeKind | NodeKind
  * @param rawInput - Query filters (will be validated)
  * @returns Matched nodes
  */
-export function findElements(rawInput: unknown): import('./tool-schemas.js').FindElementsOutput {
+export function findElements(
+  rawInput: unknown,
+  ctx: ToolContext
+): import('./tool-schemas.js').FindElementsOutput {
   const input = FindElementsInputSchema.parse(rawInput);
-  const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
+  const handle = ctx.resolveExistingPage(input.page_id);
   const page_id = handle.page_id;
 
-  const snap = snapshotStore.getByPageId(page_id);
+  const snap = ctx.getSnapshotStore().getByPageId(page_id);
   if (!snap) {
     throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
   }
@@ -138,7 +130,7 @@ export function findElements(rawInput: unknown): import('./tool-schemas.js').Fin
   const response = engine.find(request);
 
   // Get registry and state manager for EID lookup
-  const stateManager = getStateManager(page_id);
+  const stateManager = ctx.getStateManager(page_id);
   const registry = stateManager.getElementRegistry();
   const activeLayer = stateManager.getActiveLayer();
 
@@ -207,21 +199,21 @@ export function findElements(rawInput: unknown): import('./tool-schemas.js').Fin
  * @returns Full node details
  */
 export function getNodeDetails(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): import('./tool-schemas.js').GetNodeDetailsOutput {
   const input = GetNodeDetailsInputSchema.parse(rawInput);
-  const session = getSessionManager();
 
-  const handle = resolveExistingPage(session, input.page_id);
+  const handle = ctx.resolveExistingPage(input.page_id);
   const page_id = handle.page_id;
 
-  const snap = snapshotStore.getByPageId(page_id);
+  const snap = ctx.getSnapshotStore().getByPageId(page_id);
   if (!snap) {
     throw new Error(`No snapshot for page ${page_id} - capture a snapshot first`);
   }
 
   // Look up element by EID from registry
-  const stateManager = getStateManager(page_id);
+  const stateManager = ctx.getStateManager(page_id);
   const elementRef = stateManager.getElementRegistry().getByEid(input.eid);
   if (!elementRef) {
     throw new Error(`Element with eid ${input.eid} not found in registry`);
@@ -270,13 +262,14 @@ export function getNodeDetails(
  * @returns Scroll result with delta
  */
 export async function scrollElementIntoView(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): Promise<import('./tool-schemas.js').ScrollElementIntoViewOutput> {
   const input = ScrollElementIntoViewInputSchema.parse(rawInput);
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
-  const snap = requireSnapshot(pageId);
-  const node = resolveElementByEid(pageId, input.eid, snap);
+  const snap = ctx.requireSnapshot(pageId);
+  const node = ctx.resolveElementByEid(pageId, input.eid, snap);
 
   // Execute action with automatic retry on stale elements
   const result = await executeActionWithRetry(
@@ -285,12 +278,13 @@ export async function scrollElementIntoView(
     async (backendNodeId) => {
       await scrollIntoView(handleRef.current.cdp, backendNodeId);
     },
-    snapshotStore,
+    ctx,
+    ctx.getSnapshotStore(),
     captureSnapshot
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;
@@ -303,10 +297,11 @@ export async function scrollElementIntoView(
  * @returns Scroll result with delta
  */
 export async function scrollPage(
-  rawInput: unknown
+  rawInput: unknown,
+  ctx: ToolContext
 ): Promise<import('./tool-schemas.js').ScrollPageOutput> {
   const input = ScrollPageInputSchema.parse(rawInput);
-  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id);
+  const { handleRef, pageId, captureSnapshot } = await prepareActionContext(input.page_id, ctx);
 
   // Execute action with new simplified wrapper
   const result = await executeAction(
@@ -314,11 +309,12 @@ export async function scrollPage(
     async () => {
       await scrollPageByAmount(handleRef.current.cdp, input.direction, input.amount);
     },
+    ctx,
     captureSnapshot
   );
 
   // Store snapshot for future queries
-  snapshotStore.store(pageId, result.snapshot);
+  ctx.getSnapshotStore().store(pageId, result.snapshot);
 
   // Return XML state response directly
   return result.state_response;

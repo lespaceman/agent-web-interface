@@ -13,11 +13,9 @@ import type { PageHandle } from '../browser/page-registry.js';
 import type { StateResponse } from '../state/types.js';
 import type { ClickOutcome } from '../state/element-ref.types.js';
 import type { RuntimeHealth } from '../state/health.types.js';
-import { observationAccumulator } from '../observation/index.js';
 import { ATTACHMENT_SIGNIFICANCE_THRESHOLD } from '../observation/observation.types.js';
-import { getDependencyTracker } from '../form/index.js';
 
-import { getStateManager } from './state-manager-registry.js';
+import type { ToolContext } from './tool-context.types.js';
 import { computeObservedEffect } from './effect-tracker.js';
 import { stabilizeAfterAction, captureSnapshotFallback } from './action-stabilization.js';
 import { isStaleElementError, handleStaleElementRetry } from './stale-element-retry.js';
@@ -92,6 +90,7 @@ export type CaptureSnapshotFn = () => Promise<{
 export async function executeAction(
   handle: PageHandle,
   action: () => Promise<void>,
+  ctx: ToolContext,
   captureSnapshot?: CaptureSnapshotFn
 ): Promise<ActionResult> {
   let success = true;
@@ -101,7 +100,7 @@ export async function executeAction(
   const actionStartTime = Date.now();
 
   // Ensure observation accumulator is injected
-  await observationAccumulator.ensureInjected(handle.page);
+  await ctx.getObservationAccumulator().ensureInjected(handle.page);
 
   // Execute action - if this throws, we catch and return error
   try {
@@ -115,7 +114,9 @@ export async function executeAction(
   await stabilizeAfterAction(handle.page);
 
   // Capture observations from the action window
-  const observations = await observationAccumulator.getObservations(handle.page, actionStartTime);
+  const observations = await ctx
+    .getObservationAccumulator()
+    .getObservations(handle.page, actionStartTime);
 
   // Capture snapshot
   const capture = captureSnapshot ?? (() => captureSnapshotFallback(handle));
@@ -123,10 +124,9 @@ export async function executeAction(
   const snapshot = captureResult.snapshot;
 
   // Filter observations to reduce noise (threshold 5 requires semantic signals)
-  const filteredObservations = observationAccumulator.filterBySignificance(
-    observations,
-    ATTACHMENT_SIGNIFICANCE_THRESHOLD
-  );
+  const filteredObservations = ctx
+    .getObservationAccumulator()
+    .filterBySignificance(observations, ATTACHMENT_SIGNIFICANCE_THRESHOLD);
 
   // Attach observations to snapshot if any were captured
   if (
@@ -137,7 +137,7 @@ export async function executeAction(
   }
 
   // Generate state response using StateManager
-  const stateManager = getStateManager(handle.page_id);
+  const stateManager = ctx.getStateManager(handle.page_id);
   const state_response = stateManager.generateResponse(snapshot);
 
   return {
@@ -172,6 +172,7 @@ export async function executeActionWithRetry(
   handle: PageHandle,
   node: ReadableNode,
   action: (backendNodeId: number) => Promise<void>,
+  ctx: ToolContext,
   snapshotStore?: { store: (pageId: string, snapshot: BaseSnapshot) => void },
   captureSnapshot?: CaptureSnapshotFn
 ): Promise<ActionResult> {
@@ -183,7 +184,7 @@ export async function executeActionWithRetry(
   const actionStartTime = Date.now();
 
   // Ensure observation accumulator is injected
-  await observationAccumulator.ensureInjected(handle.page);
+  await ctx.getObservationAccumulator().ensureInjected(handle.page);
 
   const capture = captureSnapshot ?? (() => captureSnapshotFallback(handle));
 
@@ -232,17 +233,18 @@ export async function executeActionWithRetry(
   await stabilizeAfterAction(handle.page);
 
   // Capture observations from the action window
-  const observations = await observationAccumulator.getObservations(handle.page, actionStartTime);
+  const observations = await ctx
+    .getObservationAccumulator()
+    .getObservations(handle.page, actionStartTime);
 
   // Capture final snapshot
   const captureResult = await capture();
   const snapshot = captureResult.snapshot;
 
   // Filter observations to reduce noise (threshold 5 requires semantic signals)
-  const filteredObservations = observationAccumulator.filterBySignificance(
-    observations,
-    ATTACHMENT_SIGNIFICANCE_THRESHOLD
-  );
+  const filteredObservations = ctx
+    .getObservationAccumulator()
+    .filterBySignificance(observations, ATTACHMENT_SIGNIFICANCE_THRESHOLD);
 
   // Attach observations to snapshot if any were captured
   if (
@@ -253,7 +255,7 @@ export async function executeActionWithRetry(
   }
 
   // Generate state response using StateManager
-  const stateManager = getStateManager(handle.page_id);
+  const stateManager = ctx.getStateManager(handle.page_id);
   // Get previous snapshot BEFORE generateResponse shifts it
   const prevSnapshot = stateManager.getPreviousSnapshot();
   const state_response = stateManager.generateResponse(snapshot);
@@ -262,7 +264,7 @@ export async function executeActionWithRetry(
   if (success) {
     const effect = computeObservedEffect(node.node_id, 'type', prevSnapshot, snapshot);
     if (effect) {
-      getDependencyTracker().recordEffect(handle.page_id, effect);
+      ctx.getDependencyTracker().recordEffect(handle.page_id, effect);
     }
   }
 
@@ -306,6 +308,7 @@ export async function executeActionWithOutcome(
   handle: PageHandle,
   node: ReadableNode,
   action: (backendNodeId: number) => Promise<void>,
+  ctx: ToolContext,
   snapshotStore?: { store: (pageId: string, snapshot: BaseSnapshot) => void },
   captureSnapshot?: CaptureSnapshotFn
 ): Promise<ActionResultWithOutcome> {
@@ -318,7 +321,7 @@ export async function executeActionWithOutcome(
   const actionStartTime = Date.now();
 
   // Ensure observation accumulator is injected
-  await observationAccumulator.ensureInjected(handle.page);
+  await ctx.getObservationAccumulator().ensureInjected(handle.page);
 
   const capture = captureSnapshot ?? (() => captureSnapshotFallback(handle));
 
@@ -335,7 +338,7 @@ export async function executeActionWithOutcome(
 
     // Clear dependency tracker on navigation (old dependencies no longer valid)
     if (navigated) {
-      getDependencyTracker().clearPage(handle.page_id);
+      ctx.getDependencyTracker().clearPage(handle.page_id);
     }
 
     outcome = { status: 'success', navigated };
@@ -349,7 +352,7 @@ export async function executeActionWithOutcome(
       if (isNavigation) {
         // Element gone due to navigation - this is often success!
         // Clear dependency tracker on navigation (old dependencies no longer valid)
-        getDependencyTracker().clearPage(handle.page_id);
+        ctx.getDependencyTracker().clearPage(handle.page_id);
         outcome = { status: 'success', navigated: true };
         // Don't retry - navigation happened
       } else {
@@ -378,17 +381,18 @@ export async function executeActionWithOutcome(
   await stabilizeAfterAction(handle.page);
 
   // Capture observations from the action window
-  const observations = await observationAccumulator.getObservations(handle.page, actionStartTime);
+  const observations = await ctx
+    .getObservationAccumulator()
+    .getObservations(handle.page, actionStartTime);
 
   // Capture final snapshot
   const captureResult = await capture();
   const snapshot = captureResult.snapshot;
 
   // Filter observations to reduce noise (threshold 5 requires semantic signals)
-  const filteredObservations = observationAccumulator.filterBySignificance(
-    observations,
-    ATTACHMENT_SIGNIFICANCE_THRESHOLD
-  );
+  const filteredObservations = ctx
+    .getObservationAccumulator()
+    .filterBySignificance(observations, ATTACHMENT_SIGNIFICANCE_THRESHOLD);
 
   // Attach observations to snapshot if any were captured
   if (
@@ -405,7 +409,7 @@ export async function executeActionWithOutcome(
     const postStabilizeUrl = handle.page.url();
     if (postStabilizeUrl !== preClickState.url) {
       outcome = { status: 'success', navigated: true };
-      getDependencyTracker().clearPage(handle.page_id);
+      ctx.getDependencyTracker().clearPage(handle.page_id);
     }
   }
 
@@ -414,7 +418,7 @@ export async function executeActionWithOutcome(
 
   // Generate state response using StateManager
   // Trim regions when navigation occurred (same rationale as navigate() tool)
-  const stateManager = getStateManager(handle.page_id);
+  const stateManager = ctx.getStateManager(handle.page_id);
   // Get previous snapshot BEFORE generateResponse shifts it
   const prevSnapshot = stateManager.getPreviousSnapshot();
   const state_response = stateManager.generateResponse(
@@ -426,7 +430,7 @@ export async function executeActionWithOutcome(
   if (success && !didNavigate) {
     const effect = computeObservedEffect(node.node_id, 'click', prevSnapshot, snapshot);
     if (effect) {
-      getDependencyTracker().recordEffect(handle.page_id, effect);
+      ctx.getDependencyTracker().recordEffect(handle.page_id, effect);
     }
   }
 

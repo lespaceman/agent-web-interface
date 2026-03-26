@@ -90,12 +90,6 @@ vi.mock('../../../src/tools/execute-action.js', () => ({
   executeActionWithOutcome: mockExecuteActionWithOutcome,
 }));
 
-vi.mock('../../../src/tools/state-manager-registry.js', () => ({
-  getStateManager: vi.fn(),
-  removeStateManager: vi.fn(),
-  clearAllStateManagers: vi.fn(),
-}));
-
 vi.mock('../../../src/tools/action-stabilization.js', () => ({
   stabilizeAfterNavigation: vi.fn(),
   captureSnapshotFallback: vi.fn(),
@@ -123,23 +117,13 @@ vi.mock('../../../src/lib/temp-file.js', () => ({
   cleanupTempFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../src/tools/tool-context.js', () => ({
-  initializeToolContext: vi.fn(),
-  getSessionManager: () => mockSessionManager,
-  getSnapshotStore: () => mockSnapshotStore,
-  resolveExistingPage: () => mockHandle,
-  ensureCdpSession: vi.fn().mockResolvedValue({
-    handle: mockHandle,
-    recovered: false,
-    runtime_health: {},
-  }),
-  requireSnapshot: mockRequireSnapshot,
-  resolveElementByEid: mockResolveElementByEid,
-}));
-
 import { click } from '../../../src/tools/browser-tools.js';
+import { createTestToolContext } from '../../helpers/test-tool-context.js';
+import type { ToolContext } from '../../../src/tools/tool-context.types.js';
 
 describe('click page focus', () => {
+  let ctx: ToolContext;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireSnapshot.mockReturnValue({
@@ -155,10 +139,28 @@ describe('click page focus', () => {
       snapshot: { snapshot_id: 'snap-1', meta: {} },
       state_response: '<state />',
     });
+    ctx = createTestToolContext({
+      getSessionManager: vi
+        .fn()
+        .mockReturnValue(mockSessionManager) as ToolContext['getSessionManager'],
+      getSnapshotStore: vi
+        .fn()
+        .mockReturnValue(mockSnapshotStore) as ToolContext['getSnapshotStore'],
+      resolveExistingPage: vi
+        .fn()
+        .mockReturnValue(mockHandle) as ToolContext['resolveExistingPage'],
+      ensureCdpSession: vi.fn().mockResolvedValue({
+        handle: mockHandle,
+        recovered: false,
+        runtime_health: {},
+      }) as ToolContext['ensureCdpSession'],
+      requireSnapshot: mockRequireSnapshot as ToolContext['requireSnapshot'],
+      resolveElementByEid: mockResolveElementByEid as ToolContext['resolveElementByEid'],
+    });
   });
 
   it('brings the target page to the front before dispatching the action', async () => {
-    await click({ page_id: 'page-focus', eid: 'eid-1' });
+    await click({ page_id: 'page-focus', eid: 'eid-1' }, ctx);
 
     expect(mockBringToFront).toHaveBeenCalledTimes(1);
     expect(mockExecuteActionWithOutcome).toHaveBeenCalledTimes(1);

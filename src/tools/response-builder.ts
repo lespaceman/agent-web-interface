@@ -6,48 +6,9 @@
  * - Data tools return `<result type="...">...</result>` (via builders here)
  */
 
-import type { BaseSnapshot, NodeState } from '../snapshot/snapshot.types.js';
-import { getStateManager } from './state-manager-registry.js';
-import type { StateResponse } from '../state/types.js';
+import type { NodeState } from '../snapshot/snapshot.types.js';
 import type { NodeDetails } from './tool-schemas.js';
 import { escapeXml, xmlAttr } from '../lib/text-utils.js';
-
-// ============================================================================
-// State Response Builders (for mutation/navigation tools)
-// ============================================================================
-
-/**
- * Build an XML state response for a page snapshot.
- *
- * This is the standard way to generate a response for tools that:
- * - Launch/connect browsers
- * - Navigate to URLs
- * - Capture snapshots directly
- * - Perform mutations (click, type, etc.)
- *
- * @param pageId - The page identifier
- * @param snapshot - The captured snapshot
- * @returns XML state response string
- */
-export function buildStateResponse(pageId: string, snapshot: BaseSnapshot): StateResponse {
-  const stateManager = getStateManager(pageId);
-  return stateManager.generateResponse(snapshot);
-}
-
-/**
- * Build an error response.
- *
- * This provides a consistent error format across all tools.
- *
- * @param pageId - The page identifier
- * @param error - The error message or Error object
- * @returns XML state response string with error
- */
-export function buildErrorResponse(pageId: string, error: Error | string): StateResponse {
-  const stateManager = getStateManager(pageId);
-  const errorMessage = error instanceof Error ? error.message : error;
-  return stateManager.generateErrorResponse(errorMessage);
-}
 
 // ============================================================================
 // Result Response Builders (for data/query tools)

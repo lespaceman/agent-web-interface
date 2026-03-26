@@ -38,7 +38,11 @@ vi.mock('../../../src/shared/services/logging.service.js', () => ({
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-import { ChromeWorkerProcess, findChromePath } from '../../../src/worker/chrome-worker-process.js';
+import {
+  ChromeWorkerProcess,
+  findChromePath,
+  DEFAULT_CHROME_PATHS,
+} from '../../../src/worker/chrome-worker-process.js';
 import { WorkerError } from '../../../src/worker/errors/index.js';
 import { spawn, type ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
@@ -116,7 +120,8 @@ describe('ChromeWorkerProcess', () => {
     });
 
     it('should auto-detect Chrome path', () => {
-      vi.mocked(existsSync).mockImplementation((path) => path === '/usr/bin/google-chrome-stable');
+      const candidates = DEFAULT_CHROME_PATHS[process.platform] ?? DEFAULT_CHROME_PATHS.linux;
+      vi.mocked(existsSync).mockImplementation((path) => path === candidates[0]);
 
       const worker = new ChromeWorkerProcess({
         workerId: 'w-123',
@@ -426,10 +431,12 @@ describe('findChromePath', () => {
   });
 
   it('should return first existing path', () => {
-    vi.mocked(existsSync).mockImplementation((path) => path === '/usr/bin/chromium');
+    const candidates = DEFAULT_CHROME_PATHS[process.platform] ?? DEFAULT_CHROME_PATHS.linux;
+    const lastCandidate = candidates[candidates.length - 1];
+    vi.mocked(existsSync).mockImplementation((path) => path === lastCandidate);
 
     const result = findChromePath();
-    expect(result).toBe('/usr/bin/chromium');
+    expect(result).toBe(lastCandidate);
   });
 
   it('should return undefined if no Chrome found', () => {

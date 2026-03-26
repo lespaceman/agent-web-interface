@@ -43,6 +43,8 @@ export function getServerConfig(): ServerArgs {
 
 /**
  * Get or create the SessionManager singleton.
+ *
+ * @deprecated Use SessionController for per-session state management and BrowserPool for browser lifecycle.
  */
 export function getSessionManager(): SessionManager {
   sessionManager ??= new SessionManager();
