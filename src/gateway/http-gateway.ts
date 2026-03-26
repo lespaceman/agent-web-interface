@@ -26,6 +26,8 @@ import { wrapToolHandler } from '../server/tool-result-handler.js';
 import { getLogger } from '../shared/services/logging.service.js';
 import { VERSION } from '../shared/version.js';
 
+import { sendJsonRpcError } from './json-rpc-errors.js';
+
 const logger = getLogger();
 
 interface HttpSession {
@@ -110,36 +112,14 @@ export class HttpGateway {
         // New connection: create transport + McpServer + SessionController
         await this.createNewSession(req, res);
       } else if (sessionId && !this.sessions.has(sessionId)) {
-        // Unknown session ID
-        res.status(404).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message: 'Session not found. The session may have expired or been closed.',
-          },
-          id: null,
-        });
+        sendJsonRpcError(res, 404, -32000, 'Session not found. The session may have expired or been closed.');
       } else {
-        res.status(400).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message: 'Bad Request: No valid session ID provided',
-          },
-          id: null,
-        });
+        sendJsonRpcError(res, 400, -32000, 'Bad Request: No valid session ID provided');
       }
     } catch (error) {
       logger.error('Error handling MCP POST request', error instanceof Error ? error : undefined);
       if (!res.headersSent) {
-        res.status(500).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32603,
-            message: 'Internal server error',
-          },
-          id: null,
-        });
+        sendJsonRpcError(res, 500, -32603, 'Internal server error');
       }
     }
   }
@@ -151,14 +131,7 @@ export class HttpGateway {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
     if (!sessionId || !this.sessions.has(sessionId)) {
-      res.status(400).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: 'Bad Request: Invalid or missing session ID',
-        },
-        id: null,
-      });
+      sendJsonRpcError(res, 400, -32000, 'Bad Request: Invalid or missing session ID');
       return;
     }
 
@@ -173,14 +146,7 @@ export class HttpGateway {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
     if (!sessionId || !this.sessions.has(sessionId)) {
-      res.status(404).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: 'Session not found',
-        },
-        id: null,
-      });
+      sendJsonRpcError(res, 404, -32000, 'Session not found');
       return;
     }
 
@@ -200,9 +166,6 @@ export class HttpGateway {
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: async (sid: string) => {
         sessionId = sid;
-        // Ensure browser is launched and pool is initialized before creating
-        // the session, since createSession() acquires a BrowserContext from the pool.
-        await this.ensureBrowser();
         controller = await this.router.createSession(sid);
         this.sessions.set(sid, { server: mcpServer, transport, controller });
         logger.info('HTTP session initialized', { sessionId: sid });

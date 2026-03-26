@@ -23,6 +23,7 @@ import {
 import { SessionRouter } from './gateway/session-router.js';
 import { BrowserPool } from './browser/browser-pool.js';
 import { HttpGateway } from './gateway/http-gateway.js';
+import { sendJsonRpcError } from './gateway/json-rpc-errors.js';
 import { getLogger } from './shared/services/logging.service.js';
 import { cleanupTempFiles } from './lib/temp-file.js';
 
@@ -41,9 +42,6 @@ export async function main(): Promise<void> {
   const session = getSessionManager();
   const browserPool = new BrowserPool();
 
-  // Ensure the browser is running and the pool is initialized.
-  // Both the browser and pool are lazily started — the browser is
-  // launched on demand, and the pool requires a running browser.
   const ensureBrowserAndPool = async () => {
     await ensureBrowserForTools();
     if (browserPool.state === 'idle') {
@@ -63,31 +61,20 @@ export async function main(): Promise<void> {
 
   const app = express();
 
-  // Parse JSON bodies for MCP protocol messages
-  app.use(express.json());
+  // Allowed origins for DNS rebinding protection (MCP spec MUST requirement).
+  const allowedOriginHosts = new Set(['localhost', '127.0.0.1', '[::1]', host]);
 
-  // Origin validation to prevent DNS rebinding attacks (MCP spec MUST requirement).
-  // If Origin header is present, it must match the server's host.
-  app.use('/mcp', (req, res, next) => {
+  app.use('/mcp', express.json(), (req, res, next) => {
     const origin = req.headers.origin;
     if (origin) {
       try {
         const originUrl = new URL(origin);
-        const allowedHosts = ['localhost', '127.0.0.1', '[::1]', host];
-        if (!allowedHosts.includes(originUrl.hostname)) {
-          res.status(403).json({
-            jsonrpc: '2.0',
-            error: { code: -32000, message: 'Forbidden: Origin not allowed' },
-            id: null,
-          });
+        if (!allowedOriginHosts.has(originUrl.hostname)) {
+          sendJsonRpcError(res, 403, -32000, 'Forbidden: Origin not allowed');
           return;
         }
       } catch {
-        res.status(403).json({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Forbidden: Invalid Origin header' },
-          id: null,
-        });
+        sendJsonRpcError(res, 403, -32000, 'Forbidden: Invalid Origin header');
         return;
       }
     }
@@ -104,12 +91,12 @@ export async function main(): Promise<void> {
       } else if (req.method === 'DELETE') {
         await gateway.handleDelete(req, res);
       } else {
-        res.status(405).json({ error: 'Method not allowed' });
+        sendJsonRpcError(res, 405, -32000, 'Method not allowed');
       }
     } catch (err) {
       logger.error('MCP request error', err instanceof Error ? err : undefined);
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
+        sendJsonRpcError(res, 500, -32603, 'Internal server error');
       }
     }
   });
