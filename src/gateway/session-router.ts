@@ -27,6 +27,8 @@ export interface SessionRouterOptions {
   maxSessions?: number;
   /** Optional browser pool for per-session context isolation */
   browserPool?: BrowserPool;
+  /** Callback to ensure browser and pool are ready before session creation */
+  ensureBrowser?: () => Promise<void>;
   /**
    * Called after a session is destroyed (e.g., by idle eviction).
    * Allows the gateway layer to clean up associated resources
@@ -46,6 +48,7 @@ export class SessionRouter {
   private implicitSession: SessionController | null = null;
   private readonly sessionManager: SessionManager;
   private readonly browserPool?: BrowserPool;
+  private readonly ensureBrowser?: () => Promise<void>;
   private readonly idleTimeoutMs: number;
   private readonly maxSessions: number;
   private _onSessionDestroyed?: (sessionId: string) => void | Promise<void>;
@@ -54,6 +57,7 @@ export class SessionRouter {
   constructor(sessionManager: SessionManager, options?: SessionRouterOptions) {
     this.sessionManager = sessionManager;
     this.browserPool = options?.browserPool;
+    this.ensureBrowser = options?.ensureBrowser;
     this.idleTimeoutMs = options?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
     this.maxSessions = options?.maxSessions ?? DEFAULT_MAX_SESSIONS;
     this._onSessionDestroyed = options?.onSessionDestroyed;
@@ -101,8 +105,12 @@ export class SessionRouter {
       sessionManager: this.sessionManager,
     };
 
-    // If a browser pool is available, acquire an isolated context for this session
+    // If a browser pool is available, ensure the browser is running
+    // (lazy init) then acquire an isolated context for this session
     if (this.browserPool) {
+      if (this.ensureBrowser) {
+        await this.ensureBrowser();
+      }
       const lease = await this.browserPool.acquire(mcpSessionId);
       options.browserContext = lease.context;
     }
