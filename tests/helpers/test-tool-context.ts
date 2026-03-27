@@ -129,6 +129,7 @@ export function createTestToolContext(overrides?: Partial<ToolContext>): ToolCon
     setBrowserConfig: vi.fn(),
     requireSnapshot: vi.fn(),
     resolveElementByEid: vi.fn(),
+    close: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }

@@ -5,6 +5,15 @@
  */
 
 /**
+ * Supported Chrome release channels.
+ * Single source of truth — used by LaunchOptions, BrowserSessionConfig, and Zod schemas.
+ */
+export const CHROME_CHANNELS = ['chrome', 'chrome-canary', 'chrome-beta', 'chrome-dev'] as const;
+
+/** Chrome release channel type derived from the canonical const array. */
+export type ChromeChannel = (typeof CHROME_CHANNELS)[number];
+
+/**
  * Connection state machine states
  */
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'failed';
@@ -50,7 +59,7 @@ export interface LaunchOptions {
   viewport?: { width: number; height: number };
 
   /** Chrome channel to use */
-  channel?: 'chrome' | 'chrome-canary' | 'chrome-beta' | 'chrome-dev';
+  channel?: ChromeChannel;
 
   /** Path to Chrome executable (overrides channel) */
   executablePath?: string;

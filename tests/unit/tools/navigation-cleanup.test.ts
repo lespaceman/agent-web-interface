@@ -184,11 +184,10 @@ describe('Navigation tools dependency tracker cleanup', () => {
   });
 
   describe('closeSession()', () => {
-    it('should clear all dependency data', async () => {
+    it('should delegate cleanup to ctx.close()', async () => {
       await closeSession({}, ctx);
 
-      expect(ctx.getDependencyTracker).toHaveBeenCalled();
-      expect(mockClearAll).toHaveBeenCalled();
+      expect(ctx.close).toHaveBeenCalled();
     });
   });
 });

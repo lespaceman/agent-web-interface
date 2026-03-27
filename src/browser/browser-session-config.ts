@@ -8,6 +8,8 @@
  * @module browser/browser-session-config
  */
 
+import type { ChromeChannel } from './session-manager.types.js';
+
 /**
  * Per-session browser configuration.
  *
@@ -37,7 +39,7 @@ export interface BrowserSessionConfig {
   userDataDir?: string;
 
   /** Chrome channel to use */
-  channel?: 'chrome' | 'chrome-canary' | 'chrome-beta' | 'chrome-dev';
+  channel?: ChromeChannel;
 
   /** Path to Chrome executable (overrides channel) */
   executablePath?: string;

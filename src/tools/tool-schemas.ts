@@ -7,6 +7,8 @@
 
 import { z } from 'zod';
 
+import { CHROME_CHANNELS } from '../browser/session-manager.types.js';
+
 // ============================================================================
 // Shared Node Details Schema
 // ============================================================================
@@ -154,10 +156,7 @@ export const ConfigureBrowserInputSchema = z.object({
   /** Chrome user data directory */
   user_data_dir: z.string().optional().describe('Path to Chrome user data directory.'),
   /** Chrome channel to use */
-  channel: z
-    .enum(['chrome', 'chrome-canary', 'chrome-beta', 'chrome-dev'])
-    .optional()
-    .describe('Chrome release channel.'),
+  channel: z.enum(CHROME_CHANNELS).optional().describe('Chrome release channel.'),
   /** Path to Chrome executable (overrides channel) */
   executable_path: z.string().optional().describe('Path to Chrome executable binary.'),
 });

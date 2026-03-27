@@ -152,13 +152,7 @@ export async function closeSession(
 ): Promise<import('./tool-schemas.js').CloseSessionOutput> {
   CloseSessionInputSchema.parse(rawInput);
 
-  const session = ctx.getSessionManager();
-  if (session.isRunning()) {
-    await session.shutdown();
-  }
-  ctx.getSnapshotStore().clear();
-  ctx.clearAllStateManagers();
-  ctx.getDependencyTracker().clearAll();
+  await ctx.close();
   await cleanupTempFiles();
 
   return buildCloseSessionResponse();

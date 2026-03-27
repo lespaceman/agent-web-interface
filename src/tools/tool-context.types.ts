@@ -169,4 +169,14 @@ export interface ToolContext {
    * @throws {StaleElementError} If eid reference is stale
    */
   resolveElementByEid(pageId: string, eid: string, snapshot: BaseSnapshot): ReadableNode;
+
+  // ---------------------------------------------------------------------------
+  // Session cleanup
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Close the session and clean up all resources (browser, snapshots, state, etc.).
+   * Implementations should be idempotent — repeated calls are safe no-ops.
+   */
+  close(): Promise<void>;
 }
