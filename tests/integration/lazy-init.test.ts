@@ -58,23 +58,6 @@ describe('Lazy Browser Initialization Integration', () => {
     expect(puppeteer.connect).toHaveBeenCalled();
   });
 
-  // Skip: autoConnect requires Chrome running with remote debugging enabled,
-  // which creates DevToolsActivePort file. Can't reliably mock fs in CI due to
-  // dynamic imports after vi.resetModules(). This is tested manually.
-  it.skip('should auto-connect when --autoConnect provided', async () => {
-    const { initServerConfig, getSessionManager, ensureBrowserForTools } =
-      await import('../../src/server/server-config.js');
-
-    initServerConfig(['--autoConnect']);
-    const session = getSessionManager();
-
-    await ensureBrowserForTools();
-
-    expect(session.isRunning()).toBe(true);
-    expect(puppeteer.launch).not.toHaveBeenCalled();
-    expect(puppeteer.connect).toHaveBeenCalled();
-  });
-
   it('should not re-launch on subsequent tool calls', async () => {
     const { initServerConfig, ensureBrowserForTools } =
       await import('../../src/server/server-config.js');

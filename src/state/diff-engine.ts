@@ -428,19 +428,6 @@ function computeAtomicDiffs(prev: BaseSnapshot, curr: BaseSnapshot): AtomChange[
 // ============================================================================
 
 /**
- * EVALUATION FLAG: Track all readable element mutations, not just ARIA status roles.
- *
- * When true: Tracks ALL visible readable nodes (text, heading, paragraph, etc.)
- * When false: Only tracks nodes with ARIA roles: status, alert, log, progressbar
- *
- * This flag is for evaluation to determine if broader mutation tracking is useful.
- * Search for "TRACK_ALL_READABLE_MUTATIONS" to find this flag.
- *
- * TODO: Remove or make permanent after evaluation is complete.
- */
-const TRACK_ALL_READABLE_MUTATIONS = false;
-
-/**
  * Maximum character length for mutation text content.
  * Text exceeding this limit will be truncated with "..." suffix.
  */
@@ -448,35 +435,15 @@ const MUTATION_TEXT_MAX_LENGTH = 100;
 
 /**
  * ARIA roles that indicate state-bearing elements.
- * Only used when TRACK_ALL_READABLE_MUTATIONS is false.
+ * Mutations are only tracked for nodes with these roles.
  */
 const STATUS_ROLES = new Set(['status', 'alert', 'log', 'progressbar']);
 
 /**
- * Node kinds considered "readable" for mutation tracking.
- * Used when TRACK_ALL_READABLE_MUTATIONS is true.
- */
-const READABLE_KINDS = new Set([
-  'text',
-  'heading',
-  'paragraph',
-  'listitem',
-  'generic', // often used for dynamic content
-]);
-
-/**
  * Check if a node should be tracked for mutations.
- *
- * When TRACK_ALL_READABLE_MUTATIONS is true: tracks any readable node kind
- * When false: only tracks nodes with specific ARIA roles (status, alert, log, progressbar)
+ * Only tracks nodes with status-bearing ARIA roles (status, alert, log, progressbar).
  */
 function isTrackableNode(node: ReadableNode): boolean {
-  if (TRACK_ALL_READABLE_MUTATIONS) {
-    // Track any readable node kind
-    return READABLE_KINDS.has(node.kind);
-  }
-
-  // Only track nodes with status-bearing ARIA roles
   const role = node.attributes?.role?.toLowerCase();
   return role !== undefined && STATUS_ROLES.has(role);
 }

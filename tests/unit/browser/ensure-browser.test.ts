@@ -111,18 +111,6 @@ describe('ensureBrowserReady', () => {
       expect(puppeteer.connect).toHaveBeenCalled();
     });
 
-    // Skip: autoConnect reads DevToolsActivePort file which requires Chrome
-    // running with remote debugging. Can't mock fs in unit tests due to
-    // dynamic imports. This is tested manually.
-    it.skip('should connect instead of launch when autoConnect is true', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      await ensureBrowserReady(sessionManager, { autoConnect: true });
-
-      expect(puppeteer.launch).not.toHaveBeenCalled();
-      expect(puppeteer.connect).toHaveBeenCalled();
-    });
-
     it('should pass isolated option to launch', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
