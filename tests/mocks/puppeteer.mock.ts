@@ -264,24 +264,6 @@ export const mockPuppeteer = {
 };
 
 /**
- * Full mock setup for Puppeteer module
- * Use this with vi.mock('puppeteer-core', () => createPuppeteerMock())
- */
-export function createPuppeteerMock() {
-  return {
-    default: mockPuppeteer,
-  };
-}
-
-/**
- * Reset all Puppeteer mocks
- */
-export function resetPuppeteerMocks(): void {
-  mockPuppeteer.launch.mockClear();
-  mockPuppeteer.connect.mockClear();
-}
-
-/**
  * Helper to create a complete mock setup with linked Browser -> Context -> Page -> CDPSession
  */
 export interface LinkedMocks {

@@ -97,50 +97,10 @@ export interface SnapshotHealthMetrics {
  * Differentiates between "element gone due to navigation" vs "element stale due to DOM mutation".
  */
 export type ClickOutcome =
-  | ClickOutcomeSuccess
-  | ClickOutcomeStaleElement
-  | ClickOutcomeElementNotFound
-  | ClickOutcomeError;
-
-/**
- * Click succeeded, optionally with navigation.
- */
-export interface ClickOutcomeSuccess {
-  status: 'success';
-  /** Whether the click triggered a page navigation */
-  navigated: boolean;
-}
-
-/**
- * Element was stale (removed from DOM).
- */
-export interface ClickOutcomeStaleElement {
-  status: 'stale_element';
-  /** Why the element became stale */
-  reason: 'dom_mutation' | 'navigation';
-  /** Whether retry was attempted */
-  retried: boolean;
-}
-
-/**
- * Element not found by eid.
- */
-export interface ClickOutcomeElementNotFound {
-  status: 'element_not_found';
-  /** The eid that wasn't found */
-  eid: string;
-  /** Last known label for debugging */
-  last_known_label?: string;
-}
-
-/**
- * Error during click.
- */
-export interface ClickOutcomeError {
-  status: 'error';
-  /** Error message */
-  message: string;
-}
+  | { status: 'success'; navigated: boolean }
+  | { status: 'stale_element'; reason: 'dom_mutation' | 'navigation'; retried: boolean }
+  | { status: 'element_not_found'; eid: string; last_known_label?: string }
+  | { status: 'error'; message: string };
 
 // ============================================================================
 // Element Registry Types

@@ -154,23 +154,3 @@ describe.skipIf(skipIntegration)('Network Idle Stabilization (Integration)', () 
     await new Promise((resolve) => setTimeout(resolve, 2500));
   }, 10000);
 });
-
-describe('waitForLoadState comparison (demonstrating the old bug)', () => {
-  /**
-   * NOTE: This test demonstrates that Playwright's waitForLoadState('networkidle')
-   * does NOT reliably wait for in-page network activity after initial load.
-   *
-   * The test is SKIPPED because we now use PageNetworkTracker which fixes this issue.
-   * The test is kept for documentation purposes to show what the old buggy behavior
-   * looked like.
-   */
-  it.skip('demonstrates that waitForLoadState(networkidle) returns immediately (historical bug)', async () => {
-    // This test used to demonstrate that:
-    // - waitForLoadState('networkidle') returns in ~0ms after a click
-    // - Even when a 2-second fetch is in flight
-    // - The status would show "Loading..." instead of "Loaded!"
-    //
-    // With PageNetworkTracker, this bug is fixed.
-    // The tracker monitors actual request/response events and waits correctly.
-  });
-});
