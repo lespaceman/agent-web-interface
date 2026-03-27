@@ -8,10 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
   cssEscape,
   escapeAttrSelectorValue,
-  escapeAttributeValue,
   normalizeText,
-  levenshteinDistance,
-  stringSimilarity,
   fuzzyTokensMatch,
 } from '../../../src/lib/text-utils.js';
 
@@ -278,22 +275,6 @@ describe('escapeAttrSelectorValue', () => {
   });
 });
 
-describe('escapeAttributeValue (for display)', () => {
-  it('should normalize and truncate', () => {
-    const longValue = 'a'.repeat(200);
-    const result = escapeAttributeValue(longValue);
-    expect(result.length).toBeLessThanOrEqual(120);
-  });
-
-  it('should collapse whitespace', () => {
-    expect(escapeAttributeValue('foo  bar')).toBe('foo bar');
-  });
-
-  it('should escape quotes', () => {
-    expect(escapeAttributeValue('foo"bar')).toBe('foo\\"bar');
-  });
-});
-
 describe('normalizeText', () => {
   it('should collapse multiple spaces', () => {
     expect(normalizeText('foo   bar')).toBe('foo bar');
@@ -310,99 +291,6 @@ describe('normalizeText', () => {
   it('should normalize unicode', () => {
     // NFKC normalization: ﬁ (U+FB01) -> fi
     expect(normalizeText('ﬁle')).toBe('file');
-  });
-});
-
-// ============================================================================
-// Fuzzy Matching Utilities
-// ============================================================================
-
-describe('levenshteinDistance', () => {
-  describe('identical strings', () => {
-    it('should return 0 for identical strings', () => {
-      expect(levenshteinDistance('hello', 'hello')).toBe(0);
-    });
-
-    it('should return 0 for empty strings', () => {
-      expect(levenshteinDistance('', '')).toBe(0);
-    });
-  });
-
-  describe('basic operations', () => {
-    it('should handle single insertion', () => {
-      expect(levenshteinDistance('cat', 'cats')).toBe(1);
-    });
-
-    it('should handle single deletion', () => {
-      expect(levenshteinDistance('cats', 'cat')).toBe(1);
-    });
-
-    it('should handle single substitution', () => {
-      expect(levenshteinDistance('cat', 'bat')).toBe(1);
-    });
-
-    it('should handle multiple operations', () => {
-      expect(levenshteinDistance('kitten', 'sitting')).toBe(3);
-    });
-  });
-
-  describe('edge cases', () => {
-    it('should handle one empty string', () => {
-      expect(levenshteinDistance('', 'hello')).toBe(5);
-      expect(levenshteinDistance('hello', '')).toBe(5);
-    });
-
-    it('should handle single character strings', () => {
-      expect(levenshteinDistance('a', 'b')).toBe(1);
-      expect(levenshteinDistance('a', 'a')).toBe(0);
-    });
-
-    it('should handle completely different strings', () => {
-      expect(levenshteinDistance('abc', 'xyz')).toBe(3);
-    });
-  });
-
-  describe('symmetry', () => {
-    it('should be symmetric', () => {
-      expect(levenshteinDistance('abc', 'def')).toBe(levenshteinDistance('def', 'abc'));
-      expect(levenshteinDistance('submit', 'submt')).toBe(levenshteinDistance('submt', 'submit'));
-    });
-  });
-});
-
-describe('stringSimilarity', () => {
-  describe('identical strings', () => {
-    it('should return 1 for identical strings', () => {
-      expect(stringSimilarity('hello', 'hello')).toBe(1);
-    });
-
-    it('should return 1 for empty strings', () => {
-      expect(stringSimilarity('', '')).toBe(1);
-    });
-  });
-
-  describe('similarity values', () => {
-    it('should return high similarity for close strings', () => {
-      // 1 edit out of 6 chars = 1 - 1/6 ≈ 0.833
-      expect(stringSimilarity('submit', 'submt')).toBeCloseTo(0.833, 2);
-    });
-
-    it('should return low similarity for different strings', () => {
-      expect(stringSimilarity('abc', 'xyz')).toBe(0);
-    });
-
-    it('should return moderate similarity for partially matching strings', () => {
-      // "hello" vs "hallo" = 1 edit, length 5, similarity = 0.8
-      expect(stringSimilarity('hello', 'hallo')).toBe(0.8);
-    });
-  });
-
-  describe('boundary values', () => {
-    it('should return value between 0 and 1', () => {
-      const similarity = stringSimilarity('test', 'testing');
-      expect(similarity).toBeGreaterThanOrEqual(0);
-      expect(similarity).toBeLessThanOrEqual(1);
-    });
   });
 });
 

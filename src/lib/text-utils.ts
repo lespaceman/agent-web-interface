@@ -24,20 +24,6 @@ export function normalizeText(text: string): string {
 }
 
 /**
- * Sanitize accessible name/label hint for selector building
- * Returns undefined if the result is empty or too short
- */
-export function sanitizeAccessibleHint(value: string, maxLength = 160): string | undefined {
-  const normalized = normalizeText(value);
-  if (!normalized) return undefined;
-
-  const tokens = normalized.split(' ').filter(Boolean).slice(0, 12);
-  if (tokens.length === 0) return undefined;
-
-  return truncate(tokens.join(' '), maxLength);
-}
-
-/**
  * Truncate string with ellipsis
  */
 export function truncate(value: string, max = 120): string {
@@ -45,14 +31,6 @@ export function truncate(value: string, max = 120): string {
     return value;
   }
   return `${value.slice(0, max - 1)}…`;
-}
-
-/**
- * Escape string for CSS attribute selector (for display labels).
- * Normalizes and truncates the value.
- */
-export function escapeAttributeValue(value: string, maxLength = 120): string {
-  return truncate(normalizeText(value), maxLength).replace(/["\\]/g, '\\$&');
 }
 
 /**
@@ -216,25 +194,6 @@ export function tokenizeForMatching(text: string, maxTokens = 3, minLength = 2):
   return words.slice(0, maxTokens);
 }
 
-/**
- * Check if two strings match using fuzzy token-based comparison
- */
-export function fuzzyTokenMatch(text: string, query: string, minMatchTokens = 2): boolean {
-  const textTokens = new Set(tokenizeForMatching(text.toLowerCase(), 10, 2));
-  const queryTokens = tokenizeForMatching(query.toLowerCase(), 5, 2);
-
-  if (queryTokens.length === 0) return false;
-
-  let matchCount = 0;
-  for (const token of queryTokens) {
-    if (textTokens.has(token)) {
-      matchCount++;
-    }
-  }
-
-  return matchCount >= Math.min(minMatchTokens, queryTokens.length);
-}
-
 // ============================================================================
 // Fuzzy Matching Utilities
 // ============================================================================
@@ -243,7 +202,7 @@ export function fuzzyTokenMatch(text: string, query: string, minMatchTokens = 2)
  * Calculate Levenshtein (edit) distance between two strings.
  * Uses optimized single-row algorithm with O(min(m,n)) space.
  */
-export function levenshteinDistance(a: string, b: string): number {
+function levenshteinDistance(a: string, b: string): number {
   // Ensure a is the shorter string for space optimization
   if (a.length > b.length) {
     [a, b] = [b, a];
@@ -289,7 +248,7 @@ export function levenshteinDistance(a: string, b: string): number {
  * Calculate similarity ratio (0-1) between two strings based on Levenshtein distance.
  * Returns 1 for identical strings, 0 for completely different strings.
  */
-export function stringSimilarity(a: string, b: string): number {
+function stringSimilarity(a: string, b: string): number {
   const maxLen = Math.max(a.length, b.length);
   if (maxLen === 0) return 1; // Both empty strings are identical
   return 1 - levenshteinDistance(a, b) / maxLen;
