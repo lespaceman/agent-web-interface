@@ -58,8 +58,8 @@ const DEFAULT_USER_DATA_DIR = path.join(
  * - launch(): Start a new browser instance
  * - connect(): Connect to an existing browser via CDP
  *
- * @deprecated Use SessionController for per-session state management and BrowserPool for browser lifecycle.
- * SessionManager is retained for backward compatibility during the multi-tenancy migration.
+ * Each SessionController owns its own SessionManager instance for
+ * per-session browser isolation.
  */
 export class SessionManager {
   private browser: Browser | null = null;

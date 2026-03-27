@@ -7,21 +7,16 @@
  * Use `--transport http --port 3000` to enable.
  *
  * Each HTTP client connection gets its own McpServer + SessionController pair,
- * providing full session isolation for concurrent AI agents.
+ * providing full session isolation for concurrent AI agents. Each session owns
+ * its own browser instance, configured independently via configure_browser.
  *
  * @module http-entry
  */
 
 import http from 'node:http';
 import express from 'express';
-import {
-  getServerConfig,
-  getSessionManager,
-  ensureBrowserForTools,
-  isSessionManagerInitialized,
-} from './server/server-config.js';
+import { getServerConfig } from './server/server-config.js';
 import { SessionRouter } from './gateway/session-router.js';
-import { BrowserPool } from './browser/browser-pool.js';
 import { HttpGateway } from './gateway/http-gateway.js';
 import { sendJsonRpcError } from './gateway/json-rpc-errors.js';
 import { getLogger } from './shared/services/logging.service.js';
@@ -39,25 +34,9 @@ export async function main(): Promise<void> {
   const port = config.port;
   const host = process.env.HTTP_HOST ?? '127.0.0.1';
 
-  const session = getSessionManager();
-  const browserPool = new BrowserPool();
+  const router = new SessionRouter();
 
-  const ensureBrowserAndPool = async () => {
-    await ensureBrowserForTools();
-    if (browserPool.state === 'idle') {
-      browserPool.initialize(session);
-    }
-  };
-
-  const router = new SessionRouter(session, {
-    browserPool,
-    ensureBrowser: ensureBrowserAndPool,
-  });
-
-  const gateway = new HttpGateway({
-    router,
-    ensureBrowser: ensureBrowserAndPool,
-  });
+  const gateway = new HttpGateway({ router });
 
   const app = express();
 
@@ -127,14 +106,9 @@ export async function main(): Promise<void> {
     deadline.unref();
 
     try {
-      // Shut down gateway sessions first (closes MCP servers + transports)
+      // Shut down gateway sessions first (closes MCP servers + transports + browsers)
       await gateway.shutdown();
       await cleanupTempFiles();
-      // Release browser contexts before shutting down the browser itself
-      await browserPool.shutdown();
-      if (isSessionManagerInitialized()) {
-        await session.shutdown();
-      }
       server.close();
       process.exit(0);
     } catch (err) {

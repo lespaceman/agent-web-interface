@@ -29,8 +29,11 @@ export {
   mapSchemaKindToNodeKind,
 } from './browser-tools.js';
 
-// Server config - lazy browser initialization
-export { ensureBrowserForTools, getSessionManager } from '../server/server-config.js';
+// Browser session config
+export {
+  type BrowserSessionConfig,
+  defaultBrowserConfig,
+} from '../browser/browser-session-config.js';
 
 // Schemas - Simplified API
 export {

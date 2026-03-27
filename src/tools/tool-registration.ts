@@ -11,7 +11,7 @@ import type { ToolRegistrar } from '../server/tool-registrar.types.js';
 export type { ToolRegistrar } from '../server/tool-registrar.types.js';
 
 // Import all tool handlers
-import { listPages, closePage, closeSession } from './navigation-tools.js';
+import { listPages, closePage, closeSession, configureBrowser } from './navigation-tools.js';
 import { navigate, goBack, goForward, reload } from './navigation-tools.js';
 import {
   captureSnapshot,
@@ -50,6 +50,7 @@ import {
   TakeScreenshotInputSchemaBase,
   InspectCanvasInputSchemaBase,
   ReadPageInputSchema,
+  ConfigureBrowserInputSchema,
 } from './tool-schemas.js';
 import { GetFormUnderstandingInputSchema, GetFieldContextInputSchema } from './form-tools.js';
 
@@ -60,30 +61,35 @@ import { GetFormUnderstandingInputSchema, GetFieldContextInputSchema } from './f
 export type ContextResolver = () => ToolContext | Promise<ToolContext>;
 
 /** Tools that should not trigger lazy browser initialization */
-const SKIP_BROWSER_INIT = new Set(['close_session', 'close_page', 'list_pages']);
+const SKIP_BROWSER_INIT = new Set([
+  'close_session',
+  'close_page',
+  'list_pages',
+  'configure_browser',
+]);
 
 /**
- * Register all 22 browser automation tools on an MCP server.
+ * Register all browser automation tools on an MCP server.
+ *
+ * Browser initialization is session-scoped: each ToolContext owns its own
+ * SessionManager and lazily launches/connects via ctx.ensureBrowser().
  *
  * @param server - The MCP server instance
  * @param resolveCtx - Function that returns the ToolContext for the current request
- * @param ensureBrowser - Optional function to lazily initialize the browser before tool execution
  */
-export function registerAllTools(
-  server: ToolRegistrar,
-  resolveCtx: ContextResolver,
-  ensureBrowser?: () => Promise<void>
-): void {
-  // Helper: wrap handler with browser init + context resolution
+export function registerAllTools(server: ToolRegistrar, resolveCtx: ContextResolver): void {
+  // Helper: resolve context first, then ensure browser, then run handler.
+  // Context resolution is cheap (returns existing SessionController),
+  // so it's safe to resolve before the browser is running.
   function wrap<T, R>(
     handler: (input: T, ctx: ToolContext) => R | Promise<R>,
     toolName?: string
   ): (input: T) => Promise<R> {
     return async (input: T) => {
-      if (ensureBrowser && !SKIP_BROWSER_INIT.has(toolName ?? '')) {
-        await ensureBrowser();
-      }
       const ctx = await resolveCtx();
+      if (!SKIP_BROWSER_INIT.has(toolName ?? '')) {
+        await ctx.ensureBrowser();
+      }
       return handler(input, ctx);
     };
   }
@@ -120,6 +126,17 @@ export function registerAllTools(
       inputSchema: CloseSessionInputSchema.shape,
     },
     wrap(closeSession, 'close_session')
+  );
+
+  server.registerTool(
+    'configure_browser',
+    {
+      title: 'Configure Browser',
+      description:
+        'Set browser preferences (headless, connect endpoint, Chrome channel) before the browser starts. Must be called before any browser-touching tool. If not called, defaults apply (launch, headed, persistent profile).',
+      inputSchema: ConfigureBrowserInputSchema.shape,
+    },
+    wrap(configureBrowser, 'configure_browser')
   );
 
   // ============================================================================

@@ -5,4 +5,3 @@
  */
 
 export { BrowserAutomationServer, type ServerConfig } from './mcp-server.js';
-export { SessionStore, type TenantSession, type SessionStoreOptions } from './session-store.js';

@@ -2,8 +2,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SessionRouter } from '../../../src/gateway/session-router.js';
 import { SessionController } from '../../../src/session/session-controller.js';
-import type { SessionManager } from '../../../src/browser/session-manager.js';
-import type { BrowserPool } from '../../../src/browser/browser-pool.js';
 
 vi.mock('../../../src/session/session-controller.js', () => {
   const SessionController = vi.fn().mockImplementation(function (
@@ -27,29 +25,12 @@ vi.mock('../../../src/shared/services/logging.service.js', () => ({
   }),
 }));
 
-function createMockSessionManager(): SessionManager {
-  return {
-    resolvePage: vi.fn(),
-    resolvePageOrCreate: vi.fn(),
-    touchPage: vi.fn(),
-  } as unknown as SessionManager;
-}
-
-function createMockBrowserPool(): BrowserPool {
-  return {
-    acquire: vi.fn().mockResolvedValue({ context: {}, release: vi.fn() }),
-    release: vi.fn().mockResolvedValue(undefined),
-  } as unknown as BrowserPool;
-}
-
 describe('SessionRouter', () => {
-  let sessionManager: SessionManager;
   let router: SessionRouter;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    sessionManager = createMockSessionManager();
-    router = new SessionRouter(sessionManager);
+    router = new SessionRouter();
   });
 
   // -------------------------------------------------------------------------
@@ -63,7 +44,6 @@ describe('SessionRouter', () => {
       expect(ctx.sessionId).toBe('stdio');
       expect(SessionController).toHaveBeenCalledWith({
         sessionId: 'stdio',
-        sessionManager,
       });
     });
 
@@ -101,33 +81,24 @@ describe('SessionRouter', () => {
       expect(router.sessionCount).toBe(1);
     });
 
+    it('passes only sessionId to SessionController', async () => {
+      await router.createSession('check-args');
+      expect(SessionController).toHaveBeenCalledWith({
+        sessionId: 'check-args',
+      });
+    });
+
     it('throws if session already exists', async () => {
       await router.createSession('dup');
       await expect(router.createSession('dup')).rejects.toThrow('Session already exists: dup');
     });
 
     it('throws if maxSessions reached', async () => {
-      const smallRouter = new SessionRouter(sessionManager, { maxSessions: 2 });
+      const smallRouter = new SessionRouter({ maxSessions: 2 });
       await smallRouter.createSession('a');
       await smallRouter.createSession('b');
       await expect(smallRouter.createSession('c')).rejects.toThrow(
         'Maximum concurrent sessions (2) reached'
-      );
-    });
-
-    it('acquires BrowserPool context when pool is available', async () => {
-      const pool = createMockBrowserPool();
-      const poolRouter = new SessionRouter(sessionManager, { browserPool: pool });
-
-      await poolRouter.createSession('pool-sess');
-
-      expect(pool.acquire).toHaveBeenCalledWith('pool-sess');
-      expect(SessionController).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionId: 'pool-sess',
-          sessionManager,
-          browserContext: {},
-        })
       );
     });
   });
@@ -137,21 +108,17 @@ describe('SessionRouter', () => {
   // -------------------------------------------------------------------------
 
   describe('destroySession()', () => {
-    it('closes session and releases pool context', async () => {
-      const pool = createMockBrowserPool();
-      const poolRouter = new SessionRouter(sessionManager, { browserPool: pool });
-
-      const session = await poolRouter.createSession('to-destroy');
-      await poolRouter.destroySession('to-destroy');
+    it('closes session and removes it', async () => {
+      const session = await router.createSession('to-destroy');
+      await router.destroySession('to-destroy');
 
       expect(session.close).toHaveBeenCalled();
-      expect(pool.release).toHaveBeenCalledWith('to-destroy');
-      expect(poolRouter.sessionCount).toBe(0);
+      expect(router.sessionCount).toBe(0);
     });
 
     it('calls onSessionDestroyed callback', async () => {
       const onDestroyed = vi.fn();
-      const cbRouter = new SessionRouter(sessionManager, { onSessionDestroyed: onDestroyed });
+      const cbRouter = new SessionRouter({ onSessionDestroyed: onDestroyed });
 
       await cbRouter.createSession('cb-sess');
       await cbRouter.destroySession('cb-sess');
@@ -229,7 +196,7 @@ describe('SessionRouter', () => {
 
     it('evicts sessions that exceed idle timeout', async () => {
       const onDestroyed = vi.fn();
-      const idleRouter = new SessionRouter(sessionManager, {
+      const idleRouter = new SessionRouter({
         idleTimeoutMs: 5000,
         onSessionDestroyed: onDestroyed,
       });
@@ -253,7 +220,7 @@ describe('SessionRouter', () => {
     });
 
     it('does not evict sessions that are still active', async () => {
-      const idleRouter = new SessionRouter(sessionManager, {
+      const idleRouter = new SessionRouter({
         idleTimeoutMs: 120_000,
       });
 

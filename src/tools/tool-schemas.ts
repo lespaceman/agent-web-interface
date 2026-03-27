@@ -123,6 +123,48 @@ export type CloseSessionInput = z.infer<typeof CloseSessionInputSchema>;
 export type CloseSessionOutput = z.infer<typeof CloseSessionOutputSchema>;
 
 // ============================================================================
+// configure_browser - Set browser preferences before first tool call
+// ============================================================================
+
+export const ConfigureBrowserInputSchema = z.object({
+  /** Launch a new browser or connect to an existing one. Default: 'launch' */
+  mode: z
+    .enum(['launch', 'connect'])
+    .optional()
+    .describe("'launch' starts a new browser, 'connect' attaches to an existing one."),
+  /** Run browser in headless mode. Default: false */
+  headless: z.boolean().optional().describe('Run browser without a visible window.'),
+  /** Use an isolated temp profile instead of persistent. Default: false */
+  isolated: z
+    .boolean()
+    .optional()
+    .describe('Use a temporary profile that is discarded after the session.'),
+  /** HTTP endpoint URL for connecting to an existing browser */
+  browser_url: z
+    .string()
+    .optional()
+    .describe('HTTP endpoint for CDP discovery (e.g., http://localhost:9222).'),
+  /** WebSocket endpoint URL for connecting to an existing browser */
+  ws_endpoint: z.string().optional().describe('WebSocket endpoint for direct CDP connection.'),
+  /** Auto-connect to Chrome 144+ via DevToolsActivePort */
+  auto_connect: z
+    .boolean()
+    .optional()
+    .describe('Auto-discover Chrome via DevToolsActivePort file.'),
+  /** Chrome user data directory */
+  user_data_dir: z.string().optional().describe('Path to Chrome user data directory.'),
+  /** Chrome channel to use */
+  channel: z
+    .enum(['chrome', 'chrome-canary', 'chrome-beta', 'chrome-dev'])
+    .optional()
+    .describe('Chrome release channel.'),
+  /** Path to Chrome executable (overrides channel) */
+  executable_path: z.string().optional().describe('Path to Chrome executable binary.'),
+});
+
+export type ConfigureBrowserInput = z.infer<typeof ConfigureBrowserInputSchema>;
+
+// ============================================================================
 // navigate - Navigate to a URL
 // ============================================================================
 

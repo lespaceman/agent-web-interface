@@ -10,14 +10,23 @@ vi.mock('puppeteer-core', () => ({
   },
 }));
 
-import puppeteer from 'puppeteer-core';
+vi.mock('../../src/shared/services/logging.service.js', () => ({
+  getLogger: () => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
 
-describe('Lazy Browser Initialization Integration', () => {
+import puppeteer from 'puppeteer-core';
+import { SessionController } from '../../src/session/session-controller.js';
+
+describe('Lazy Browser Initialization (SessionController)', () => {
   let mockBrowser: MockBrowser;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetModules();
 
     const mocks = createLinkedMocks({ url: 'https://example.com', title: 'Example' });
     mockBrowser = mocks.browser;
@@ -26,65 +35,47 @@ describe('Lazy Browser Initialization Integration', () => {
     (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
   });
 
-  it('should auto-launch browser on first tool call', async () => {
-    const { initServerConfig, getSessionManager, ensureBrowserForTools } =
-      await import('../../src/server/server-config.js');
+  it('launches a browser on ensureBrowser()', async () => {
+    const controller = new SessionController({ sessionId: 'test-launch' });
 
-    initServerConfig([]);
-    const session = getSessionManager();
+    await controller.ensureBrowser();
 
-    // Browser not running initially
-    expect(session.isRunning()).toBe(false);
-
-    // Simulate what any tool does
-    await ensureBrowserForTools();
-
-    // Browser should now be running
-    expect(session.isRunning()).toBe(true);
     expect(puppeteer.launch).toHaveBeenCalledTimes(1);
+    expect(controller.getSessionManager().isRunning()).toBe(true);
   });
 
-  it('should auto-connect when --browserUrl provided', async () => {
-    const { initServerConfig, getSessionManager, ensureBrowserForTools } =
-      await import('../../src/server/server-config.js');
+  it('connects when browserUrl is configured', async () => {
+    const controller = new SessionController({
+      sessionId: 'test-connect',
+      browserConfig: { browserUrl: 'http://localhost:9222' },
+    });
 
-    initServerConfig(['--browserUrl', 'http://localhost:9222']);
-    const session = getSessionManager();
+    await controller.ensureBrowser();
 
-    await ensureBrowserForTools();
-
-    expect(session.isRunning()).toBe(true);
     expect(puppeteer.launch).not.toHaveBeenCalled();
     expect(puppeteer.connect).toHaveBeenCalled();
+    expect(controller.getSessionManager().isRunning()).toBe(true);
   });
 
-  it('should not re-launch on subsequent tool calls', async () => {
-    const { initServerConfig, ensureBrowserForTools } =
-      await import('../../src/server/server-config.js');
+  it('is idempotent — does not re-launch on subsequent calls', async () => {
+    const controller = new SessionController({ sessionId: 'test-idempotent' });
 
-    initServerConfig([]);
+    await controller.ensureBrowser();
+    await controller.ensureBrowser();
+    await controller.ensureBrowser();
 
-    // First call launches
-    await ensureBrowserForTools();
-    expect(puppeteer.launch).toHaveBeenCalledTimes(1);
-
-    // Subsequent calls should not launch again
-    await ensureBrowserForTools();
-    await ensureBrowserForTools();
     expect(puppeteer.launch).toHaveBeenCalledTimes(1);
   });
 
-  it('should respect headless=false from CLI', async () => {
-    const { initServerConfig, ensureBrowserForTools } =
-      await import('../../src/server/server-config.js');
+  it('respects setBrowserConfig({ headless: true })', async () => {
+    const controller = new SessionController({ sessionId: 'test-headless' });
+    controller.setBrowserConfig({ headless: true });
 
-    initServerConfig(['--headless=false']);
-
-    await ensureBrowserForTools();
+    await controller.ensureBrowser();
 
     expect(puppeteer.launch).toHaveBeenCalledWith(
       expect.objectContaining({
-        headless: false,
+        headless: true,
       })
     );
   });

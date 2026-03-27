@@ -7,6 +7,7 @@
 import {
   ClosePageInputSchema,
   CloseSessionInputSchema,
+  ConfigureBrowserInputSchema,
   NavigateInputSchema,
   GoBackInputSchema,
   GoForwardInputSchema,
@@ -151,11 +152,14 @@ export async function closeSession(
 ): Promise<import('./tool-schemas.js').CloseSessionOutput> {
   CloseSessionInputSchema.parse(rawInput);
 
-  await ctx.getSessionManager().shutdown();
+  const session = ctx.getSessionManager();
+  if (session.isRunning()) {
+    await session.shutdown();
+  }
   ctx.getSnapshotStore().clear();
-  ctx.clearAllStateManagers(); // Clean up all state managers
-  ctx.getDependencyTracker().clearAll(); // Clean up all dependencies
-  await cleanupTempFiles(); // Clean up screenshot temp files
+  ctx.clearAllStateManagers();
+  ctx.getDependencyTracker().clearAll();
+  await cleanupTempFiles();
 
   return buildCloseSessionResponse();
 }
@@ -232,4 +236,31 @@ export async function reload(
 ): Promise<import('./tool-schemas.js').ReloadOutput> {
   const input = ReloadInputSchema.parse(rawInput);
   return executeNavigationAction(input.page_id, ctx, 'reload');
+}
+
+/**
+ * Configure the browser for this session.
+ *
+ * Must be called before the first browser-touching tool (navigate, click, etc.).
+ * Sets preferences like headless mode, connection endpoint, or Chrome channel.
+ *
+ * @param rawInput - Browser configuration options
+ * @returns Confirmation message
+ */
+export function configureBrowser(rawInput: unknown, ctx: ToolContext): string {
+  const input = ConfigureBrowserInputSchema.parse(rawInput);
+
+  ctx.setBrowserConfig({
+    mode: input.mode,
+    headless: input.headless,
+    isolated: input.isolated,
+    browserUrl: input.browser_url,
+    wsEndpoint: input.ws_endpoint,
+    autoConnect: input.auto_connect,
+    userDataDir: input.user_data_dir,
+    channel: input.channel,
+    executablePath: input.executable_path,
+  });
+
+  return '<result>Browser configured successfully. Preferences will apply when the browser starts.</result>';
 }

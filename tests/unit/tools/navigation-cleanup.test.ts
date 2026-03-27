@@ -45,6 +45,7 @@ const mockResolvePageOrCreate = vi.fn().mockResolvedValue({
 });
 
 const mockSessionManager = {
+  isRunning: vi.fn().mockReturnValue(true),
   resolvePageOrCreate: mockResolvePageOrCreate,
   navigateTo: mockNavigateTo,
   touchPage: mockTouchPage,

@@ -38,7 +38,6 @@ interface HttpSession {
 
 export interface HttpGatewayOptions {
   router: SessionRouter;
-  ensureBrowser: () => Promise<void>;
   version?: string;
 }
 
@@ -77,12 +76,10 @@ class HttpToolRegistrar implements ToolRegistrar {
 export class HttpGateway {
   private readonly sessions = new Map<string, HttpSession>();
   private readonly router: SessionRouter;
-  private readonly ensureBrowser: () => Promise<void>;
   private readonly version: string;
 
   constructor(options: HttpGatewayOptions) {
     this.router = options.router;
-    this.ensureBrowser = options.ensureBrowser;
     this.version = options.version ?? VERSION;
 
     // When the router evicts an idle session, clean up the gateway-owned
@@ -193,14 +190,10 @@ export class HttpGateway {
     // The resolver lazily reads the mutable `controller` reference which is
     // guaranteed to be set by onsessioninitialized before any tool runs.
     const registrar = new HttpToolRegistrar(mcpServer);
-    registerAllTools(
-      registrar,
-      () => {
-        if (!controller) throw new Error('Session not initialized');
-        return controller;
-      },
-      this.ensureBrowser
-    );
+    registerAllTools(registrar, () => {
+      if (!controller) throw new Error('Session not initialized');
+      return controller;
+    });
 
     // Connect transport to server before handling the first request
     await mcpServer.connect(transport);

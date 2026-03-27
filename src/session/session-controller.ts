@@ -5,20 +5,14 @@
  * Each agent/session gets its own SessionController instance
  * with isolated pages, snapshots, state managers, and registries.
  *
- * In single-tenant (stdio) mode, one SessionController wraps
- * the existing SessionManager.
- *
- * In multi-tenant (HTTP) mode, each MCP connection gets its own
- * SessionController with an isolated BrowserContext.
+ * Each session owns its own SessionManager and browser lifecycle,
+ * configured independently via BrowserSessionConfig.
  *
  * @module session/session-controller
  */
 
-import type { BrowserContext } from 'puppeteer-core';
-import { PageRegistry, type PageHandle } from '../browser/page-registry.js';
-import { PuppeteerCdpClient } from '../cdp/puppeteer-cdp-client.js';
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
-import type { SessionManager } from '../browser/session-manager.js';
+import { SessionManager } from '../browser/session-manager.js';
 import { SnapshotStore } from '../snapshot/snapshot-store.js';
 import { StateManager } from '../state/state-manager.js';
 import { DependencyTracker } from '../form/dependency-tracker.js';
@@ -34,6 +28,15 @@ import type {
   CdpSessionResult,
   SnapshotCaptureResult,
 } from '../tools/tool-context.types.js';
+import {
+  defaultBrowserConfig,
+  type BrowserSessionConfig,
+} from '../browser/browser-session-config.js';
+import { ensureBrowserReady } from '../browser/ensure-browser.js';
+import type { PageHandle } from '../browser/page-registry.js';
+import { getLogger } from '../shared/services/logging.service.js';
+
+const logger = getLogger();
 
 /**
  * Session state machine.
@@ -46,16 +49,15 @@ export type SessionState = 'initializing' | 'active' | 'closing' | 'closed';
 export interface SessionControllerOptions {
   /** Unique session identifier */
   sessionId: string;
-  /** SessionManager instance for browser operations */
-  sessionManager: SessionManager;
-  /** Optional isolated BrowserContext for multi-tenant mode */
-  browserContext?: BrowserContext;
+  /** Optional browser configuration for this session */
+  browserConfig?: BrowserSessionConfig;
 }
 
 /**
  * Per-tenant session controller implementing ToolContext.
  *
  * Owns all per-session state:
+ * - SessionManager (per-session browser lifecycle)
  * - SnapshotStore (per-session snapshot cache)
  * - StateManagers (one per page)
  * - DependencyTracker (per-session form dependencies)
@@ -64,34 +66,25 @@ export interface SessionControllerOptions {
 export class SessionController implements ToolContext {
   readonly sessionId: string;
 
-  private readonly _sessionManager: SessionManager;
-  private readonly _browserContext?: BrowserContext;
-  private readonly _pageRegistry?: PageRegistry;
+  private _sessionManager: SessionManager | null = null;
+  private _browserConfig: BrowserSessionConfig;
   private readonly _snapshotStore: SnapshotStore;
   private readonly _stateManagers = new Map<string, StateManager>();
   private readonly _dependencyTracker: DependencyTracker;
   private readonly _observationAccumulator: ObservationAccumulator;
 
-  /** Whether this session owns its own pages (HTTP multi-tenant mode). */
-  private readonly _isolatedPages: boolean;
+  /** Deduplication promise for concurrent ensureBrowser() calls */
+  private _ensureBrowserPromise: Promise<void> | null = null;
 
   private _state: SessionState = 'initializing';
   private _lastActivity: number = Date.now();
 
   constructor(options: SessionControllerOptions) {
     this.sessionId = options.sessionId;
-    this._sessionManager = options.sessionManager;
-    this._browserContext = options.browserContext;
+    this._browserConfig = options.browserConfig ?? defaultBrowserConfig();
     this._snapshotStore = new SnapshotStore();
     this._dependencyTracker = new DependencyTracker();
     this._observationAccumulator = new ObservationAccumulator();
-
-    // In HTTP mode, each session has its own BrowserContext and PageRegistry
-    // to prevent cross-session page leakage.
-    this._isolatedPages = !!options.browserContext;
-    if (this._isolatedPages) {
-      this._pageRegistry = new PageRegistry();
-    }
 
     this._state = 'active';
   }
@@ -116,9 +109,8 @@ export class SessionController implements ToolContext {
   }
 
   /**
-   * Close the session and clean up all resources.
+   * Close the session and clean up all resources, including the owned browser.
    */
-  // eslint-disable-next-line @typescript-eslint/require-await -- Kept async for API contract; BrowserPool owns context close
   async close(): Promise<void> {
     if (this._state === 'closing' || this._state === 'closed') return;
     this._state = 'closing';
@@ -127,10 +119,78 @@ export class SessionController implements ToolContext {
     this._stateManagers.clear();
     this._dependencyTracker.clearAll();
 
-    // Note: We do NOT close _browserContext here. The BrowserPool owns
-    // the context lifecycle and closes it in BrowserPool.release().
+    // Shut down the owned browser
+    if (this._sessionManager) {
+      try {
+        await this._sessionManager.shutdown();
+      } catch (err) {
+        logger.error(
+          'Error shutting down session browser',
+          err instanceof Error ? err : undefined,
+          { sessionId: this.sessionId }
+        );
+      }
+      this._sessionManager = null;
+    }
 
     this._state = 'closed';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Browser lifecycle (ToolContext implementation)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set the browser configuration for this session.
+   *
+   * Must be called before the browser is launched/connected (i.e., before
+   * the first browser-touching tool call). Throws if browser is already running.
+   */
+  setBrowserConfig(config: BrowserSessionConfig): void {
+    if (this._sessionManager?.isRunning() || this._ensureBrowserPromise) {
+      throw new Error(
+        'Cannot change browser configuration after the browser has started. ' +
+          'Call close_session first, then configure_browser with new settings.'
+      );
+    }
+    // Merge only defined values to avoid wiping previously set fields
+    const prev = this._browserConfig;
+    this._browserConfig = {
+      mode: config.mode ?? prev.mode,
+      headless: config.headless ?? prev.headless,
+      isolated: config.isolated ?? prev.isolated,
+      browserUrl: config.browserUrl ?? prev.browserUrl,
+      wsEndpoint: config.wsEndpoint ?? prev.wsEndpoint,
+      autoConnect: config.autoConnect ?? prev.autoConnect,
+      userDataDir: config.userDataDir ?? prev.userDataDir,
+      channel: config.channel ?? prev.channel,
+      executablePath: config.executablePath ?? prev.executablePath,
+    };
+  }
+
+  /**
+   * Ensure the session's browser is ready.
+   *
+   * Lazily creates a SessionManager and launches/connects based on
+   * the session's BrowserSessionConfig. Idempotent — returns immediately
+   * if the browser is already running. Concurrent calls are deduplicated.
+   */
+  async ensureBrowser(): Promise<void> {
+    // Deduplicate concurrent calls — all callers await the same promise
+    if (this._ensureBrowserPromise) {
+      await this._ensureBrowserPromise;
+      return;
+    }
+
+    const session = this.getOrCreateSessionManager();
+
+    // ensureBrowserReady handles the isRunning() fast-path internally
+    this._ensureBrowserPromise = ensureBrowserReady(session, this._browserConfig);
+    try {
+      await this._ensureBrowserPromise;
+    } finally {
+      this._ensureBrowserPromise = null;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -139,121 +199,33 @@ export class SessionController implements ToolContext {
 
   resolvePage(pageId?: string): PageHandle | undefined {
     this.touch();
-    if (!this._isolatedPages) {
-      return this._sessionManager.resolvePage(pageId);
-    }
-    if (pageId) {
-      return this._pageRegistry!.get(pageId);
-    }
-    return this._pageRegistry!.getMostRecent();
+    return this.getSessionManager().resolvePage(pageId);
   }
 
   async resolvePageOrCreate(pageId?: string): Promise<PageHandle> {
     this.touch();
-    if (!this._isolatedPages) {
-      return this._sessionManager.resolvePageOrCreate(pageId);
-    }
-    if (pageId) {
-      const handle = this._pageRegistry!.get(pageId);
-      if (!handle) throw new Error(`Page not found: ${pageId}`);
-      return handle;
-    }
-    return this._pageRegistry!.getMostRecent() ?? (await this.createPageInContext());
+    return this.getSessionManager().resolvePageOrCreate(pageId);
   }
 
   resolveExistingPage(pageId?: string): PageHandle {
     this.touch();
-    if (!this._isolatedPages) {
-      return resolveExistingPageImpl(this._sessionManager, pageId);
-    }
-    const handle = this.resolvePage(pageId);
-    if (!handle) {
-      throw new Error(
-        pageId ? `Page not found: ${pageId}` : 'No page available. Navigate to a URL first.'
-      );
-    }
-    this._pageRegistry!.touch(handle.page_id);
-    return handle;
+    return resolveExistingPageImpl(this.getSessionManager(), pageId);
   }
 
   touchPage(pageId: string): void {
-    if (this._isolatedPages) {
-      this._pageRegistry!.touch(pageId);
-    } else {
-      this._sessionManager.touchPage(pageId);
-    }
+    this.getSessionManager().touchPage(pageId);
   }
 
   async closePage(pageId: string): Promise<boolean> {
-    if (!this._isolatedPages) {
-      return this._sessionManager.closePage(pageId);
-    }
-    const handle = this._pageRegistry!.get(pageId);
-    if (!handle) return false;
-
-    this._pageRegistry!.remove(pageId);
-    try {
-      await handle.cdp.close();
-    } catch {
-      // CDP session may already be closed
-    }
-    try {
-      await handle.page.close();
-    } catch {
-      // Page may already be closed
-    }
-    return true;
+    return this.getSessionManager().closePage(pageId);
   }
 
   async syncPages(): Promise<PageHandle[]> {
-    if (!this._isolatedPages) {
-      return this._sessionManager.syncPages();
-    }
-    if (!this._browserContext) {
-      return this._pageRegistry!.list();
-    }
-    // Adopt any unregistered pages in the isolated context
-    const browserPages = await this._browserContext.pages();
-    for (const page of browserPages) {
-      if (this._pageRegistry!.findByPage(page)) continue;
-      if (page.isClosed()) continue;
-      try {
-        const cdpSession = await page.createCDPSession();
-        const cdpClient = new PuppeteerCdpClient(cdpSession);
-        const handle = this._pageRegistry!.register(page, cdpClient);
-        this._pageRegistry!.updateMetadata(handle.page_id, { url: page.url() });
-      } catch {
-        // Skip pages that can't be adopted
-      }
-    }
-    return this._pageRegistry!.list();
+    return this.getSessionManager().syncPages();
   }
 
   async navigateTo(pageId: string, url: string): Promise<void> {
-    if (!this._isolatedPages) {
-      await this._sessionManager.navigateTo(pageId, url);
-      return;
-    }
-    const handle = this._pageRegistry!.get(pageId);
-    if (!handle) throw new Error(`Page not found: ${pageId}`);
-    await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
-    this._pageRegistry!.updateMetadata(pageId, { url: handle.page.url() });
-  }
-
-  /**
-   * Create a new page in the isolated BrowserContext.
-   */
-  private async createPageInContext(): Promise<PageHandle> {
-    if (!this._browserContext) {
-      throw new Error('No browser context available');
-    }
-    const page = await this._browserContext.newPage();
-    const cdpSession = await page.createCDPSession();
-    const cdpClient = new PuppeteerCdpClient(cdpSession);
-    const handle = this._pageRegistry!.register(page, cdpClient);
-    // Inject observation accumulator for the new page
-    await this._observationAccumulator.inject(page);
-    return handle;
+    await this.getSessionManager().navigateTo(pageId, url);
   }
 
   // ---------------------------------------------------------------------------
@@ -261,7 +233,7 @@ export class SessionController implements ToolContext {
   // ---------------------------------------------------------------------------
 
   getSessionManager(): SessionManager {
-    return this._sessionManager;
+    return this.getOrCreateSessionManager();
   }
 
   getSnapshotStore(): SnapshotStore {
@@ -296,7 +268,7 @@ export class SessionController implements ToolContext {
   // ---------------------------------------------------------------------------
 
   async ensureCdpSession(handle: PageHandle): Promise<CdpSessionResult> {
-    return ensureCdpSessionImpl(this._sessionManager, handle);
+    return ensureCdpSessionImpl(this.getSessionManager(), handle);
   }
 
   // ---------------------------------------------------------------------------
@@ -341,5 +313,17 @@ export class SessionController implements ToolContext {
     }
 
     return node;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get or lazily create the session's own SessionManager.
+   */
+  private getOrCreateSessionManager(): SessionManager {
+    this._sessionManager ??= new SessionManager();
+    return this._sessionManager;
   }
 }

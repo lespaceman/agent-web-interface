@@ -16,6 +16,7 @@ import type { StateManager } from '../state/state-manager.js';
 import type { DependencyTracker } from '../form/dependency-tracker.js';
 import type { ObservationAccumulator } from '../observation/observation-accumulator.js';
 import type { RuntimeHealth } from '../state/health.types.js';
+import type { BrowserSessionConfig } from '../browser/browser-session-config.js';
 
 /**
  * Result of ensuring a CDP session is healthy.
@@ -47,6 +48,24 @@ export interface SnapshotCaptureResult {
 export interface ToolContext {
   /** Unique session identifier */
   readonly sessionId: string;
+
+  // ---------------------------------------------------------------------------
+  // Browser lifecycle
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Ensure the session's browser is ready.
+   * Lazily launches/connects based on the session's BrowserSessionConfig.
+   * Idempotent — returns immediately if already running.
+   */
+  ensureBrowser(): Promise<void>;
+
+  /**
+   * Set the browser configuration for this session.
+   * Must be called before the browser is launched/connected.
+   * @throws Error if browser is already running
+   */
+  setBrowserConfig(config: BrowserSessionConfig): void;
 
   // ---------------------------------------------------------------------------
   // Page lifecycle

@@ -78,6 +78,7 @@ export function createTestToolContext(overrides?: Partial<ToolContext>): ToolCon
   } as unknown as ObservationAccumulator;
 
   const defaultSessionManager = {
+    isRunning: vi.fn().mockReturnValue(true),
     resolvePage: vi.fn(),
     resolvePageOrCreate: vi.fn(),
     touchPage: vi.fn(),
@@ -124,6 +125,8 @@ export function createTestToolContext(overrides?: Partial<ToolContext>): ToolCon
       handle: {} as PageHandle,
       runtime_health: createHealthyRuntime(),
     } satisfies SnapshotCaptureResult),
+    ensureBrowser: vi.fn().mockResolvedValue(undefined),
+    setBrowserConfig: vi.fn(),
     requireSnapshot: vi.fn(),
     resolveElementByEid: vi.fn(),
     ...overrides,

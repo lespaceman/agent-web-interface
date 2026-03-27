@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/src/index.js",
   "bin": {
-    "agent-web-interface": "./dist/src/index.js"
+    "agent-web-interface-dev": "./dist/src/index.js"
   },
   "scripts": {
     "build": "tsc --project tsconfig.build.json",

@@ -6,11 +6,12 @@
  * - stdio mode: resolve(undefined) returns a single implicit SessionController
  * - HTTP mode: resolve(sessionId) looks up by MCP session ID
  *
+ * Each SessionController owns its own browser lifecycle, configured
+ * independently via BrowserSessionConfig.
+ *
  * @module gateway/session-router
  */
 
-import type { SessionManager } from '../browser/session-manager.js';
-import type { BrowserPool } from '../browser/browser-pool.js';
 import { SessionController, type SessionControllerOptions } from '../session/session-controller.js';
 import type { ToolContext } from '../tools/tool-context.types.js';
 import { getLogger } from '../shared/services/logging.service.js';
@@ -25,10 +26,6 @@ export interface SessionRouterOptions {
   idleTimeoutMs?: number;
   /** Maximum concurrent sessions (default: 10) */
   maxSessions?: number;
-  /** Optional browser pool for per-session context isolation */
-  browserPool?: BrowserPool;
-  /** Callback to ensure browser and pool are ready before session creation */
-  ensureBrowser?: () => Promise<void>;
   /**
    * Called after a session is destroyed (e.g., by idle eviction).
    * Allows the gateway layer to clean up associated resources
@@ -46,18 +43,12 @@ const DEFAULT_MAX_SESSIONS = 10;
 export class SessionRouter {
   private readonly sessions = new Map<string, SessionController>();
   private implicitSession: SessionController | null = null;
-  private readonly sessionManager: SessionManager;
-  private readonly browserPool?: BrowserPool;
-  private readonly ensureBrowser?: () => Promise<void>;
   private readonly idleTimeoutMs: number;
   private readonly maxSessions: number;
   private _onSessionDestroyed?: (sessionId: string) => void | Promise<void>;
   private idleCheckTimer?: ReturnType<typeof setInterval>;
 
-  constructor(sessionManager: SessionManager, options?: SessionRouterOptions) {
-    this.sessionManager = sessionManager;
-    this.browserPool = options?.browserPool;
-    this.ensureBrowser = options?.ensureBrowser;
+  constructor(options?: SessionRouterOptions) {
     this.idleTimeoutMs = options?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
     this.maxSessions = options?.maxSessions ?? DEFAULT_MAX_SESSIONS;
     this._onSessionDestroyed = options?.onSessionDestroyed;
@@ -89,6 +80,7 @@ export class SessionRouter {
    * @param mcpSessionId - MCP session ID from transport
    * @returns The created SessionController
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Kept async for API contract with HttpGateway
   async createSession(mcpSessionId: string): Promise<SessionController> {
     if (this.sessions.has(mcpSessionId)) {
       throw new Error(`Session already exists: ${mcpSessionId}`);
@@ -102,18 +94,7 @@ export class SessionRouter {
 
     const options: SessionControllerOptions = {
       sessionId: mcpSessionId,
-      sessionManager: this.sessionManager,
     };
-
-    // If a browser pool is available, ensure the browser is running
-    // (lazy init) then acquire an isolated context for this session
-    if (this.browserPool) {
-      if (this.ensureBrowser) {
-        await this.ensureBrowser();
-      }
-      const lease = await this.browserPool.acquire(mcpSessionId);
-      options.browserContext = lease.context;
-    }
 
     const controller = new SessionController(options);
     this.sessions.set(mcpSessionId, controller);
@@ -133,11 +114,6 @@ export class SessionRouter {
 
     await session.close();
     this.sessions.delete(mcpSessionId);
-
-    // Release the browser context back to the pool if available
-    if (this.browserPool) {
-      await this.browserPool.release(mcpSessionId);
-    }
 
     logger.info('Session destroyed', { sessionId: mcpSessionId });
 
@@ -163,7 +139,6 @@ export class SessionRouter {
   private getOrCreateImplicitSession(): SessionController {
     this.implicitSession ??= new SessionController({
       sessionId: 'stdio',
-      sessionManager: this.sessionManager,
     });
     this.implicitSession.touch();
     return this.implicitSession;
@@ -178,11 +153,6 @@ export class SessionRouter {
 
   /**
    * Register a callback invoked after a session is destroyed.
-   * Used by the gateway layer to clean up resources (transports,
-   * MCP servers) that the router does not own.
-   *
-   * Can be set via constructor options or this method (for cases
-   * where the gateway is created after the router).
    */
   setOnSessionDestroyed(cb: (sessionId: string) => void | Promise<void>): void {
     this._onSessionDestroyed = cb;
@@ -234,14 +204,23 @@ export class SessionRouter {
         toEvict.push(id);
       }
     }
-    for (const id of toEvict) {
-      try {
+    if (toEvict.length === 0) return;
+
+    // Evict in parallel — each destroySession operates on a distinct session
+    const results = await Promise.allSettled(
+      toEvict.map((id) => {
         logger.info('Evicting idle session', { sessionId: id });
-        await this.destroySession(id);
-      } catch (err) {
-        logger.error('Failed to evict session', err instanceof Error ? err : undefined, {
-          sessionId: id,
-        });
+        return this.destroySession(id);
+      })
+    );
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected') {
+        logger.error(
+          'Failed to evict session',
+          result.reason instanceof Error ? result.reason : undefined,
+          { sessionId: toEvict[i] }
+        );
       }
     }
   }
