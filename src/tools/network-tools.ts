@@ -5,7 +5,6 @@
  * Provides list and search over recorded HTTP requests/responses.
  */
 
-import { getSessionManager, resolveExistingPage } from './tool-context.js';
 import {
   getOrCreateRecorder,
   type NetworkEntry,
@@ -18,6 +17,7 @@ import {
   type ListNetworkCallsInput,
   type SearchNetworkCallsInput,
 } from './tool-schemas.js';
+import type { ToolContext } from './tool-context.types.js';
 
 // ============================================================================
 // Helpers
@@ -92,10 +92,9 @@ function entryToXml(entry: NetworkEntry, includeHeaders: boolean, includeBody: b
 // Tool Handlers
 // ============================================================================
 
-export function listNetworkCalls(rawInput: unknown): string {
+export function listNetworkCalls(rawInput: unknown, ctx: ToolContext): string {
   const input: ListNetworkCallsInput = ListNetworkCallsInputSchema.parse(rawInput);
-  const session = getSessionManager();
-  const handle = resolveExistingPage(session, input.page_id);
+  const handle = ctx.resolveExistingPage(input.page_id);
 
   const recorder = getOrCreateRecorder(handle.page);
   const filter: NetworkFilter = {};
@@ -122,10 +121,9 @@ export function listNetworkCalls(rawInput: unknown): string {
   return lines.join('\n');
 }
 
-export function searchNetworkCalls(rawInput: unknown): string {
+export function searchNetworkCalls(rawInput: unknown, ctx: ToolContext): string {
   const input: SearchNetworkCallsInput = SearchNetworkCallsInputSchema.parse(rawInput);
-  const session = getSessionManager();
-  const handle = resolveExistingPage(session, input.page_id);
+  const handle = ctx.resolveExistingPage(input.page_id);
 
   const recorder = getOrCreateRecorder(handle.page);
   const filter: NetworkFilter = {};

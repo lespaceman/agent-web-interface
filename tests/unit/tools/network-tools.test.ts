@@ -5,19 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// Mock tool-context before importing handlers
-const mockPage = {};
-const mockResolveExistingPage = vi.fn().mockReturnValue({
-  page_id: 'page-123',
-  page: mockPage,
-});
-const mockGetSessionManager = vi.fn().mockReturnValue({});
-
-vi.mock('../../../src/tools/tool-context.js', () => ({
-  getSessionManager: (): unknown => mockGetSessionManager(),
-  resolveExistingPage: (...args: unknown[]): unknown => mockResolveExistingPage(...args),
-}));
+import type { ToolContext } from '../../../src/tools/tool-context.types.js';
 
 // Mock recorder
 const mockGetEntries = vi.fn();
@@ -35,10 +23,23 @@ vi.mock('../../../src/browser/page-network-recorder.js', () => ({
 
 import { listNetworkCalls, searchNetworkCalls } from '../../../src/tools/network-tools.js';
 
+// Create a minimal mock ToolContext
+const mockPage = {};
+const mockCtx = {
+  resolveExistingPage: vi.fn().mockReturnValue({
+    page_id: 'page-123',
+    page: mockPage,
+  }),
+} as unknown as ToolContext;
+
 describe('listNetworkCalls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetStats.mockReturnValue({ total: 2, pending: 0, failed: 0, by_resource_type: {} });
+    (mockCtx.resolveExistingPage as ReturnType<typeof vi.fn>).mockReturnValue({
+      page_id: 'page-123',
+      page: mockPage,
+    });
   });
 
   it('should return XML with entries', () => {
@@ -76,7 +77,7 @@ describe('listNetworkCalls', () => {
       ],
     });
 
-    const result = listNetworkCalls({});
+    const result = listNetworkCalls({}, mockCtx);
 
     expect(result).toContain('<network_calls');
     expect(result).toContain('page_id="page-123"');
@@ -91,16 +92,19 @@ describe('listNetworkCalls', () => {
   it('should pass filters to getEntries', () => {
     mockGetEntries.mockReturnValue({ total: 0, entries: [] });
 
-    listNetworkCalls({
-      method: 'POST',
-      resource_type: 'fetch',
-      status_min: 400,
-      status_max: 599,
-      failed_only: true,
-      url_pattern: '/api',
-      offset: 5,
-      limit: 10,
-    });
+    listNetworkCalls(
+      {
+        method: 'POST',
+        resource_type: 'fetch',
+        status_min: 400,
+        status_max: 599,
+        failed_only: true,
+        url_pattern: '/api',
+        offset: 5,
+        limit: 10,
+      },
+      mockCtx
+    );
 
     expect(mockGetEntries).toHaveBeenCalledWith(
       {
@@ -120,7 +124,7 @@ describe('listNetworkCalls', () => {
     mockGetEntries.mockReturnValue({ total: 0, entries: [] });
     mockGetStats.mockReturnValue({ total: 0, pending: 0, failed: 0, by_resource_type: {} });
 
-    const result = listNetworkCalls({});
+    const result = listNetworkCalls({}, mockCtx);
 
     expect(result).toContain('total="0"');
     expect(result).toContain('shown="0"');
@@ -147,7 +151,7 @@ describe('listNetworkCalls', () => {
       ],
     });
 
-    const result = listNetworkCalls({});
+    const result = listNetworkCalls({}, mockCtx);
 
     expect(result).toContain('failed="true"');
     expect(result).toContain('error="net::ERR_FAILED"');
@@ -157,12 +161,16 @@ describe('listNetworkCalls', () => {
 describe('searchNetworkCalls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (mockCtx.resolveExistingPage as ReturnType<typeof vi.fn>).mockReturnValue({
+      page_id: 'page-123',
+      page: mockPage,
+    });
   });
 
   it('should pass url_pattern and url_regex to search', () => {
     mockSearch.mockReturnValue({ total: 0, entries: [] });
 
-    searchNetworkCalls({ url_pattern: '/api/v1', url_regex: true });
+    searchNetworkCalls({ url_pattern: '/api/v1', url_regex: true }, mockCtx);
 
     expect(mockSearch).toHaveBeenCalledWith('/api/v1', true, expect.any(Object));
   });
@@ -188,10 +196,13 @@ describe('searchNetworkCalls', () => {
       ],
     });
 
-    const result = searchNetworkCalls({
-      url_pattern: '/data',
-      include_headers: true,
-    });
+    const result = searchNetworkCalls(
+      {
+        url_pattern: '/data',
+        include_headers: true,
+      },
+      mockCtx
+    );
 
     expect(result).toContain('<request_headers>');
     expect(result).toContain('<response_headers>');
@@ -219,10 +230,13 @@ describe('searchNetworkCalls', () => {
       ],
     });
 
-    const result = searchNetworkCalls({
-      url_pattern: '/submit',
-      include_body: true,
-    });
+    const result = searchNetworkCalls(
+      {
+        url_pattern: '/submit',
+        include_body: true,
+      },
+      mockCtx
+    );
 
     expect(result).toContain('<body>');
     expect(result).toContain('{&quot;key&quot;:&quot;value&quot;}');
@@ -247,7 +261,7 @@ describe('searchNetworkCalls', () => {
       })),
     });
 
-    const result = searchNetworkCalls({ url_pattern: 'example', limit: 5 });
+    const result = searchNetworkCalls({ url_pattern: 'example', limit: 5 }, mockCtx);
 
     expect(result).toContain('total="50"');
     expect(result).toContain('shown="5"');
