@@ -4,12 +4,20 @@
  * Ensures a browser is ready before tool execution.
  * If no browser is running, launches or connects based on session configuration.
  *
+ * When a persistent profile is in use and Chrome is already running (from a
+ * previous session or another agent), reconnects via DevToolsActivePort instead
+ * of failing on the profile lock.
+ *
  * CDP endpoint can be set via AWI_CDP_URL env var (http or ws) to connect
  * to an existing browser instead of launching.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import type { SessionManager } from './session-manager.js';
+import { DEFAULT_USER_DATA_DIR } from './session-manager.js';
 import type { BrowserSessionConfig } from './browser-session-config.js';
+import { extractErrorMessage } from './connection-utils.js';
 import { getLogger } from '../shared/services/logging.service.js';
 
 const logger = getLogger();
@@ -38,28 +46,83 @@ export async function ensureBrowserReady(
 
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string must be falsy
   const cdpUrl = process.env.AWI_CDP_URL?.trim() || undefined;
-  const mode = (cdpUrl ?? config.autoConnect) ? 'connect' : 'launch';
+  const shouldConnect = !!(cdpUrl ?? config.autoConnect);
 
-  logger.info('Lazy browser initialization triggered', { mode });
-
-  try {
-    if (mode === 'connect') {
+  if (shouldConnect) {
+    logger.info('Lazy browser initialization triggered', { mode: 'connect' });
+    try {
       await session.connect({
         endpointUrl: cdpUrl,
         autoConnect: config.autoConnect,
       });
-    } else {
-      await session.launch({
-        headless: config.headless ?? false,
-        isolated: config.isolated ?? false,
+      logger.info('Browser initialized successfully', { mode: 'connect' });
+    } catch (error) {
+      logger.error('Browser initialization failed', error instanceof Error ? error : undefined, {
+        mode: 'connect',
       });
+      throw error;
     }
-    logger.info('Browser initialized successfully', { mode });
+    return;
+  }
+
+  // Launch mode — try reconnecting to an existing browser first (persistent profiles only)
+  const profileDir = config.isolated ? undefined : DEFAULT_USER_DATA_DIR;
+
+  if (profileDir && (await tryReconnect(session, profileDir))) {
+    return;
+  }
+
+  // Launch a new browser
+  logger.info('Lazy browser initialization triggered', { mode: 'launch' });
+  try {
+    await session.launch({
+      headless: config.headless ?? false,
+      isolated: config.isolated ?? false,
+    });
+    logger.info('Browser initialized successfully', { mode: 'launch' });
   } catch (error) {
+    // Another process may have grabbed the profile between our reconnect attempt
+    // and launch (race condition). Try reconnecting one more time.
+    if (profileDir && isProfileLockError(error) && (await tryReconnect(session, profileDir))) {
+      return;
+    }
+
     logger.error('Browser initialization failed', error instanceof Error ? error : undefined, {
-      mode,
+      mode: 'launch',
       headless: config.headless,
     });
     throw error;
   }
+}
+
+/**
+ * Attempt to reconnect to an existing Chrome via its DevToolsActivePort file.
+ * Returns true on success. On failure, cleans up a stale port file and returns false.
+ */
+async function tryReconnect(session: SessionManager, profileDir: string): Promise<boolean> {
+  try {
+    await session.connect({ autoConnect: true, userDataDir: profileDir, ownedReconnect: true });
+    logger.info('Reconnected to existing browser');
+    return true;
+  } catch (error) {
+    logger.warning('Reconnect to existing browser failed', {
+      error: extractErrorMessage(error),
+    });
+    // Clean up stale DevToolsActivePort so the next attempt doesn't retry a dead endpoint
+    const portFile = path.join(profileDir, 'DevToolsActivePort');
+    await fs.promises.unlink(portFile).catch(() => {
+      /* best-effort cleanup */
+    });
+    return false;
+  }
+}
+
+/**
+ * Detect Chrome profile-lock errors from Puppeteer.
+ * Matches against Puppeteer's error text which includes "already running for <path>"
+ * when the SingletonLock file prevents a second Chrome instance.
+ */
+function isProfileLockError(error: unknown): boolean {
+  const msg = extractErrorMessage(error);
+  return /already running for|already in use|SingletonLock/i.test(msg);
 }

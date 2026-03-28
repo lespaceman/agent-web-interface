@@ -44,7 +44,7 @@ import type {
 export type { Page };
 
 /** Default user data directory for persistent browser profiles */
-const DEFAULT_USER_DATA_DIR = path.join(
+export const DEFAULT_USER_DATA_DIR = path.join(
   os.homedir(),
   '.cache',
   'agent-web-interface',
@@ -173,7 +173,6 @@ export class SessionManager {
       isolated = false,
       userDataDir,
       args = [],
-      pipe = true,
     } = options;
 
     // Determine profile directory
@@ -182,6 +181,10 @@ export class SessionManager {
       profileDir = userDataDir ?? DEFAULT_USER_DATA_DIR;
       await fs.promises.mkdir(profileDir, { recursive: true });
     }
+
+    // Persistent profiles use WebSocket transport so other sessions can reconnect.
+    // Isolated (temp) profiles use pipe transport (faster, no network exposure).
+    const pipe = options.pipe ?? !profileDir;
 
     this.logger.info('Launching browser', {
       headless,
@@ -411,7 +414,7 @@ export class SessionManager {
       }
 
       this.browser = browser;
-      this.isExternalBrowser = true;
+      this.isExternalBrowser = !options.ownedReconnect;
 
       // Setup disconnect listener
       this.setupBrowserListeners();

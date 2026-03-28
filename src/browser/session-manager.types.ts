@@ -73,7 +73,7 @@ export interface LaunchOptions {
   /** Additional Chrome command-line arguments */
   args?: string[];
 
-  /** Use pipe transport instead of WebSocket (default: true, more secure) */
+  /** Use pipe transport instead of WebSocket. Defaults to true for isolated profiles, false for persistent (enables reconnection). */
   pipe?: boolean;
 }
 
@@ -108,4 +108,10 @@ export interface ConnectOptions {
 
   /** Chrome user data directory for autoConnect (default: ~/.config/google-chrome on Linux) */
   userDataDir?: string;
+
+  /**
+   * Treat connected browser as owned (close on shutdown instead of disconnect).
+   * Use when reconnecting to a browser that this server originally launched.
+   */
+  ownedReconnect?: boolean;
 }

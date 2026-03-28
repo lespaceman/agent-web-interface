@@ -22,7 +22,7 @@ const mockSessionManagerInstance = {
   connectionState: 'idle' as string,
   connectionPromise: null as Promise<void> | null,
   launch: vi.fn().mockResolvedValue(undefined),
-  connect: vi.fn().mockResolvedValue(undefined),
+  connect: vi.fn().mockRejectedValue(new Error('No existing browser to reconnect to')),
   shutdown: vi.fn().mockResolvedValue(undefined),
   resolvePage: vi.fn(),
   resolvePageOrCreate: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('../../../src/browser/session-manager.js', () => {
   function SessionManager(this: Record<string, unknown>) {
     return Object.assign(this, mockSessionManagerInstance);
   }
-  return { SessionManager };
+  return { SessionManager, DEFAULT_USER_DATA_DIR: '/mock/chrome-profile' };
 });
 
 vi.mock('../../../src/tools/tool-context.js', () => ({
@@ -274,7 +274,6 @@ describe('SessionController', () => {
       expect(mockSessionManagerInstance.launch).toHaveBeenCalledWith(
         expect.objectContaining({ headless: false })
       );
-      expect(mockSessionManagerInstance.connect).not.toHaveBeenCalled();
     });
 
     it('returns immediately if browser is already running', async () => {
@@ -298,6 +297,7 @@ describe('SessionController', () => {
     });
 
     it('connects when AWI_CDP_URL env var is set', async () => {
+      mockSessionManagerInstance.connect.mockResolvedValueOnce(undefined);
       process.env.AWI_CDP_URL = 'http://localhost:9222';
       try {
         const controller2 = new SessionController({

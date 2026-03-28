@@ -10,11 +10,36 @@ vi.mock('puppeteer-core', () => ({
   },
 }));
 
+// Mock node:fs — no DevToolsActivePort by default, mkdir succeeds for profile dir
+const { mockReadFile, mockMkdir, mockUnlink } = vi.hoisted(() => ({
+  mockReadFile: vi.fn<(path: string, encoding?: string) => Promise<string>>(),
+  mockMkdir: vi.fn<(path: string, options?: object) => Promise<string | undefined>>(),
+  mockUnlink: vi.fn<(path: string) => Promise<void>>(),
+}));
+
+vi.mock('node:fs', () => ({
+  default: {
+    promises: {
+      readFile: mockReadFile,
+      mkdir: mockMkdir,
+      unlink: mockUnlink,
+    },
+    constants: { F_OK: 0 },
+  },
+  promises: {
+    readFile: mockReadFile,
+    mkdir: mockMkdir,
+    unlink: mockUnlink,
+  },
+  constants: { F_OK: 0 },
+}));
+
 vi.mock('../../src/shared/services/logging.service.js', () => ({
   getLogger: () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
+    warning: vi.fn(),
     debug: vi.fn(),
   }),
 }));
@@ -33,6 +58,11 @@ describe('Lazy Browser Initialization (SessionController)', () => {
 
     (puppeteer.launch as Mock).mockResolvedValue(mockBrowser);
     (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
+
+    // No DevToolsActivePort by default — tryReconnect fails, falls through to launch
+    mockReadFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    mockMkdir.mockResolvedValue(undefined);
+    mockUnlink.mockResolvedValue(undefined);
   });
 
   it('launches a browser on ensureBrowser()', async () => {
