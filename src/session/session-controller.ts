@@ -153,19 +153,8 @@ export class SessionController implements ToolContext {
           'Call close_session first, then configure_browser with new settings.'
       );
     }
-    // Merge only defined values to avoid wiping previously set fields
-    const prev = this._browserConfig;
-    this._browserConfig = {
-      mode: config.mode ?? prev.mode,
-      headless: config.headless ?? prev.headless,
-      isolated: config.isolated ?? prev.isolated,
-      browserUrl: config.browserUrl ?? prev.browserUrl,
-      wsEndpoint: config.wsEndpoint ?? prev.wsEndpoint,
-      autoConnect: config.autoConnect ?? prev.autoConnect,
-      userDataDir: config.userDataDir ?? prev.userDataDir,
-      channel: config.channel ?? prev.channel,
-      executablePath: config.executablePath ?? prev.executablePath,
-    };
+    const overrides = Object.fromEntries(Object.entries(config).filter(([, v]) => v !== undefined));
+    this._browserConfig = { ...this._browserConfig, ...overrides };
   }
 
   /**

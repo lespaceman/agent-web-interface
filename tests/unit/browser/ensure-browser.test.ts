@@ -89,26 +89,18 @@ describe('ensureBrowserReady', () => {
       );
     });
 
-    it('should connect instead of launch when browserUrl provided', async () => {
+    it('should connect instead of launch when AWI_CDP_URL env var is set', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      await ensureBrowserReady(sessionManager, {
-        browserUrl: 'http://localhost:9222',
-      });
+      process.env.AWI_CDP_URL = 'http://localhost:9222';
+      try {
+        await ensureBrowserReady(sessionManager, {});
 
-      expect(puppeteer.launch).not.toHaveBeenCalled();
-      expect(puppeteer.connect).toHaveBeenCalled();
-    });
-
-    it('should connect instead of launch when wsEndpoint provided', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      await ensureBrowserReady(sessionManager, {
-        wsEndpoint: 'ws://localhost:9222/devtools/browser/abc',
-      });
-
-      expect(puppeteer.launch).not.toHaveBeenCalled();
-      expect(puppeteer.connect).toHaveBeenCalled();
+        expect(puppeteer.launch).not.toHaveBeenCalled();
+        expect(puppeteer.connect).toHaveBeenCalled();
+      } finally {
+        delete process.env.AWI_CDP_URL;
+      }
     });
 
     it('should pass isolated option to launch', async () => {
@@ -119,30 +111,6 @@ describe('ensureBrowserReady', () => {
       expect(puppeteer.launch).toHaveBeenCalledWith(
         expect.objectContaining({
           userDataDir: undefined, // isolated means no persistent profile
-        })
-      );
-    });
-
-    it('should pass channel option to launch', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      await ensureBrowserReady(sessionManager, { channel: 'chrome-canary' });
-
-      expect(puppeteer.launch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          channel: 'chrome-canary',
-        })
-      );
-    });
-
-    it('should pass executablePath option to launch', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      await ensureBrowserReady(sessionManager, { executablePath: '/opt/chrome/chrome' });
-
-      expect(puppeteer.launch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          executablePath: '/opt/chrome/chrome',
         })
       );
     });

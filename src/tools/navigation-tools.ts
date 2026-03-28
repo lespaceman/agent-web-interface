@@ -245,15 +245,9 @@ export function configureBrowser(rawInput: unknown, ctx: ToolContext): string {
   const input = ConfigureBrowserInputSchema.parse(rawInput);
 
   ctx.setBrowserConfig({
-    mode: input.mode,
     headless: input.headless,
     isolated: input.isolated,
-    browserUrl: input.browser_url,
-    wsEndpoint: input.ws_endpoint,
     autoConnect: input.auto_connect,
-    userDataDir: input.user_data_dir,
-    channel: input.channel,
-    executablePath: input.executable_path,
   });
 
   return '<result>Browser configured successfully. Preferences will apply when the browser starts.</result>';

@@ -44,17 +44,21 @@ describe('Lazy Browser Initialization (SessionController)', () => {
     expect(controller.getSessionManager().isRunning()).toBe(true);
   });
 
-  it('connects when browserUrl is configured', async () => {
-    const controller = new SessionController({
-      sessionId: 'test-connect',
-      browserConfig: { browserUrl: 'http://localhost:9222' },
-    });
+  it('connects when AWI_CDP_URL env var is set', async () => {
+    process.env.AWI_CDP_URL = 'http://localhost:9222';
+    try {
+      const controller = new SessionController({
+        sessionId: 'test-connect',
+      });
 
-    await controller.ensureBrowser();
+      await controller.ensureBrowser();
 
-    expect(puppeteer.launch).not.toHaveBeenCalled();
-    expect(puppeteer.connect).toHaveBeenCalled();
-    expect(controller.getSessionManager().isRunning()).toBe(true);
+      expect(puppeteer.launch).not.toHaveBeenCalled();
+      expect(puppeteer.connect).toHaveBeenCalled();
+      expect(controller.getSessionManager().isRunning()).toBe(true);
+    } finally {
+      delete process.env.AWI_CDP_URL;
+    }
   });
 
   it('is idempotent — does not re-launch on subsequent calls', async () => {

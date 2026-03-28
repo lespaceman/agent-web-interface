@@ -5,10 +5,10 @@
  * Each session can independently choose to launch a new browser or connect
  * to an existing one, with its own headless/headed preference.
  *
+ * Env var AWI_CDP_URL overrides to connect to an existing CDP endpoint.
+ *
  * @module browser/browser-session-config
  */
-
-import type { ChromeChannel } from './session-manager.types.js';
 
 /**
  * Per-session browser configuration.
@@ -17,32 +17,14 @@ import type { ChromeChannel } from './session-manager.types.js';
  * If not provided, sensible defaults are used (launch, headed, persistent profile).
  */
 export interface BrowserSessionConfig {
-  /** Launch a new browser or connect to an existing one. Default: 'launch' */
-  mode?: 'launch' | 'connect';
-
   /** Run browser in headless mode. Default: false */
   headless?: boolean;
 
   /** Use an isolated temp profile instead of persistent. Default: false */
   isolated?: boolean;
 
-  /** HTTP endpoint URL for connecting to an existing browser */
-  browserUrl?: string;
-
-  /** WebSocket endpoint URL for connecting to an existing browser */
-  wsEndpoint?: string;
-
   /** Auto-connect to Chrome 144+ via DevToolsActivePort */
   autoConnect?: boolean;
-
-  /** Chrome user data directory */
-  userDataDir?: string;
-
-  /** Chrome channel to use */
-  channel?: ChromeChannel;
-
-  /** Path to Chrome executable (overrides channel) */
-  executablePath?: string;
 }
 
 /**
@@ -53,7 +35,6 @@ export interface BrowserSessionConfig {
  */
 export function defaultBrowserConfig(): BrowserSessionConfig {
   return {
-    mode: 'launch',
     headless: false,
     isolated: false,
   };

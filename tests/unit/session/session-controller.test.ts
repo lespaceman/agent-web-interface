@@ -283,33 +283,22 @@ describe('SessionController', () => {
       expect(mockSessionManagerInstance.connect).not.toHaveBeenCalled();
     });
 
-    it('connects when browserUrl is configured', async () => {
-      const controller2 = new SessionController({
-        sessionId: 'connect-session',
-        browserConfig: { browserUrl: 'http://localhost:9222' },
-      });
+    it('connects when AWI_CDP_URL env var is set', async () => {
+      process.env.AWI_CDP_URL = 'http://localhost:9222';
+      try {
+        const controller2 = new SessionController({
+          sessionId: 'connect-session',
+        });
 
-      await controller2.ensureBrowser();
+        await controller2.ensureBrowser();
 
-      expect(mockSessionManagerInstance.connect).toHaveBeenCalledWith(
-        expect.objectContaining({ browserURL: 'http://localhost:9222' })
-      );
-      expect(mockSessionManagerInstance.launch).not.toHaveBeenCalled();
-    });
-
-    it('connects when wsEndpoint is configured', async () => {
-      const controller2 = new SessionController({
-        sessionId: 'ws-session',
-        browserConfig: { wsEndpoint: 'ws://localhost:9222/devtools/browser/abc' },
-      });
-
-      await controller2.ensureBrowser();
-
-      expect(mockSessionManagerInstance.connect).toHaveBeenCalledWith(
-        expect.objectContaining({
-          browserWSEndpoint: 'ws://localhost:9222/devtools/browser/abc',
-        })
-      );
+        expect(mockSessionManagerInstance.connect).toHaveBeenCalledWith(
+          expect.objectContaining({ endpointUrl: 'http://localhost:9222' })
+        );
+        expect(mockSessionManagerInstance.launch).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.AWI_CDP_URL;
+      }
     });
 
     it('propagates errors from launch', async () => {
@@ -349,7 +338,7 @@ describe('SessionController', () => {
     });
 
     it('merges config with existing values', async () => {
-      controller.setBrowserConfig({ headless: true, channel: 'chrome' });
+      controller.setBrowserConfig({ headless: true });
 
       await controller.ensureBrowser();
 
