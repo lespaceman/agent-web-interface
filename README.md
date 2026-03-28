@@ -100,8 +100,6 @@ Example workflows include:
 - Handling login and consent flows
 - Performing multi-step UI interactions with lower token usage
 
-See the `examples/` directory for concrete agent workflows.
-
 ---
 
 ## Claude Code
@@ -110,33 +108,30 @@ See the `examples/` directory for concrete agent workflows.
 # Basic (auto-launches browser)
 claude mcp add agent-web-interface -- npx agent-web-interface@latest
 
-# With auto-connect to your Chrome profile
-claude mcp add agent-web-interface -- npx agent-web-interface@latest --autoConnect
-
-# Headless mode
-claude mcp add agent-web-interface -- npx agent-web-interface@latest --headless
+# With auto-connect to your Chrome profile (set via env var)
+claude mcp add agent-web-interface -e AWI_CDP_URL=http://localhost:9222 -- npx agent-web-interface@latest
 ```
 
 ---
 
 ## CLI Arguments
 
-The server accepts the following arguments to configure browser initialization:
+The server accepts transport-level arguments only. Browser configuration is per-session via the `navigate` tool.
 
-| Argument                 | Description                                                     | Default          |
-| ------------------------ | --------------------------------------------------------------- | ---------------- |
-| `--headless=true\|false` | Run browser in headless mode                                    | `false`          |
-| `--browserUrl`           | HTTP endpoint to connect to existing browser                    | -                |
-| `--wsEndpoint`           | WebSocket endpoint to connect to existing browser               | -                |
-| `--autoConnect`          | Auto-connect to Chrome 144+ via DevToolsActivePort              | `false`          |
-| `--isolated`             | Use isolated temp profile instead of persistent                 | `false`          |
-| `--userDataDir`          | Chrome user data directory                                      | Platform default |
-| `--channel`              | Chrome channel (chrome, chrome-canary, chrome-beta, chrome-dev) | `chrome`         |
-| `--executablePath`       | Path to Chrome executable                                       | -                |
+| Argument      | Description                          | Default |
+| ------------- | ------------------------------------ | ------- |
+| `--transport` | Transport mode: `stdio` or `http`    | `stdio` |
+| `--port`      | Port for HTTP transport              | `3000`  |
 
-### Automatic Browser Initialization
+### Browser Session Configuration
 
-The browser is automatically launched or connected on the first tool call. No explicit initialization is needed.
+Browser initialization is automatic on the first tool call. The `navigate` tool accepts optional parameters to configure the session:
+
+| Parameter      | Description                                            | Default |
+| -------------- | ------------------------------------------------------ | ------- |
+| `headless`     | Run browser in headless mode                           | `false` |
+| `isolated`     | Use an isolated temp profile instead of persistent     | `false` |
+| `auto_connect` | Auto-connect to Chrome 144+ via DevToolsActivePort     | `false` |
 
 Examples:
 
@@ -144,14 +139,11 @@ Examples:
 # Auto-launch visible browser (default)
 npx agent-web-interface
 
-# Launch headless browser
-npx agent-web-interface --headless
+# HTTP transport mode
+npx agent-web-interface --transport http --port 8080
 
-# Auto-connect to Chrome with remote debugging enabled
-npx agent-web-interface --autoConnect
-
-# Connect to specific endpoint
-npx agent-web-interface --browserUrl http://localhost:9222
+# Connect to existing CDP endpoint via env var
+AWI_CDP_URL=http://localhost:9222 npx agent-web-interface
 ```
 
 ---
@@ -162,14 +154,17 @@ To connect with your bookmarks, extensions, and logged-in sessions:
 
 1. Navigate to `chrome://inspect/#remote-debugging` in Chrome
 2. Enable remote debugging and allow the connection
-3. Use `--autoConnect` CLI argument
+3. Use the `auto_connect` parameter on the `navigate` tool, or set `AWI_CDP_URL`
 
 ```json
 {
   "mcpServers": {
     "agent-web-interface": {
       "command": "npx",
-      "args": ["agent-web-interface@latest", "--autoConnect"]
+      "args": ["agent-web-interface@latest"],
+      "env": {
+        "AWI_CDP_URL": "http://localhost:9222"
+      }
     }
   }
 }
@@ -179,11 +174,17 @@ To connect with your bookmarks, extensions, and logged-in sessions:
 
 ## Environment Variables
 
-| Variable           | Description                                        | Default     |
-| ------------------ | -------------------------------------------------- | ----------- |
-| `AWI_TRIM_REGIONS` | Set to `false` to disable region trimming globally | `true`      |
-| `CEF_BRIDGE_HOST`  | CDP host for browser connection                    | `127.0.0.1` |
-| `CEF_BRIDGE_PORT`  | CDP port for browser connection                    | `9223`      |
+| Variable             | Description                                        | Default     |
+| -------------------- | -------------------------------------------------- | ----------- |
+| `AWI_CDP_URL`        | CDP endpoint (http or ws) to connect to existing browser | -      |
+| `AWI_TRIM_REGIONS`   | Set to `false` to disable region trimming globally | `true`      |
+| `TRANSPORT`          | Transport mode override (`http`)                   | -           |
+| `HTTP_HOST`          | Host for HTTP transport                            | `127.0.0.1` |
+| `HTTP_PORT`          | Port for HTTP transport                            | `3000`      |
+| `LOG_LEVEL`          | Logging level                                      | `info`      |
+| `CEF_BRIDGE_HOST`    | CDP host for CEF bridge connection                 | `127.0.0.1` |
+| `CEF_BRIDGE_PORT`    | CDP port for CEF bridge connection                 | `9223`      |
+| `CHROME_PATH`        | Path to Chrome executable (multi-tenant)           | -           |
 
 ---
 
