@@ -317,5 +317,31 @@ describe('State Extractor', () => {
 
       expect(state.checked).toBe(true);
     });
+
+    it('should extract pressed=true from toggle button AX properties', () => {
+      const axNode: RawAxNode = {
+        nodeId: 'ax-1',
+        backendDOMNodeId: 100,
+        role: 'button',
+        properties: [{ name: 'pressed', value: { type: 'tristate', value: 'true' } }],
+      };
+
+      const state = extractState(undefined, axNode, undefined);
+
+      expect(state.pressed).toBe(true);
+    });
+
+    it('should extract pressed=false from toggle button AX properties', () => {
+      const axNode: RawAxNode = {
+        nodeId: 'ax-1',
+        backendDOMNodeId: 100,
+        role: 'button',
+        properties: [{ name: 'pressed', value: { type: 'tristate', value: 'false' } }],
+      };
+
+      const state = extractState(undefined, axNode, undefined);
+
+      expect(state.pressed).toBe(false);
+    });
   });
 });

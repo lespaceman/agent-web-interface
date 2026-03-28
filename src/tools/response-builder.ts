@@ -107,9 +107,10 @@ export function buildFindElementsResponse(
         attrs.push(`visible="${m.state.visible ? 'true' : 'false'}"`);
       if (m.state.enabled !== undefined)
         attrs.push(`enabled="${m.state.enabled ? 'true' : 'false'}"`);
-      if (m.state.checked) attrs.push(`checked="true"`);
+      if (m.state.checked) attrs.push(`checked="${m.state.checked === 'mixed' ? 'mixed' : 'true'}"`);
       if (m.state.expanded) attrs.push(`expanded="true"`);
       if (m.state.selected) attrs.push(`selected="true"`);
+      if (m.state.pressed) attrs.push(`pressed="true"`);
       if (m.state.focused) attrs.push(`focused="true"`);
     }
 
@@ -209,9 +210,10 @@ export function buildGetElementDetailsResponse(
   if (node.state) {
     if (node.state.visible === false) attrs.push('visible="false"');
     if (node.state.enabled === false) attrs.push('enabled="false"');
-    if (node.state.checked) attrs.push('checked="true"');
+    if (node.state.checked) attrs.push(`checked="${node.state.checked === 'mixed' ? 'mixed' : 'true'}"`);
     if (node.state.expanded) attrs.push('expanded="true"');
     if (node.state.selected) attrs.push('selected="true"');
+    if (node.state.pressed) attrs.push('pressed="true"');
     if (node.state.focused) attrs.push('focused="true"');
     if (node.state.required) attrs.push('required="true"');
     if (node.state.invalid) attrs.push('invalid="true"');

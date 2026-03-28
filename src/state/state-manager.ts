@@ -540,9 +540,10 @@ export class StateManager {
       };
 
       // Optional state flags (only if true)
-      if (node.state?.checked) actionable.chk = true;
+      if (node.state?.checked) actionable.chk = node.state.checked;
       if (node.state?.selected) actionable.sel = true;
       if (node.state?.expanded) actionable.exp = true;
+      if (node.state?.pressed) actionable.prs = true;
       if (node.state?.focused) actionable.foc = true;
       if (node.state?.required) actionable.req = true;
       if (node.state?.invalid) actionable.inv = true;

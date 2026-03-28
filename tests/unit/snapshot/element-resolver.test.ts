@@ -476,6 +476,61 @@ describe('ElementResolver', () => {
     });
   });
 
+  describe('findClickableAncestor via clickByBackendNodeId() — small element handling', () => {
+    let mockCdp: { send: ReturnType<typeof vi.fn> };
+
+    beforeEach(() => {
+      mockCdp = {
+        send: vi.fn(),
+      };
+    });
+
+    it('should find label[for] when checkbox input is too small to click (bug T1.3)', async () => {
+      let boxModelCallCount = 0;
+      mockCdp.send.mockImplementation((method: string) => {
+        switch (method) {
+          case 'DOM.scrollIntoViewIfNeeded':
+            return Promise.resolve(undefined);
+          case 'DOM.getBoxModel':
+            boxModelCallCount++;
+            // First call: 1x1 checkbox; second call: the label target
+            return Promise.resolve({
+              model: {
+                content:
+                  boxModelCallCount === 1
+                    ? [476, 525, 477, 525, 477, 526, 476, 526]
+                    : [476, 520, 536, 520, 536, 540, 476, 540],
+              },
+            });
+          case 'DOM.resolveNode':
+            return Promise.resolve({ object: { objectId: 'obj-checkbox' } });
+          case 'Runtime.callFunctionOn':
+            return Promise.resolve({ result: { objectId: 'obj-label' } });
+          case 'DOM.describeNode':
+            return Promise.resolve({ node: { backendNodeId: 99999 } });
+          case 'Input.dispatchMouseEvent':
+            return Promise.resolve(undefined);
+          default:
+            return Promise.resolve(undefined);
+        }
+      });
+
+      await clickByBackendNodeId(mockCdp as unknown as CdpClient, 12345);
+
+      expect(mockCdp.send).toHaveBeenCalledWith('DOM.resolveNode', { backendNodeId: 12345 });
+
+      const mousePressed = mockCdp.send.mock.calls.find(
+        (call: unknown[]) =>
+          call[0] === 'Input.dispatchMouseEvent' &&
+          (call[1] as { type: string }).type === 'mousePressed'
+      );
+      expect(mousePressed).toBeDefined();
+      const coords = mousePressed![1] as { x: number; y: number };
+      expect(coords.x).toBe(506);
+      expect(coords.y).toBe(530);
+    });
+  });
+
   describe('clickAtCoordinates()', () => {
     let mockCdp: { send: ReturnType<typeof vi.fn> };
 

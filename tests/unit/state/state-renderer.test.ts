@@ -662,36 +662,33 @@ describe('renderStateXml mutations', () => {
 // renderActionable Kind Attribute Tests
 // ============================================================================
 
-describe('renderActionable kind attribute', () => {
-  /**
-   * Create a baseline response with specific actionables to test rendering.
-   */
-  function createBaselineWithActionables(actionables: ActionableInfo[]): StateResponseObject {
-    return {
-      state: {
-        sid: 'test-session',
-        step: 1,
-        doc: {
-          url: 'https://example.com/',
-          origin: 'https://example.com',
-          title: 'Test Page',
-          doc_id: 'test-doc',
-          nav_type: 'hard',
-          history_idx: 0,
-        },
-        layer: { active: 'main', stack: ['main'], pointer_lock: false },
-        timing: { ts: '2024-01-01T00:00:00Z', dom_ready: true, network_busy: false },
-        hash: { ui: 'abc123', layer: 'def456' },
+function createBaselineWithActionables(actionables: ActionableInfo[]): StateResponseObject {
+  return {
+    state: {
+      sid: 'test-session',
+      step: 1,
+      doc: {
+        url: 'https://example.com/',
+        origin: 'https://example.com',
+        title: 'Test Page',
+        doc_id: 'test-doc',
+        nav_type: 'hard',
+        history_idx: 0,
       },
-      diff: { mode: 'baseline', reason: 'first' } as BaselineResponse,
-      actionables,
-      counts: { shown: actionables.length, total_in_layer: actionables.length },
-      limits: { max_actionables: 1000, actionables_capped: false },
-      atoms: { viewport: { w: 1280, h: 720, dpr: 1 }, scroll: { x: 0, y: 0 } },
-      tokens: 0,
-    };
-  }
+      layer: { active: 'main', stack: ['main'], pointer_lock: false },
+      timing: { ts: '2024-01-01T00:00:00Z', dom_ready: true, network_busy: false },
+      hash: { ui: 'abc123', layer: 'def456' },
+    },
+    diff: { mode: 'baseline', reason: 'first' } as BaselineResponse,
+    actionables,
+    counts: { shown: actionables.length, total_in_layer: actionables.length },
+    limits: { max_actionables: 1000, actionables_capped: false },
+    atoms: { viewport: { w: 1280, h: 720, dpr: 1 }, scroll: { x: 0, y: 0 } },
+    tokens: 0,
+  };
+}
 
+describe('renderActionable kind attribute', () => {
   it('should render kind attribute for non-standard interactive elements', () => {
     const actionable: ActionableInfo = {
       eid: 'abc123def456',
@@ -850,6 +847,52 @@ describe('renderActionable kind attribute', () => {
     const xml = renderStateXml(response);
 
     expect(xml).toContain('kind="cell&lt;&gt;"');
+  });
+});
+
+// ============================================================================
+// Bug regression tests — from manual TEST-PLAN.md execution
+// ============================================================================
+
+describe('renderActionable state rendering bugs', () => {
+  it('should render pressed="true" for toggle buttons with pressed state (bug T2.2)', () => {
+    const actionable = {
+      eid: 'abc123def456',
+      kind: 'button',
+      name: 'Mute',
+      role: 'button',
+      vis: true,
+      ena: true,
+      prs: true,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'button "Mute"' } },
+      ctx: { layer: 'main', region: 'main' },
+    } as ActionableInfo;
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('pressed="true"');
+  });
+
+  it('should render checked="mixed" for indeterminate checkboxes (bug T2.3)', () => {
+    const actionable = {
+      eid: 'abc123def456',
+      kind: 'checkbox',
+      name: 'All condiments',
+      role: 'checkbox',
+      vis: true,
+      ena: true,
+      chk: 'mixed' as const,
+      ref: { snapshot_id: 'snap-1', backend_node_id: 100 },
+      loc: { preferred: { ax: 'checkbox "All condiments"' } },
+      ctx: { layer: 'main', region: 'main' },
+    } as ActionableInfo;
+
+    const response = createBaselineWithActionables([actionable]);
+    const xml = renderStateXml(response);
+
+    expect(xml).toContain('checked="mixed"');
   });
 });
 

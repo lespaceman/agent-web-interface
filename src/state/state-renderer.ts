@@ -259,9 +259,10 @@ function renderActionable(item: ActionableInfo, _diff?: StateResponseObject['dif
   // State flags (descriptive names with boolean values)
   if (!item.ena) attrs.push(`enabled="false"`);
   if (!item.vis) attrs.push(`visible="false"`);
-  if (item.chk) attrs.push(`checked="true"`);
+  if (item.chk) attrs.push(`checked="${item.chk === 'mixed' ? 'mixed' : 'true'}"`);
   if (item.sel) attrs.push(`selected="true"`);
   if (item.exp) attrs.push(`expanded="true"`);
+  if (item.prs) attrs.push(`pressed="true"`);
   if (item.foc) attrs.push(`focused="true"`);
 
   // Attributes

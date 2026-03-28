@@ -262,9 +262,10 @@ export interface ActionableInfo {
   };
 
   /** Optional state flags (only if true) */
-  chk?: boolean; // checked
+  chk?: boolean | 'mixed'; // checked
   sel?: boolean; // selected
   exp?: boolean; // expanded
+  prs?: boolean; // pressed (toggle buttons)
   foc?: boolean; // focused
   req?: boolean; // required
   inv?: boolean; // invalid
