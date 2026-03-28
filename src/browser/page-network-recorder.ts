@@ -136,11 +136,7 @@ export class PageNetworkRecorder {
     }
   }
 
-  getEntries(
-    filter?: NetworkFilter,
-    offset = 0,
-    limit = 25
-  ): NetworkQueryResult {
+  getEntries(filter?: NetworkFilter, offset = 0, limit = 25): NetworkQueryResult {
     const filtered = this.applyFilter(filter);
     return {
       total: filtered.length,
@@ -267,10 +263,7 @@ export class PageNetworkRecorder {
     }
   }
 
-  private pickHeaders(
-    headers: Record<string, string>,
-    kept: Set<string>
-  ): Record<string, string> {
+  private pickHeaders(headers: Record<string, string>, kept: Set<string>): Record<string, string> {
     const result: Record<string, string> = {};
     for (const key of Object.keys(headers)) {
       if (kept.has(key.toLowerCase())) {
@@ -326,10 +319,7 @@ export class PageNetworkRecorder {
       if (response) {
         entry.status = response.status();
         entry.status_text = response.statusText();
-        entry.response_headers = this.pickHeaders(
-          response.headers(),
-          KEPT_RESPONSE_HEADERS
-        );
+        entry.response_headers = this.pickHeaders(response.headers(), KEPT_RESPONSE_HEADERS);
         const ct = response.headers()['content-type'];
         entry.mime_type = ct ? ct.split(';')[0].trim() : null;
       }
@@ -364,10 +354,7 @@ export class PageNetworkRecorder {
 
 const recorders = new WeakMap<Page, PageNetworkRecorder>();
 
-export function getOrCreateRecorder(
-  page: Page,
-  maxEntries?: number
-): PageNetworkRecorder {
+export function getOrCreateRecorder(page: Page, maxEntries?: number): PageNetworkRecorder {
   let recorder = recorders.get(page);
   if (!recorder) {
     recorder = new PageNetworkRecorder(maxEntries);

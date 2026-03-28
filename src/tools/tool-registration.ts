@@ -52,10 +52,7 @@ import {
   ReadPageInputSchema,
 } from './tool-schemas.js';
 import { GetFormUnderstandingInputSchema, GetFieldContextInputSchema } from './form-tools.js';
-import {
-  ListNetworkCallsInputSchema,
-  SearchNetworkCallsInputSchema,
-} from './tool-schemas.js';
+import { ListNetworkCallsInputSchema, SearchNetworkCallsInputSchema } from './tool-schemas.js';
 
 /**
  * Context resolver function type.

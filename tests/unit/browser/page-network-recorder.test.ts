@@ -26,25 +26,28 @@ interface FullMockHTTPRequest {
   failure: ReturnType<typeof vi.fn>;
 }
 
-function createFullMockRequest(opts: {
-  url?: string;
-  method?: string;
-  resourceType?: string;
-  isNavigation?: boolean;
-  headers?: Record<string, string>;
-  postData?: string | null;
-  status?: number;
-  statusText?: string;
-  responseHeaders?: Record<string, string>;
-  failureText?: string | null;
-} = {}): FullMockHTTPRequest {
-  const response = opts.status != null
-    ? {
-        status: vi.fn().mockReturnValue(opts.status),
-        statusText: vi.fn().mockReturnValue(opts.statusText ?? 'OK'),
-        headers: vi.fn().mockReturnValue(opts.responseHeaders ?? {}),
-      }
-    : null;
+function createFullMockRequest(
+  opts: {
+    url?: string;
+    method?: string;
+    resourceType?: string;
+    isNavigation?: boolean;
+    headers?: Record<string, string>;
+    postData?: string | null;
+    status?: number;
+    statusText?: string;
+    responseHeaders?: Record<string, string>;
+    failureText?: string | null;
+  } = {}
+): FullMockHTTPRequest {
+  const response =
+    opts.status != null
+      ? {
+          status: vi.fn().mockReturnValue(opts.status),
+          statusText: vi.fn().mockReturnValue(opts.statusText ?? 'OK'),
+          headers: vi.fn().mockReturnValue(opts.responseHeaders ?? {}),
+        }
+      : null;
 
   return {
     url: vi.fn().mockReturnValue(opts.url ?? 'https://example.com/api'),
@@ -157,7 +160,11 @@ describe('PageNetworkRecorder', () => {
       const recorder = new PageNetworkRecorder();
       recorder.attach(page as unknown as Page);
 
-      const req = page.emitRequest({ url: 'https://example.com/api', status: 200, statusText: 'OK' });
+      const req = page.emitRequest({
+        url: 'https://example.com/api',
+        status: 200,
+        statusText: 'OK',
+      });
       page.emitRequestFinished(req);
 
       const entry = recorder.getEntries().entries[0];
@@ -207,8 +214,8 @@ describe('PageNetworkRecorder', () => {
       page.emitRequest({
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer secret',
-          'Accept': 'application/json',
+          Authorization: 'Bearer secret',
+          Accept: 'application/json',
           'X-Custom': 'ignored',
         },
       });
@@ -246,16 +253,36 @@ describe('PageNetworkRecorder', () => {
       recorder.attach(page as unknown as Page);
 
       // Create varied entries
-      const r1 = page.emitRequest({ url: 'https://api.example.com/users', method: 'GET', resourceType: 'fetch', status: 200 });
+      const r1 = page.emitRequest({
+        url: 'https://api.example.com/users',
+        method: 'GET',
+        resourceType: 'fetch',
+        status: 200,
+      });
       page.emitRequestFinished(r1);
 
-      const r2 = page.emitRequest({ url: 'https://api.example.com/login', method: 'POST', resourceType: 'xhr', status: 401 });
+      const r2 = page.emitRequest({
+        url: 'https://api.example.com/login',
+        method: 'POST',
+        resourceType: 'xhr',
+        status: 401,
+      });
       page.emitRequestFinished(r2);
 
-      const r3 = page.emitRequest({ url: 'https://cdn.example.com/style.css', method: 'GET', resourceType: 'stylesheet', status: 200 });
+      const r3 = page.emitRequest({
+        url: 'https://cdn.example.com/style.css',
+        method: 'GET',
+        resourceType: 'stylesheet',
+        status: 200,
+      });
       page.emitRequestFinished(r3);
 
-      const r4 = page.emitRequest({ url: 'https://api.example.com/data', method: 'GET', resourceType: 'fetch', failureText: 'net::ERR_FAILED' });
+      const r4 = page.emitRequest({
+        url: 'https://api.example.com/data',
+        method: 'GET',
+        resourceType: 'fetch',
+        failureText: 'net::ERR_FAILED',
+      });
       page.emitRequestFailed(r4);
     });
 
@@ -322,11 +349,23 @@ describe('PageNetworkRecorder', () => {
       const recorder = new PageNetworkRecorder();
       recorder.attach(page as unknown as Page);
 
-      const r1 = page.emitRequest({ url: 'https://api.example.com/v1/users', method: 'GET', status: 200 });
+      const r1 = page.emitRequest({
+        url: 'https://api.example.com/v1/users',
+        method: 'GET',
+        status: 200,
+      });
       page.emitRequestFinished(r1);
-      const r2 = page.emitRequest({ url: 'https://api.example.com/v1/users', method: 'POST', status: 201 });
+      const r2 = page.emitRequest({
+        url: 'https://api.example.com/v1/users',
+        method: 'POST',
+        status: 201,
+      });
       page.emitRequestFinished(r2);
-      const r3 = page.emitRequest({ url: 'https://cdn.example.com/image.png', resourceType: 'image', status: 200 });
+      const r3 = page.emitRequest({
+        url: 'https://cdn.example.com/image.png',
+        resourceType: 'image',
+        status: 200,
+      });
       page.emitRequestFinished(r3);
 
       const result = recorder.search('/v1/users', false, { method: 'POST' });

@@ -729,7 +729,9 @@ export const SearchNetworkCallsInputSchema = z.object({
   /** URL pattern to search for (substring or regex) */
   url_pattern: z
     .string()
-    .describe('URL pattern to search for. Substring match by default; set url_regex=true for regex.'),
+    .describe(
+      'URL pattern to search for. Substring match by default; set url_regex=true for regex.'
+    ),
   /** Treat url_pattern as regex (default: false) */
   url_regex: z
     .boolean()
