@@ -5,32 +5,10 @@
  * Domain-agnostic - works on any website.
  */
 
-import type { BaseSnapshot, NodeKind } from '../snapshot/snapshot.types.js';
+import type { BaseSnapshot } from '../snapshot/snapshot.types.js';
 import type { Atoms } from './types.js';
 import { computeEid } from './element-identity.js';
-
-// Interactive element kinds (for filtering)
-const INTERACTIVE_KINDS: NodeKind[] = [
-  'link',
-  'button',
-  'input',
-  'textarea',
-  'select',
-  'combobox',
-  'checkbox',
-  'radio',
-  'switch',
-  'slider',
-  'tab',
-  'menuitem',
-];
-
-/**
- * Check if node kind is interactive.
- */
-function isInteractiveKind(kind: NodeKind): boolean {
-  return INTERACTIVE_KINDS.includes(kind);
-}
+import { isInteractiveKind } from './actionables-filter.js';
 
 // ============================================================================
 // Atoms Extraction

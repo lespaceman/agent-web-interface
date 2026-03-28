@@ -73,6 +73,13 @@ export interface ToolContext {
    */
   canReconfigure(): boolean;
 
+  /**
+   * Shut down the current browser and clear session state so the browser
+   * can be reconfigured (e.g., switch from a launched browser to auto_connect).
+   * After this call, canReconfigure() returns true.
+   */
+  resetBrowser(): Promise<void>;
+
   // ---------------------------------------------------------------------------
   // Page lifecycle
   // ---------------------------------------------------------------------------

@@ -125,9 +125,6 @@ export function computeVisibility(layout: {
 }): boolean {
   if (layout.display === 'none') return false;
   if (layout.visibility === 'hidden' || layout.visibility === 'collapse') return false;
-  if (layout.opacity === '0') return false;
-  // pointer-events:none means the element can't receive interactions
-  if (layout.pointerEvents === 'none') return false;
   // clip-path: inset(100%) fully clips the element from view
   if (layout.clipPath === 'inset(100%)') return false;
   if (layout.bbox.w === 0 || layout.bbox.h === 0) return false;

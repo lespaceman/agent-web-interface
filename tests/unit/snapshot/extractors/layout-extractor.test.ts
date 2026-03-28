@@ -333,12 +333,12 @@ describe('Layout Extractor', () => {
       expect(computeVisibility({ bbox: { x: 10, y: 20, w: 100, h: 0 } })).toBe(false);
     });
 
-    it('should return false for opacity:0', () => {
-      expect(computeVisibility({ bbox: visible, opacity: '0' })).toBe(false);
+    it('should treat opacity:0 as visible', () => {
+      expect(computeVisibility({ bbox: visible, opacity: '0' })).toBe(true);
     });
 
-    it('should return false for pointer-events:none', () => {
-      expect(computeVisibility({ bbox: visible, pointerEvents: 'none' })).toBe(false);
+    it('should treat pointer-events:none as visible', () => {
+      expect(computeVisibility({ bbox: visible, pointerEvents: 'none' })).toBe(true);
     });
 
     it('should return false for clip-path:inset(100%)', () => {

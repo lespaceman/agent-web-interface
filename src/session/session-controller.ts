@@ -155,6 +155,17 @@ export class SessionController implements ToolContext {
   }
 
   /**
+   * Shut down the current browser and clear session state so the browser
+   * can be reconfigured (e.g., switch from a launched browser to auto_connect).
+   */
+  async resetBrowser(): Promise<void> {
+    if (this._sessionManager) {
+      await this._sessionManager.shutdown();
+    }
+    this.clearSessionState();
+  }
+
+  /**
    * Set the browser configuration for this session.
    *
    * Must be called before the browser is launched/connected (i.e., before

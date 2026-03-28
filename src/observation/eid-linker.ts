@@ -12,6 +12,7 @@
 import type { DOMObservation, ObservationGroups, ObservationChild } from './observation.types.js';
 import type { BaseSnapshot, ReadableNode, NodeKind } from '../snapshot/snapshot.types.js';
 import type { ElementRegistry } from '../state/element-registry.js';
+import { isInteractiveKind } from '../state/actionables-filter.js';
 import { fuzzyTokensMatch, tokenizeForMatching } from '../lib/text-utils.js';
 
 // ============================================================================
@@ -391,29 +392,6 @@ export function computeMatchScore(
 
 /** Maximum number of children to extract per observation */
 const MAX_OBSERVATION_CHILDREN = 5;
-
-/** Interactive node kinds that qualify as observation children */
-const INTERACTIVE_KINDS: NodeKind[] = [
-  'button',
-  'link',
-  'input',
-  'textarea',
-  'select',
-  'combobox',
-  'checkbox',
-  'radio',
-  'switch',
-  'slider',
-  'tab',
-  'menuitem',
-];
-
-/**
- * Check if a node kind is interactive (actionable).
- */
-function isInteractiveKind(kind: NodeKind): boolean {
-  return INTERACTIVE_KINDS.includes(kind);
-}
 
 /**
  * Check if a node qualifies as an extractable child (interactive or heading with label).

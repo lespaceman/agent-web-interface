@@ -10,7 +10,7 @@ import type { ScoringContext } from './types.js';
 import { getNodeLayer, INCLUSIVE_OVERLAY_LAYERS } from './node-layer.js';
 
 // Interactive element kinds
-const INTERACTIVE_KINDS: NodeKind[] = [
+const INTERACTIVE_KINDS = new Set<NodeKind>([
   'link',
   'button',
   'input',
@@ -24,7 +24,7 @@ const INTERACTIVE_KINDS: NodeKind[] = [
   'tab',
   'menuitem',
   'canvas',
-];
+]);
 
 // Live region kinds — non-interactive but must appear in snapshot output.
 // This is the single source of truth for NodeKind-level live region classification.
@@ -41,7 +41,7 @@ export const LIVE_REGION_KINDS = new Set<NodeKind>([
  * Check if node kind is interactive.
  */
 export function isInteractiveKind(kind: NodeKind): boolean {
-  return INTERACTIVE_KINDS.includes(kind);
+  return INTERACTIVE_KINDS.has(kind);
 }
 
 /**
@@ -92,6 +92,11 @@ export function selectActionables(
 
     // Must be visible
     if (!node.state?.visible) {
+      return false;
+    }
+
+    // Implicitly interactive elements without a label are noise
+    if (node.implicitly_interactive && !isInteractiveKind(node.kind) && !node.label?.trim()) {
       return false;
     }
 

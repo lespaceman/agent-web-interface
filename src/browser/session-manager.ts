@@ -26,7 +26,6 @@ import {
   extractErrorMessage,
   isValidHttpUrl,
   isValidWsUrl,
-  getDefaultChromeUserDataDir,
   readDevToolsActivePort,
   DEFAULT_CDP_PORT,
   DEFAULT_CDP_HOST,
@@ -310,22 +309,35 @@ export class SessionManager {
    */
   private async _doConnect(options: ConnectOptions): Promise<void> {
     const timeout = options.timeout ?? DEFAULT_CONNECTION_TIMEOUT;
-    let connectOptions: { browserWSEndpoint?: string; browserURL?: string };
+    let connectOptions: {
+      browserWSEndpoint?: string;
+      browserURL?: string;
+      channel?: 'chrome' | 'chrome-beta' | 'chrome-canary' | 'chrome-dev';
+    };
     let endpointForLogging: string;
 
     // Determine connection method
-    if (options.autoConnect) {
-      // Chrome 144+ auto-connect via DevToolsActivePort
-      const userDataDir = options.userDataDir ?? getDefaultChromeUserDataDir();
+    if (options.autoConnect && !options.userDataDir) {
+      // Chrome 144+ auto-connect using Puppeteer's native channel option.
+      // Puppeteer reads DevToolsActivePort from Chrome's default user data dir.
+      connectOptions = { channel: 'chrome' };
+      endpointForLogging = 'channel:chrome';
+      this.logger.info('Auto-connect: using Puppeteer channel:chrome');
+    } else if (options.autoConnect && options.userDataDir) {
+      // Custom userDataDir (e.g., reconnecting to agent's own launched profile).
+      // Puppeteer's channel option doesn't support custom dirs, so read manually.
       try {
-        const wsEndpoint = await readDevToolsActivePort(userDataDir);
+        const wsEndpoint = await readDevToolsActivePort(options.userDataDir);
         connectOptions = { browserWSEndpoint: wsEndpoint };
         endpointForLogging = wsEndpoint;
-        this.logger.info('Auto-connect: found DevToolsActivePort', { userDataDir, wsEndpoint });
+        this.logger.info('Auto-connect: found DevToolsActivePort', {
+          userDataDir: options.userDataDir,
+          wsEndpoint,
+        });
       } catch (error) {
         throw BrowserSessionError.connectionFailed(
           error instanceof Error ? error : new Error(extractErrorMessage(error)),
-          { operation: 'autoConnect', userDataDir }
+          { operation: 'autoConnect', userDataDir: options.userDataDir }
         );
       }
     } else if (options.browserWSEndpoint) {

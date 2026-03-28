@@ -128,6 +128,7 @@ export function createTestToolContext(overrides?: Partial<ToolContext>): ToolCon
     ensureBrowser: vi.fn().mockResolvedValue(undefined),
     setBrowserConfig: vi.fn(),
     canReconfigure: vi.fn().mockReturnValue(true),
+    resetBrowser: vi.fn().mockResolvedValue(undefined),
     requireSnapshot: vi.fn(),
     resolveElementByEid: vi.fn(),
     close: vi.fn().mockResolvedValue(undefined),

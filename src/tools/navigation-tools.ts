@@ -145,19 +145,31 @@ export async function navigate(
 ): Promise<import('./tool-schemas.js').NavigateOutput> {
   const input = NavigateInputSchema.parse(rawInput);
 
-  // Apply browser preferences if provided (ignored once browser is running)
+  // Apply browser preferences if provided
   if (
-    (input.headless !== undefined ||
-      input.isolated !== undefined ||
-      input.auto_connect !== undefined) &&
-    ctx.canReconfigure()
+    input.headless !== undefined ||
+    input.isolated !== undefined ||
+    input.auto_connect !== undefined
   ) {
-    ctx.setBrowserConfig({
-      headless: input.headless,
-      isolated: input.isolated,
-      autoConnect: input.auto_connect,
-    });
+    // auto_connect means "connect to my existing Chrome, not a launched browser".
+    // If a launched browser is already running, shut it down first so we can
+    // reconnect to the user's Chrome instead.
+    if (input.auto_connect && !ctx.canReconfigure()) {
+      await ctx.resetBrowser();
+    }
+
+    if (ctx.canReconfigure()) {
+      ctx.setBrowserConfig({
+        headless: input.headless,
+        isolated: input.isolated,
+        autoConnect: input.auto_connect,
+      });
+    }
   }
+
+  // navigate is excluded from the pre-handler ensureBrowser() call so that
+  // browser config (auto_connect, headless, isolated) can be set first.
+  await ctx.ensureBrowser();
 
   let handle = await ctx.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
