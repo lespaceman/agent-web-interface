@@ -62,10 +62,7 @@ function findBestMatch(
       candidate.where.heading_context === original.where.heading_context
     )
       score++;
-    if (
-      original.where.group_id != null &&
-      candidate.where.group_id === original.where.group_id
-    )
+    if (original.where.group_id != null && candidate.where.group_id === original.where.group_id)
       score++;
     return { candidate, score };
   });

@@ -70,8 +70,8 @@ export function normalizeAccessibleName(label: string): string {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ')
-    .replace(/\(\d+\)/g, '(#)')     // "(3)" → "(#)" — badge/counter patterns
-    .replace(/\s\d+\s*$/g, ' #')   // trailing standalone number: "page 3" → "page #"
+    .replace(/\(\d+\)/g, '(#)') // "(3)" → "(#)" — badge/counter patterns
+    .replace(/\s\d+\s*$/g, ' #') // trailing standalone number: "page 3" → "page #"
     .substring(0, 100);
 }
 

@@ -56,7 +56,9 @@ export function extractConstraints(node: ReadableNode, snapshot: BaseSnapshot): 
 export function sameRadioGroup(a: ReadableNode, b: ReadableNode): boolean {
   if (a.where.region !== b.where.region) return false;
   if (a.attributes?.name && b.attributes?.name) return a.attributes.name === b.attributes.name;
-  return a.where.heading_context === b.where.heading_context || a.where.group_id === b.where.group_id;
+  return (
+    a.where.heading_context === b.where.heading_context || a.where.group_id === b.where.group_id
+  );
 }
 
 /**
@@ -65,9 +67,7 @@ export function sameRadioGroup(a: ReadableNode, b: ReadableNode): boolean {
 export function extractRadioOptions(node: ReadableNode, snapshot: BaseSnapshot): FieldOption[] {
   const options: FieldOption[] = [];
 
-  const radioButtons = snapshot.nodes.filter(
-    (n) => n.kind === 'radio' && sameRadioGroup(node, n)
-  );
+  const radioButtons = snapshot.nodes.filter((n) => n.kind === 'radio' && sameRadioGroup(node, n));
 
   for (const radio of radioButtons) {
     options.push({

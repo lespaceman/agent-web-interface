@@ -302,19 +302,27 @@ describe('Layout Extractor', () => {
     const visible = { x: 10, y: 20, w: 100, h: 50 };
 
     it('should return true for visible elements', () => {
-      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'visible' })).toBe(true);
+      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'visible' })).toBe(
+        true
+      );
     });
 
     it('should return false for display:none', () => {
-      expect(computeVisibility({ bbox: visible, display: 'none', visibility: 'visible' })).toBe(false);
+      expect(computeVisibility({ bbox: visible, display: 'none', visibility: 'visible' })).toBe(
+        false
+      );
     });
 
     it('should return false for visibility:hidden', () => {
-      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'hidden' })).toBe(false);
+      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'hidden' })).toBe(
+        false
+      );
     });
 
     it('should return false for visibility:collapse', () => {
-      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'collapse' })).toBe(false);
+      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'collapse' })).toBe(
+        false
+      );
     });
 
     it('should return false for zero-width elements', () => {
