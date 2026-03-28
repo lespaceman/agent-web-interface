@@ -12,7 +12,7 @@
     "dev": "tsc --watch",
     "start": "node dist/src/index.js",
     "mcp:inspect": "npx @modelcontextprotocol/inspector node dist/src/index.js",
-    "prepare": "npm run build",
+    "prepare": "husky",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -69,10 +69,21 @@
     "eslint": "^9.39.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.7.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.53.0",
     "vitest": "^4.0.17"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json,md}": [
+      "prettier --write"
+    ]
   },
   "engines": {
     "node": ">=20.0.0"

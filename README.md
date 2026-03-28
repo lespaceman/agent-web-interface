@@ -118,20 +118,20 @@ claude mcp add agent-web-interface -e AWI_CDP_URL=http://localhost:9222 -- npx a
 
 The server accepts transport-level arguments only. Browser configuration is per-session via the `navigate` tool.
 
-| Argument      | Description                          | Default |
-| ------------- | ------------------------------------ | ------- |
-| `--transport` | Transport mode: `stdio` or `http`    | `stdio` |
-| `--port`      | Port for HTTP transport              | `3000`  |
+| Argument      | Description                       | Default |
+| ------------- | --------------------------------- | ------- |
+| `--transport` | Transport mode: `stdio` or `http` | `stdio` |
+| `--port`      | Port for HTTP transport           | `3000`  |
 
 ### Browser Session Configuration
 
 Browser initialization is automatic on the first tool call. The `navigate` tool accepts optional parameters to configure the session:
 
-| Parameter      | Description                                            | Default |
-| -------------- | ------------------------------------------------------ | ------- |
-| `headless`     | Run browser in headless mode                           | `false` |
-| `isolated`     | Use an isolated temp profile instead of persistent     | `false` |
-| `auto_connect` | Auto-connect to Chrome 144+ via DevToolsActivePort     | `false` |
+| Parameter      | Description                                        | Default |
+| -------------- | -------------------------------------------------- | ------- |
+| `headless`     | Run browser in headless mode                       | `false` |
+| `isolated`     | Use an isolated temp profile instead of persistent | `false` |
+| `auto_connect` | Auto-connect to Chrome 144+ via DevToolsActivePort | `false` |
 
 Examples:
 
@@ -174,17 +174,17 @@ To connect with your bookmarks, extensions, and logged-in sessions:
 
 ## Environment Variables
 
-| Variable             | Description                                        | Default     |
-| -------------------- | -------------------------------------------------- | ----------- |
-| `AWI_CDP_URL`        | CDP endpoint (http or ws) to connect to existing browser | -      |
-| `AWI_TRIM_REGIONS`   | Set to `false` to disable region trimming globally | `true`      |
-| `TRANSPORT`          | Transport mode override (`http`)                   | -           |
-| `HTTP_HOST`          | Host for HTTP transport                            | `127.0.0.1` |
-| `HTTP_PORT`          | Port for HTTP transport                            | `3000`      |
-| `LOG_LEVEL`          | Logging level                                      | `info`      |
-| `CEF_BRIDGE_HOST`    | CDP host for CEF bridge connection                 | `127.0.0.1` |
-| `CEF_BRIDGE_PORT`    | CDP port for CEF bridge connection                 | `9223`      |
-| `CHROME_PATH`        | Path to Chrome executable (multi-tenant)           | -           |
+| Variable           | Description                                              | Default     |
+| ------------------ | -------------------------------------------------------- | ----------- |
+| `AWI_CDP_URL`      | CDP endpoint (http or ws) to connect to existing browser | -           |
+| `AWI_TRIM_REGIONS` | Set to `false` to disable region trimming globally       | `true`      |
+| `TRANSPORT`        | Transport mode override (`http`)                         | -           |
+| `HTTP_HOST`        | Host for HTTP transport                                  | `127.0.0.1` |
+| `HTTP_PORT`        | Port for HTTP transport                                  | `3000`      |
+| `LOG_LEVEL`        | Logging level                                            | `info`      |
+| `CEF_BRIDGE_HOST`  | CDP host for CEF bridge connection                       | `127.0.0.1` |
+| `CEF_BRIDGE_PORT`  | CDP port for CEF bridge connection                       | `9223`      |
+| `CHROME_PATH`      | Path to Chrome executable (multi-tenant)                 | -           |
 
 ---
 
