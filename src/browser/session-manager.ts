@@ -22,6 +22,7 @@ import type { ConnectionHealth } from '../state/health.types.js';
 import { observationAccumulator } from '../observation/index.js';
 import { waitForNetworkQuiet, NAVIGATION_NETWORK_IDLE_TIMEOUT_MS } from './page-stabilization.js';
 import { getOrCreateTracker, removeTracker } from './page-network-tracker.js';
+import { getOrCreateRecorder, removeRecorder } from './page-network-recorder.js';
 import {
   extractErrorMessage,
   isValidHttpUrl,
@@ -677,9 +678,11 @@ export class SessionManager {
       // Wait for DOM ready first (fast baseline)
       await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
 
-      // Mark navigation on tracker (bumps generation to ignore stale events)
+      // Mark navigation on tracker and recorder (bumps generation to ignore stale events)
       const tracker = getOrCreateTracker(handle.page);
       tracker.markNavigation();
+      const recorder = getOrCreateRecorder(handle.page);
+      recorder.markNavigation();
 
       // Then wait for network to settle (catches API calls)
       const networkIdle = await waitForNetworkQuiet(
@@ -1176,6 +1179,12 @@ export class SessionManager {
     const tracker = getOrCreateTracker(page);
     tracker.attach(page);
 
-    page.on('close', () => removeTracker(page));
+    const recorder = getOrCreateRecorder(page);
+    recorder.attach(page);
+
+    page.on('close', () => {
+      removeTracker(page);
+      removeRecorder(page);
+    });
   }
 }

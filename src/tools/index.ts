@@ -177,3 +177,16 @@ export {
   type ReadPageInput,
   type ReadPageOutput,
 } from './tool-schemas.js';
+
+// Network tools
+export { listNetworkCalls, searchNetworkCalls } from './network-tools.js';
+export {
+  ListNetworkCallsInputSchema,
+  ListNetworkCallsOutputSchema,
+  type ListNetworkCallsInput,
+  type ListNetworkCallsOutput,
+  SearchNetworkCallsInputSchema,
+  SearchNetworkCallsOutputSchema,
+  type SearchNetworkCallsInput,
+  type SearchNetworkCallsOutput,
+} from './tool-schemas.js';
