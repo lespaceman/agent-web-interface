@@ -6,20 +6,13 @@
 
 import {
   ClosePageInputSchema,
-  CloseSessionInputSchema,
-  ConfigureBrowserInputSchema,
   NavigateInputSchema,
   GoBackInputSchema,
   GoForwardInputSchema,
   ReloadInputSchema,
 } from './tool-schemas.js';
-import { cleanupTempFiles } from '../lib/temp-file.js';
 import { stabilizeAfterNavigation } from './action-stabilization.js';
-import {
-  buildClosePageResponse,
-  buildCloseSessionResponse,
-  buildListPagesResponse,
-} from './response-builder.js';
+import { buildClosePageResponse, buildListPagesResponse } from './response-builder.js';
 import type { ToolContext } from './tool-context.types.js';
 
 /**
@@ -141,24 +134,6 @@ export async function closePage(
 }
 
 /**
- * Close the entire browser session.
- *
- * @param rawInput - Close options (will be validated)
- * @returns Close result
- */
-export async function closeSession(
-  rawInput: unknown,
-  ctx: ToolContext
-): Promise<import('./tool-schemas.js').CloseSessionOutput> {
-  CloseSessionInputSchema.parse(rawInput);
-
-  await ctx.close();
-  await cleanupTempFiles();
-
-  return buildCloseSessionResponse();
-}
-
-/**
  * Navigate to a URL.
  *
  * @param rawInput - Navigation options (will be validated)
@@ -169,6 +144,20 @@ export async function navigate(
   ctx: ToolContext
 ): Promise<import('./tool-schemas.js').NavigateOutput> {
   const input = NavigateInputSchema.parse(rawInput);
+
+  // Apply browser preferences if provided (ignored once browser is running)
+  if (
+    (input.headless !== undefined ||
+      input.isolated !== undefined ||
+      input.auto_connect !== undefined) &&
+    ctx.canReconfigure()
+  ) {
+    ctx.setBrowserConfig({
+      headless: input.headless,
+      isolated: input.isolated,
+      autoConnect: input.auto_connect,
+    });
+  }
 
   let handle = await ctx.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
@@ -230,25 +219,4 @@ export async function reload(
 ): Promise<import('./tool-schemas.js').ReloadOutput> {
   const input = ReloadInputSchema.parse(rawInput);
   return executeNavigationAction(input.page_id, ctx, 'reload');
-}
-
-/**
- * Configure the browser for this session.
- *
- * Must be called before the first browser-touching tool (navigate, click, etc.).
- * Sets preferences like headless mode, connection endpoint, or Chrome channel.
- *
- * @param rawInput - Browser configuration options
- * @returns Confirmation message
- */
-export function configureBrowser(rawInput: unknown, ctx: ToolContext): string {
-  const input = ConfigureBrowserInputSchema.parse(rawInput);
-
-  ctx.setBrowserConfig({
-    headless: input.headless,
-    isolated: input.isolated,
-    autoConnect: input.auto_connect,
-  });
-
-  return '<result>Browser configured successfully. Preferences will apply when the browser starts.</result>';
 }

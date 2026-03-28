@@ -2,7 +2,7 @@
  * CLI Argument Parsing
  *
  * Parses command-line arguments for server configuration.
- * Browser configuration is now per-session (via configure_browser tool),
+ * Browser configuration is per-session (via navigate tool params),
  * so only transport-level settings remain here.
  */
 
@@ -13,7 +13,7 @@ export type TransportMode = 'stdio' | 'http';
  * Server configuration from CLI arguments.
  *
  * Contains only server-level settings. Browser preferences are
- * per-session and configured via the configure_browser tool.
+ * per-session and configured via the navigate tool's optional parameters.
  */
 export interface ServerArgs {
   /** Transport mode: stdio (default) or http */

@@ -55,17 +55,6 @@ export function buildClosePageResponse(pageId: string): string {
 }
 
 /**
- * Build XML response for close_session tool.
- *
- * @returns XML result string
- */
-export function buildCloseSessionResponse(): string {
-  return `<result type="close_session" status="success">
-  <closed />
-</result>`;
-}
-
-/**
  * Match item from find_elements query.
  */
 export interface FindElementsMatch {

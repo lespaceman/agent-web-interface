@@ -66,14 +66,9 @@ vi.mock('../../../src/tools/action-stabilization.js', () => ({
 
 vi.mock('../../../src/tools/response-builder.js', () => ({
   buildClosePageResponse: vi.fn().mockReturnValue({ success: true }),
-  buildCloseSessionResponse: vi.fn().mockReturnValue({ success: true }),
   buildFindElementsResponse: vi.fn(),
   buildGetElementDetailsResponse: vi.fn(),
   buildListPagesResponse: vi.fn(),
-}));
-
-vi.mock('../../../src/lib/temp-file.js', () => ({
-  cleanupTempFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../../src/state/health.types.js', () => ({
@@ -94,7 +89,6 @@ import {
   goForward,
   reload,
   closePage,
-  closeSession,
 } from '../../../src/tools/navigation-tools.js';
 
 describe('Navigation tools dependency tracker cleanup', () => {
@@ -180,14 +174,6 @@ describe('Navigation tools dependency tracker cleanup', () => {
 
       expect(ctx.getDependencyTracker).toHaveBeenCalled();
       expect(mockClearPage).toHaveBeenCalledWith('test-page');
-    });
-  });
-
-  describe('closeSession()', () => {
-    it('should delegate cleanup to ctx.close()', async () => {
-      await closeSession({}, ctx);
-
-      expect(ctx.close).toHaveBeenCalled();
     });
   });
 });

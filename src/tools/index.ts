@@ -8,7 +8,6 @@
 export {
   listPages,
   closePage,
-  closeSession,
   navigate,
   goBack,
   goForward,
@@ -47,11 +46,6 @@ export {
   ClosePageOutputSchema,
   type ClosePageInput,
   type ClosePageOutput,
-  // close_session
-  CloseSessionInputSchema,
-  CloseSessionOutputSchema,
-  type CloseSessionInput,
-  type CloseSessionOutput,
   // navigate
   NavigateInputSchema,
   NavigateOutputSchema,

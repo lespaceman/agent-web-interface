@@ -111,7 +111,6 @@ vi.mock('../../../src/lib/temp-file.js', () => ({
 
 vi.mock('../../../src/tools/response-builder.js', () => ({
   buildClosePageResponse: vi.fn(),
-  buildCloseSessionResponse: vi.fn(),
   buildListPagesResponse: vi.fn(),
   buildFindElementsResponse: vi.fn(),
   buildGetElementDetailsResponse: vi.fn(),

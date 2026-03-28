@@ -8,7 +8,7 @@
  *
  * Each HTTP client connection gets its own McpServer + SessionController pair,
  * providing full session isolation for concurrent AI agents. Each session owns
- * its own browser instance, configured independently via configure_browser.
+ * its own browser instance, configured independently via navigate tool params.
  *
  * @module http-entry
  */

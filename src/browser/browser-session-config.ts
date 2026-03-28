@@ -13,7 +13,7 @@
 /**
  * Per-session browser configuration.
  *
- * Agents pass this to `configure_browser` before their first browser-touching tool.
+ * Agents pass browser preferences via the `navigate` tool's optional parameters.
  * If not provided, sensible defaults are used (launch, headed, persistent profile).
  */
 export interface BrowserSessionConfig {

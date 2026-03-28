@@ -12,6 +12,11 @@ import type { CdpClient } from '../../../src/cdp/cdp-client.interface.js';
 
 // ── Module mocks ────────────────────────────────────────────────────────────
 
+/** Captured state change listeners for simulating browser crashes in tests */
+const stateChangeListeners = new Set<
+  (event: { previousState: string; currentState: string }) => void
+>();
+
 const mockSessionManagerInstance = {
   isRunning: vi.fn().mockReturnValue(false),
   connectionState: 'idle' as string,
@@ -26,6 +31,14 @@ const mockSessionManagerInstance = {
   syncPages: vi.fn().mockResolvedValue([]),
   navigateTo: vi.fn().mockResolvedValue(undefined),
   rebindCdpSession: vi.fn(),
+  onStateChange: vi
+    .fn()
+    .mockImplementation(
+      (listener: (event: { previousState: string; currentState: string }) => void) => {
+        stateChangeListeners.add(listener);
+        return () => stateChangeListeners.delete(listener);
+      }
+    ),
 };
 
 vi.mock('../../../src/browser/session-manager.js', () => {
@@ -80,6 +93,7 @@ describe('SessionController', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    stateChangeListeners.clear();
     // Reset mock state
     mockSessionManagerInstance.isRunning.mockReturnValue(false);
     mockSessionManagerInstance.connectionState = 'idle';
@@ -324,7 +338,7 @@ describe('SessionController', () => {
       mockSessionManagerInstance.isRunning.mockReturnValue(true);
 
       expect(() => controller.setBrowserConfig({ headless: true })).toThrow(
-        'Cannot change browser configuration after the browser has started'
+        'Cannot change browser configuration while the browser is running'
       );
     });
 
@@ -396,6 +410,111 @@ describe('SessionController', () => {
 
       expect(mockSessionManagerInstance.shutdown).not.toHaveBeenCalled();
       expect(controller.state).toBe('closed');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // canReconfigure()
+  // ══════════════════════════════════════════════════════════════════════════
+
+  describe('canReconfigure', () => {
+    it('returns true when no SessionManager exists', () => {
+      expect(controller.canReconfigure()).toBe(true);
+    });
+
+    it('returns true when SessionManager exists but browser is not running', () => {
+      controller.getSessionManager();
+      mockSessionManagerInstance.isRunning.mockReturnValue(false);
+
+      expect(controller.canReconfigure()).toBe(true);
+    });
+
+    it('returns false when browser is running', () => {
+      controller.getSessionManager();
+      mockSessionManagerInstance.isRunning.mockReturnValue(true);
+
+      expect(controller.canReconfigure()).toBe(false);
+    });
+
+    it('returns true after browser crash (failed state)', async () => {
+      await controller.ensureBrowser();
+      mockSessionManagerInstance.isRunning.mockReturnValue(false);
+
+      expect(controller.canReconfigure()).toBe(true);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // crash recovery
+  // ══════════════════════════════════════════════════════════════════════════
+
+  describe('crash recovery', () => {
+    it('clears session state when browser transitions to failed', () => {
+      // Force SessionManager creation (registers the listener)
+      controller.getSessionManager();
+      expect(stateChangeListeners.size).toBe(1);
+
+      // Spy on snapshot store clear
+      const store = controller.getSnapshotStore();
+      const clearSpy = vi.spyOn(store, 'clear');
+
+      // Simulate browser crash
+      for (const listener of stateChangeListeners) {
+        listener({ previousState: 'connected', currentState: 'failed' });
+      }
+
+      expect(clearSpy).toHaveBeenCalled();
+    });
+
+    it('allows setBrowserConfig after browser crash', () => {
+      controller.getSessionManager();
+      mockSessionManagerInstance.isRunning.mockReturnValue(false);
+
+      // Simulate crash
+      for (const listener of stateChangeListeners) {
+        listener({ previousState: 'connected', currentState: 'failed' });
+      }
+
+      // Should not throw — browser is dead, config can change
+      expect(() => controller.setBrowserConfig({ isolated: true })).not.toThrow();
+    });
+
+    it('relaunches with new config after crash + reconfigure', async () => {
+      // First launch with defaults
+      await controller.ensureBrowser();
+      expect(mockSessionManagerInstance.launch).toHaveBeenCalledWith(
+        expect.objectContaining({ isolated: false })
+      );
+
+      // Simulate crash
+      mockSessionManagerInstance.isRunning.mockReturnValue(false);
+      for (const listener of stateChangeListeners) {
+        listener({ previousState: 'connected', currentState: 'failed' });
+      }
+
+      // Reconfigure
+      controller.setBrowserConfig({ isolated: true });
+
+      // Relaunch
+      vi.clearAllMocks();
+      await controller.ensureBrowser();
+
+      expect(mockSessionManagerInstance.launch).toHaveBeenCalledWith(
+        expect.objectContaining({ isolated: true })
+      );
+    });
+
+    it('does not clear state on non-failed transitions', () => {
+      controller.getSessionManager();
+      const store = controller.getSnapshotStore();
+      const clearSpy = vi.spyOn(store, 'clear');
+
+      // Simulate normal transition (connecting → connected)
+      for (const listener of stateChangeListeners) {
+        listener({ previousState: 'connecting', currentState: 'connected' });
+      }
+
+      expect(clearSpy).not.toHaveBeenCalled();
     });
   });
 });

@@ -75,6 +75,8 @@ export class SessionController implements ToolContext {
 
   /** Deduplication promise for concurrent ensureBrowser() calls */
   private _ensureBrowserPromise: Promise<void> | null = null;
+  /** Unsubscribe from SessionManager state changes (cleanup in close()) */
+  private _unsubStateChange: (() => void) | null = null;
 
   private _state: SessionState = 'initializing';
   private _lastActivity: number = Date.now();
@@ -115,6 +117,9 @@ export class SessionController implements ToolContext {
     if (this._state === 'closing' || this._state === 'closed') return;
     this._state = 'closing';
 
+    this._unsubStateChange?.();
+    this._unsubStateChange = null;
+
     this._snapshotStore.destroy();
     this._stateManagers.clear();
     this._dependencyTracker.clearAll();
@@ -141,17 +146,23 @@ export class SessionController implements ToolContext {
   // ---------------------------------------------------------------------------
 
   /**
+   * Check if browser configuration can be changed.
+   * Returns true when no browser is running (before first launch or after crash).
+   */
+  canReconfigure(): boolean {
+    if (this._ensureBrowserPromise) return false;
+    return !(this._sessionManager?.isRunning() ?? false);
+  }
+
+  /**
    * Set the browser configuration for this session.
    *
    * Must be called before the browser is launched/connected (i.e., before
    * the first browser-touching tool call). Throws if browser is already running.
    */
   setBrowserConfig(config: BrowserSessionConfig): void {
-    if (this._sessionManager?.isRunning() || this._ensureBrowserPromise) {
-      throw new Error(
-        'Cannot change browser configuration after the browser has started. ' +
-          'Call close_session first, then configure_browser with new settings.'
-      );
+    if (!this.canReconfigure()) {
+      throw new Error('Cannot change browser configuration while the browser is running.');
     }
     const overrides = Object.fromEntries(Object.entries(config).filter(([, v]) => v !== undefined));
     this._browserConfig = { ...this._browserConfig, ...overrides };
@@ -312,7 +323,24 @@ export class SessionController implements ToolContext {
    * Get or lazily create the session's own SessionManager.
    */
   private getOrCreateSessionManager(): SessionManager {
-    this._sessionManager ??= new SessionManager();
+    if (!this._sessionManager) {
+      this._sessionManager = new SessionManager();
+      this._unsubStateChange = this._sessionManager.onStateChange((event) => {
+        if (event.currentState === 'failed') {
+          this.clearSessionState();
+        }
+      });
+    }
     return this._sessionManager;
+  }
+
+  /**
+   * Clear stale per-page state (snapshots, state managers, dependencies).
+   * Called when the browser crashes or disconnects unexpectedly.
+   */
+  private clearSessionState(): void {
+    this._snapshotStore.clear();
+    this._stateManagers.clear();
+    this._dependencyTracker.clearAll();
   }
 }

@@ -15,15 +15,7 @@ export {
 } from './action-context.js';
 
 // Navigation & session tools
-export {
-  listPages,
-  closePage,
-  closeSession,
-  navigate,
-  goBack,
-  goForward,
-  reload,
-} from './navigation-tools.js';
+export { listPages, closePage, navigate, goBack, goForward, reload } from './navigation-tools.js';
 
 // Observation tools
 export {

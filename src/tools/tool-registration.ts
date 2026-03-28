@@ -1,7 +1,7 @@
 /**
  * Tool Registration
  *
- * Extracts all 22 MCP tool registrations into a reusable function.
+ * Extracts all 23 MCP tool registrations into a reusable function.
  * Used by both stdio (index.ts) and HTTP (http-gateway.ts) entry points.
  */
 
@@ -11,7 +11,7 @@ import type { ToolRegistrar } from '../server/tool-registrar.types.js';
 export type { ToolRegistrar } from '../server/tool-registrar.types.js';
 
 // Import all tool handlers
-import { listPages, closePage, closeSession, configureBrowser } from './navigation-tools.js';
+import { listPages, closePage } from './navigation-tools.js';
 import { navigate, goBack, goForward, reload } from './navigation-tools.js';
 import {
   captureSnapshot,
@@ -30,7 +30,6 @@ import { readPage } from './readability-tools.js';
 import {
   ListPagesInputSchema,
   ClosePageInputSchema,
-  CloseSessionInputSchema,
   NavigateInputSchema,
   GoBackInputSchema,
   GoForwardInputSchema,
@@ -50,7 +49,6 @@ import {
   TakeScreenshotInputSchemaBase,
   InspectCanvasInputSchemaBase,
   ReadPageInputSchema,
-  ConfigureBrowserInputSchema,
 } from './tool-schemas.js';
 import { GetFormUnderstandingInputSchema, GetFieldContextInputSchema } from './form-tools.js';
 
@@ -61,12 +59,7 @@ import { GetFormUnderstandingInputSchema, GetFieldContextInputSchema } from './f
 export type ContextResolver = () => ToolContext | Promise<ToolContext>;
 
 /** Tools that should not trigger lazy browser initialization */
-const SKIP_BROWSER_INIT = new Set([
-  'close_session',
-  'close_page',
-  'list_pages',
-  'configure_browser',
-]);
+const SKIP_BROWSER_INIT = new Set(['close_page', 'list_pages']);
 
 /**
  * Register all browser automation tools on an MCP server.
@@ -116,27 +109,6 @@ export function registerAllTools(server: ToolRegistrar, resolveCtx: ContextResol
       inputSchema: ClosePageInputSchema.shape,
     },
     wrap(closePage, 'close_page')
-  );
-
-  server.registerTool(
-    'close_session',
-    {
-      title: 'Close Session',
-      description: 'Close the entire browser and clear all state.',
-      inputSchema: CloseSessionInputSchema.shape,
-    },
-    wrap(closeSession, 'close_session')
-  );
-
-  server.registerTool(
-    'configure_browser',
-    {
-      title: 'Configure Browser',
-      description:
-        'Set browser preferences (headless, connect endpoint, Chrome channel) before the browser starts. Must be called before any browser-touching tool. If not called, defaults apply (launch, headed, persistent profile).',
-      inputSchema: ConfigureBrowserInputSchema.shape,
-    },
-    wrap(configureBrowser, 'configure_browser')
   );
 
   // ============================================================================

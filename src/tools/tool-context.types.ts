@@ -67,6 +67,12 @@ export interface ToolContext {
    */
   setBrowserConfig(config: BrowserSessionConfig): void;
 
+  /**
+   * Check if browser configuration can be changed.
+   * Returns true if no browser is running (allows config before launch or after crash).
+   */
+  canReconfigure(): boolean;
+
   // ---------------------------------------------------------------------------
   // Page lifecycle
   // ---------------------------------------------------------------------------
