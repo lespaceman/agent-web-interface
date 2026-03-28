@@ -22,6 +22,9 @@ import { getLogger } from '../shared/services/logging.service.js';
 
 const logger = getLogger();
 
+/** Short timeout for reconnect attempts — these are fast pre-checks, not full connections */
+const RECONNECT_TIMEOUT_MS = 5000;
+
 /**
  * Ensure browser is ready for tool execution.
  *
@@ -68,7 +71,7 @@ export async function ensureBrowserReady(
   // Launch mode — try reconnecting to an existing browser first (persistent profiles only)
   const profileDir = config.isolated ? undefined : DEFAULT_USER_DATA_DIR;
 
-  if (profileDir && (await tryReconnect(session, profileDir))) {
+  if (profileDir && (await hasPortFile(profileDir)) && (await tryReconnect(session, profileDir))) {
     return;
   }
 
@@ -96,22 +99,37 @@ export async function ensureBrowserReady(
 }
 
 /**
+ * Check if DevToolsActivePort file exists in the profile directory.
+ * Used to skip the reconnect attempt entirely on cold starts where
+ * Chrome has never run, avoiding wasted I/O.
+ */
+async function hasPortFile(profileDir: string): Promise<boolean> {
+  try {
+    await fs.promises.access(path.join(profileDir, 'DevToolsActivePort'), fs.constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Attempt to reconnect to an existing Chrome via its DevToolsActivePort file.
- * Returns true on success. On failure, cleans up a stale port file and returns false.
+ * Returns true on success. On failure, returns false.
+ * Uses a short timeout since this is a fast pre-check, not a full connection attempt.
  */
 async function tryReconnect(session: SessionManager, profileDir: string): Promise<boolean> {
   try {
-    await session.connect({ autoConnect: true, userDataDir: profileDir, ownedReconnect: true });
+    await session.connect({
+      autoConnect: true,
+      userDataDir: profileDir,
+      ownedReconnect: true,
+      timeout: RECONNECT_TIMEOUT_MS,
+    });
     logger.info('Reconnected to existing browser');
     return true;
   } catch (error) {
     logger.warning('Reconnect to existing browser failed', {
       error: extractErrorMessage(error),
-    });
-    // Clean up stale DevToolsActivePort so the next attempt doesn't retry a dead endpoint
-    const portFile = path.join(profileDir, 'DevToolsActivePort');
-    await fs.promises.unlink(portFile).catch(() => {
-      /* best-effort cleanup */
     });
     return false;
   }

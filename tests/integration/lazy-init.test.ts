@@ -11,7 +11,8 @@ vi.mock('puppeteer-core', () => ({
 }));
 
 // Mock node:fs — no DevToolsActivePort by default, mkdir succeeds for profile dir
-const { mockReadFile, mockMkdir, mockUnlink } = vi.hoisted(() => ({
+const { mockAccess, mockReadFile, mockMkdir, mockUnlink } = vi.hoisted(() => ({
+  mockAccess: vi.fn<(path: string, mode?: number) => Promise<void>>(),
   mockReadFile: vi.fn<(path: string, encoding?: string) => Promise<string>>(),
   mockMkdir: vi.fn<(path: string, options?: object) => Promise<string | undefined>>(),
   mockUnlink: vi.fn<(path: string) => Promise<void>>(),
@@ -20,6 +21,7 @@ const { mockReadFile, mockMkdir, mockUnlink } = vi.hoisted(() => ({
 vi.mock('node:fs', () => ({
   default: {
     promises: {
+      access: mockAccess,
       readFile: mockReadFile,
       mkdir: mockMkdir,
       unlink: mockUnlink,
@@ -27,6 +29,7 @@ vi.mock('node:fs', () => ({
     constants: { F_OK: 0 },
   },
   promises: {
+    access: mockAccess,
     readFile: mockReadFile,
     mkdir: mockMkdir,
     unlink: mockUnlink,
@@ -59,7 +62,8 @@ describe('Lazy Browser Initialization (SessionController)', () => {
     (puppeteer.launch as Mock).mockResolvedValue(mockBrowser);
     (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
 
-    // No DevToolsActivePort by default — tryReconnect fails, falls through to launch
+    // No DevToolsActivePort by default — hasPortFile returns false, skips reconnect
+    mockAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
     mockReadFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
     mockMkdir.mockResolvedValue(undefined);
     mockUnlink.mockResolvedValue(undefined);

@@ -63,7 +63,8 @@ describe('ensureBrowserReady', () => {
     (puppeteer.launch as Mock).mockResolvedValue(mockBrowser);
     (puppeteer.connect as Mock).mockResolvedValue(mockBrowser);
 
-    // Default: DevToolsActivePort does not exist (readFile fails with ENOENT)
+    // Default: DevToolsActivePort does not exist
+    mockAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
     mockReadFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
     mockMkdir.mockResolvedValue(undefined);
     mockUnlink.mockResolvedValue(undefined);
@@ -188,7 +189,8 @@ describe('ensureBrowserReady', () => {
     it('should reconnect when existing browser has DevToolsActivePort', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      // readDevToolsActivePort succeeds (Chrome is running with a debug port)
+      // Port file exists and readDevToolsActivePort succeeds
+      mockAccess.mockResolvedValue(undefined);
       mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
 
       await ensureBrowserReady(sessionManager, {});
@@ -198,25 +200,40 @@ describe('ensureBrowserReady', () => {
       expect(sessionManager.isRunning()).toBe(true);
     });
 
-    it('should fall back to launch when reconnect fails (no running browser)', async () => {
+    it('should fall back to launch when port file exists but connect fails', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      // Default: readFile rejects (no DevToolsActivePort), so tryReconnect fails
-      // before reaching puppeteer.connect. Launch should proceed.
+      // Port file exists but connect fails (stale port)
+      mockAccess.mockResolvedValue(undefined);
+      mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
+      (puppeteer.connect as Mock).mockRejectedValueOnce(new Error('Connection refused'));
+
+      await ensureBrowserReady(sessionManager, {});
+
+      expect(puppeteer.connect).toHaveBeenCalledTimes(1);
+      expect(puppeteer.launch).toHaveBeenCalledTimes(1);
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+
+    it('should skip reconnect and launch directly when no port file exists', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      // Default: access rejects (no DevToolsActivePort), hasPortFile returns false
       await ensureBrowserReady(sessionManager, {});
 
       expect(puppeteer.launch).toHaveBeenCalledTimes(1);
+      // connect should not be called — no port file to reconnect to
+      expect(puppeteer.connect).not.toHaveBeenCalled();
       expect(sessionManager.isRunning()).toBe(true);
     });
 
     it('should fall back to connect on profile lock error during launch', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      // Flow: tryReconnect #1 fails (no DevToolsActivePort) → launch fails
-      // (profile lock) → tryReconnect #2 succeeds (other process wrote port file)
-      mockReadFile
-        .mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
-        .mockResolvedValueOnce('9222\n/devtools/browser/abc-123\n');
+      // No port file initially → hasPortFile false → skip first tryReconnect
+      // Launch fails with profile lock → second tryReconnect succeeds
+      // (other process wrote port file between our check and launch)
+      mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
 
       (puppeteer.launch as Mock).mockRejectedValueOnce(
         new Error(
@@ -227,31 +244,32 @@ describe('ensureBrowserReady', () => {
       await ensureBrowserReady(sessionManager, {});
 
       expect(puppeteer.launch).toHaveBeenCalledTimes(1);
-      expect(puppeteer.connect).toHaveBeenCalledTimes(1); // only the successful fallback
+      expect(puppeteer.connect).toHaveBeenCalledTimes(1);
       expect(sessionManager.isRunning()).toBe(true);
     });
 
     it('should skip reconnection logic for isolated mode', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      // Even if DevToolsActivePort exists, isolated mode should not try reconnecting
-      mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
-
       await ensureBrowserReady(sessionManager, { isolated: true });
 
       expect(puppeteer.launch).toHaveBeenCalledTimes(1);
       expect(puppeteer.connect).not.toHaveBeenCalled();
+      // Should not have checked for DevToolsActivePort
+      expect(mockAccess).not.toHaveBeenCalled();
     });
 
     it('should throw original error when both launch and fallback connect fail', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      // Both tryReconnect calls fail, launch fails with profile lock
-      (puppeteer.connect as Mock).mockRejectedValue(new Error('DevToolsActivePort file not found'));
+      // Launch fails with profile lock, fallback connect also fails
       (puppeteer.launch as Mock).mockRejectedValueOnce(
         new Error(
           'The browser is already running for /some/path. Use a different `userDataDir` or stop the running browser first.'
         )
+      );
+      (puppeteer.connect as Mock).mockRejectedValueOnce(
+        new Error('DevToolsActivePort file not found')
       );
 
       await expect(ensureBrowserReady(sessionManager, {})).rejects.toThrow('already running');
