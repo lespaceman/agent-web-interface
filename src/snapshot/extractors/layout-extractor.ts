@@ -113,14 +113,24 @@ export function computeScreenZone(bbox: BBox, viewport: Viewport): ScreenZone {
 }
 
 /**
- * Compute visibility from display, visibility CSS properties and bbox.
+ * Compute visibility from CSS properties and bbox.
  *
  * @param bbox - Element bounding box
  * @param display - CSS display value
  * @param visibility - CSS visibility value
+ * @param opacity - CSS opacity value
+ * @param pointerEvents - CSS pointer-events value
+ * @param clipPath - CSS clip-path value
  * @returns true if element is visible
  */
-export function computeVisibility(bbox: BBox, display?: string, visibility?: string): boolean {
+export function computeVisibility(
+  bbox: BBox,
+  display?: string,
+  visibility?: string,
+  opacity?: string,
+  pointerEvents?: string,
+  clipPath?: string
+): boolean {
   // Check CSS display
   if (display === 'none') {
     return false;
@@ -128,6 +138,21 @@ export function computeVisibility(bbox: BBox, display?: string, visibility?: str
 
   // Check CSS visibility
   if (visibility === 'hidden' || visibility === 'collapse') {
+    return false;
+  }
+
+  // Check opacity (fully transparent elements are not visible)
+  if (opacity === '0') {
+    return false;
+  }
+
+  // Check pointer-events (non-interactive elements treated as not visible for interaction)
+  if (pointerEvents === 'none') {
+    return false;
+  }
+
+  // Check clip-path (fully clipped elements are not visible)
+  if (clipPath === 'inset(100%)') {
     return false;
   }
 
@@ -158,6 +183,9 @@ async function extractNodeLayout(
   let display: string | undefined;
   let visibility: string | undefined;
   let zIndex: number | undefined;
+  let opacity: string | undefined;
+  let pointerEvents: string | undefined;
+  let clipPath: string | undefined;
   let boxModelError = false;
 
   // Get box model (uses backendNodeId)
@@ -193,6 +221,12 @@ async function extractNodeLayout(
           if (!isNaN(parsed)) {
             zIndex = parsed;
           }
+        } else if (prop.name === 'opacity') {
+          opacity = prop.value;
+        } else if (prop.name === 'pointer-events') {
+          pointerEvents = prop.value;
+        } else if (prop.name === 'clip-path') {
+          clipPath = prop.value;
         }
       }
     } catch {
@@ -200,7 +234,9 @@ async function extractNodeLayout(
     }
   }
 
-  const isVisible = boxModelError ? false : computeVisibility(bbox, display, visibility);
+  const isVisible = boxModelError
+    ? false
+    : computeVisibility(bbox, display, visibility, opacity, pointerEvents, clipPath);
   const screenZone = isVisible ? computeScreenZone(bbox, viewport) : undefined;
 
   return {
@@ -210,6 +246,9 @@ async function extractNodeLayout(
     isVisible,
     screenZone,
     zIndex,
+    opacity,
+    pointerEvents,
+    clipPath,
   };
 }
 

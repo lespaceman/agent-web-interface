@@ -60,7 +60,8 @@ export function extractRadioOptions(node: ReadableNode, snapshot: BaseSnapshot):
     (n) =>
       n.kind === 'radio' &&
       n.where.region === node.where.region &&
-      (n.where.heading_context === node.where.heading_context ||
+      ((node.attributes?.name && n.attributes?.name === node.attributes.name) ||
+        n.where.heading_context === node.where.heading_context ||
         n.where.group_id === node.where.group_id)
   );
 

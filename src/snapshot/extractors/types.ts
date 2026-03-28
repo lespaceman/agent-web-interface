@@ -134,6 +134,15 @@ export interface NodeLayoutInfo {
 
   /** CSS z-index value (used for overlay detection) */
   zIndex?: number;
+
+  /** CSS opacity value */
+  opacity?: string;
+
+  /** CSS pointer-events value */
+  pointerEvents?: string;
+
+  /** CSS clip-path value */
+  clipPath?: string;
 }
 
 /**

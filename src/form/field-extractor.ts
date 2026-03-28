@@ -95,7 +95,10 @@ function linkRadioGroups(fields: FormField[], snapshot: BaseSnapshot): void {
     const node = snapshot.nodes.find((n) => n.node_id === field.eid);
     if (!node) continue;
 
-    const key = `${node.where.region}:${node.where.heading_context ?? ''}:${node.where.group_id ?? ''}`;
+    const name = node.attributes?.name;
+    const key = name
+      ? `${node.where.region}:name:${name}`
+      : `${node.where.region}:${node.where.heading_context ?? ''}:${node.where.group_id ?? ''}`;
     const group = groups.get(key) ?? [];
     group.push(field);
     groups.set(key, group);

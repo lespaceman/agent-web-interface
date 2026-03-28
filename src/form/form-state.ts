@@ -42,7 +42,7 @@ export function computeFormState(fields: FormField[]): FormState {
     errorFields.length === 0 &&
     (requiredFields.length > 0
       ? filledRequiredFields.length === requiredFields.length
-      : fields.every((f) => f.state.filled || !f.state.enabled));
+      : fields.length === 0 || fields.some((f) => f.state.filled));
 
   return {
     completion_pct: completionPct,

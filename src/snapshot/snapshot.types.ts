@@ -264,13 +264,16 @@ export interface NodeState {
   enabled: boolean;
 
   /** Checked state for checkboxes/radios/switches */
-  checked?: boolean;
+  checked?: boolean | 'mixed';
 
   /** Expanded state for accordions/dropdowns */
   expanded?: boolean;
 
   /** Selected state for tabs/options */
   selected?: boolean;
+
+  /** Pressed state for toggle buttons */
+  pressed?: boolean;
 
   /** Focused state */
   focused?: boolean;

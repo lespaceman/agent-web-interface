@@ -49,6 +49,13 @@ export async function stabilizeAfterAction(
     // This catches API calls that haven't rendered to DOM yet
     const networkIdle = await waitForNetworkQuiet(page, networkTimeoutMs);
 
+    // Step 3: After network settled, briefly wait for any DOM renders triggered by API responses.
+    // Only needed when DOM was already stable and network actually reached idle
+    // (meaning data arrived that could trigger React/framework re-renders).
+    if (result.status === 'stable' && networkIdle) {
+      await stabilizeDom(page, { maxTimeoutMs: 500 });
+    }
+
     if (!networkIdle && result.status === 'stable') {
       // DOM was stable but network didn't idle - add a note
       return {

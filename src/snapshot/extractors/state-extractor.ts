@@ -71,10 +71,10 @@ function getAriaAttribute(
  * @param value - AX property value
  * @returns boolean for true/false, undefined for mixed or unset
  */
-function parseCheckedState(value: unknown): boolean | undefined {
+function parseCheckedState(value: unknown): boolean | 'mixed' | undefined {
   if (value === true || value === 'true') return true;
   if (value === false || value === 'false') return false;
-  // 'mixed' or undefined results in undefined
+  if (value === 'mixed') return 'mixed';
   return undefined;
 }
 
@@ -134,12 +134,18 @@ export function extractState(
     }
   }
 
+  // WAI-ARIA: aria-disabled="false" explicitly overrides native disabled
+  if (!enabled && getAriaAttribute(attributes, 'aria-disabled') === 'false') {
+    enabled = true;
+  }
+
   // Override: if AX reports disabled but the element has interactivity signals
   // (click listeners, cursor:pointer), it's likely a custom widget that is actually
   // interactive. Common with hidden radio/checkbox inputs wrapped in visual labels.
   if (!enabled && interactivity) {
-    const { has_click_listener, has_cursor_pointer } = interactivity;
-    if (has_click_listener || has_cursor_pointer) {
+    const { has_click_listener, has_cursor_pointer, listener_source } = interactivity;
+    // Only override for direct listeners, not ancestor delegation (which could be analytics)
+    if ((has_click_listener && listener_source === 'self') || has_cursor_pointer) {
       enabled = true;
     }
   }
@@ -155,6 +161,10 @@ export function extractState(
   // === Selected (tabs, options) ===
   const axSelected = getAxProperty(properties, 'selected');
   const selected = parseBooleanState(axSelected);
+
+  // === Pressed (toggle buttons) ===
+  const axPressed = getAxProperty(properties, 'pressed');
+  const pressed = parseBooleanState(axPressed);
 
   // === Focused ===
   const axFocused = getAxProperty(properties, 'focused');
@@ -201,6 +211,7 @@ export function extractState(
   if (checked !== undefined) state.checked = checked;
   if (expanded !== undefined) state.expanded = expanded;
   if (selected !== undefined) state.selected = selected;
+  if (pressed !== undefined) state.pressed = pressed;
   if (focused !== undefined) state.focused = focused;
   if (required !== undefined) state.required = required;
   if (invalid !== undefined) state.invalid = invalid;

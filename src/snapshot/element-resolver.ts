@@ -263,6 +263,13 @@ export async function clickAtCoordinates(
   const modifierBits = computeModifiers(modifiers);
 
   await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x,
+    y,
+    modifiers: modifierBits,
+  });
+
+  await cdp.send('Input.dispatchMouseEvent', {
     type: 'mousePressed',
     x,
     y,
@@ -457,7 +464,9 @@ export async function selectOption(
         const available = options.map(o => o.text || o.value).join(', ');
         throw new Error('Option not found: "' + targetValue + '". Available: ' + available);
       }
-      this.value = option.value;
+      var nativeSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      nativeSetter.call(this, option.value);
+      this.dispatchEvent(new Event('input', { bubbles: true }));
       this.dispatchEvent(new Event('change', { bubbles: true }));
       return option.text;
     }`,

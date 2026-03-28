@@ -330,9 +330,23 @@ describe('computeFormState', () => {
       expect(result.can_submit).toBe(false);
     });
 
-    it('should be true with no required fields and no errors', () => {
+    it('should be true when at least one optional field is filled', () => {
       const fields = [
         createField({
+          eid: 'f-1',
+          constraints: { required: false, required_confidence: 0 },
+          state: {
+            filled: true,
+            has_value: true,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
+        }),
+        createField({
+          eid: 'f-2',
           constraints: { required: false, required_confidence: 0 },
           state: {
             filled: false,
@@ -348,7 +362,41 @@ describe('computeFormState', () => {
 
       const result = computeFormState(fields);
 
-      // With unfilled enabled optional fields, can_submit is false
+      expect(result.can_submit).toBe(true);
+    });
+
+    it('should be false when no optional fields are filled', () => {
+      const fields = [
+        createField({
+          eid: 'f-1',
+          constraints: { required: false, required_confidence: 0 },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
+        }),
+        createField({
+          eid: 'f-2',
+          constraints: { required: false, required_confidence: 0 },
+          state: {
+            filled: false,
+            has_value: false,
+            valid: true,
+            enabled: true,
+            touched: false,
+            focused: false,
+            visible: true,
+          },
+        }),
+      ];
+
+      const result = computeFormState(fields);
+
       expect(result.can_submit).toBe(false);
     });
   });

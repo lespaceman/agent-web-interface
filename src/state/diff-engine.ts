@@ -66,7 +66,10 @@ export function computeDiff(prev: BaseSnapshot, curr: BaseSnapshot): DiffRespons
     removed.length === 0 &&
     changed.length === 0 &&
     mutations.textChanged.length === 0 &&
-    mutations.statusAppeared.length === 0;
+    mutations.statusAppeared.length === 0 &&
+    atoms.length === 0 &&
+    doc === undefined &&
+    layer === undefined;
 
   return {
     mode: 'diff',
