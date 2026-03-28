@@ -487,6 +487,7 @@ describe('ElementResolver', () => {
 
     it('should find label[for] when checkbox input is too small to click (bug T1.3)', async () => {
       let boxModelCallCount = 0;
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
       mockCdp.send.mockImplementation((method: string) => {
         switch (method) {
           case 'DOM.scrollIntoViewIfNeeded':

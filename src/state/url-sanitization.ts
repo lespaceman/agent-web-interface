@@ -27,23 +27,26 @@ export const SAFE_QUERY_PARAMS = new Set([
 ]);
 
 /**
+ * Keep only allowlisted query parameters from a URLSearchParams instance.
+ */
+function filterSafeParams(searchParams: URLSearchParams): URLSearchParams {
+  const safe = new URLSearchParams();
+  for (const [key, value] of searchParams) {
+    if (SAFE_QUERY_PARAMS.has(key.toLowerCase())) {
+      safe.set(key, value);
+    }
+  }
+  return safe;
+}
+
+/**
  * Sanitize URL by stripping sensitive query parameters.
  * Only keeps safe params like page, sort, q.
  */
 export function sanitizeUrl(rawUrl: string): string {
   try {
     const url = new URL(rawUrl);
-
-    // Build new search params with only safe ones
-    const safeParams = new URLSearchParams();
-    for (const [key, value] of url.searchParams) {
-      if (SAFE_QUERY_PARAMS.has(key.toLowerCase())) {
-        safeParams.set(key, value);
-      }
-    }
-
-    // Reconstruct URL with sanitized params
-    url.search = safeParams.toString();
+    url.search = filterSafeParams(url.searchParams).toString();
     return url.toString();
   } catch {
     // If URL parsing fails, return origin only
@@ -52,13 +55,25 @@ export function sanitizeUrl(rawUrl: string): string {
 }
 
 /**
- * Sanitize href attribute (remove tokens from URLs).
+ * Sanitize href attribute (strip non-safe query params from any URL).
  */
 export function sanitizeHref(href: string): string {
-  // For relative URLs, return as-is
-  if (!href.startsWith('http://') && !href.startsWith('https://')) {
+  if (href.startsWith('http://') || href.startsWith('https://')) {
+    return sanitizeUrl(href);
+  }
+
+  const qIndex = href.indexOf('?');
+  if (qIndex === -1) {
     return href;
   }
 
-  return sanitizeUrl(href);
+  try {
+    const dummy = new URL(href, 'http://p');
+    const search = filterSafeParams(dummy.searchParams).toString();
+    const base = href.substring(0, qIndex);
+    const hash = dummy.hash || '';
+    return search ? `${base}?${search}${hash}` : `${base}${hash}`;
+  } catch {
+    return href.substring(0, qIndex);
+  }
 }

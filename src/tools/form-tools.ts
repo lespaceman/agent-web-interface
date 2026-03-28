@@ -18,6 +18,43 @@ import {
   type FieldValueRequest,
 } from '../form/index.js';
 import { escapeXml } from '../lib/text-utils.js';
+import type { ElementRegistry } from '../state/element-registry.js';
+import type { ReadableNode } from '../snapshot/snapshot.types.js';
+
+/**
+ * Resolve internal node_ids to stable semantic eids on all form fields and actions.
+ * Option eids (radio buttons) require a node_id→backend_node_id map from the snapshot.
+ */
+function resolveFormEids(
+  forms: FormRegion[],
+  registry: ElementRegistry,
+  nodes?: ReadableNode[]
+): void {
+  const resolve = (backendNodeId: number) => registry.getEidByBackendNodeId(backendNodeId);
+  const nodeIdToBackendId = nodes
+    ? new Map(nodes.map((n) => [n.node_id, n.backend_node_id]))
+    : undefined;
+
+  for (const form of forms) {
+    for (const field of form.fields) {
+      field.eid = resolve(field.backend_node_id) ?? field.eid;
+      if (nodeIdToBackendId && field.constraints.options) {
+        for (const opt of field.constraints.options) {
+          if (opt.eid) {
+            const backendId = nodeIdToBackendId.get(opt.eid);
+            if (backendId !== undefined) {
+              opt.eid = resolve(backendId) ?? opt.eid;
+            }
+          }
+        }
+      }
+    }
+    for (const action of form.actions) {
+      action.eid = resolve(action.backend_node_id) ?? action.eid;
+    }
+  }
+}
+
 // ============================================================================
 // Input/Output Schemas
 // ============================================================================
@@ -369,30 +406,7 @@ export async function getFormUnderstanding(rawInput: unknown, ctx: ToolContext):
   }
 
   const allForms = detectForms(snapshot);
-
-  const registry = ctx.getStateManager(pageId).getElementRegistry();
-  const nodeIdToBackendId = new Map(snapshot.nodes.map((n) => [n.node_id, n.backend_node_id]));
-
-  const resolveEid = (backendNodeId: number) => registry.getEidByBackendNodeId(backendNodeId);
-
-  for (const form of allForms) {
-    for (const field of form.fields) {
-      field.eid = resolveEid(field.backend_node_id) ?? field.eid;
-      if (field.constraints.options) {
-        for (const opt of field.constraints.options) {
-          if (opt.eid) {
-            const backendId = nodeIdToBackendId.get(opt.eid);
-            if (backendId !== undefined) {
-              opt.eid = resolveEid(backendId) ?? opt.eid;
-            }
-          }
-        }
-      }
-    }
-    for (const action of form.actions) {
-      action.eid = resolveEid(action.backend_node_id) ?? action.eid;
-    }
-  }
+  resolveFormEids(allForms, ctx.getStateManager(pageId).getElementRegistry(), snapshot.nodes);
 
   // Filter by form_id if specified
   const forms = input.form_id ? allForms.filter((f) => f.form_id === input.form_id) : allForms;
@@ -493,6 +507,9 @@ export function getFieldContext(rawInput: unknown, ctx: ToolContext): string {
 
   // Find the field's form
   const allForms = detectForms(snapshot);
+
+  resolveFormEids(allForms, ctx.getStateManager(pageId).getElementRegistry());
+
   let targetField: FormField | undefined;
   let targetForm: FormRegion | undefined;
 

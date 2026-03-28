@@ -462,7 +462,7 @@ export class SnapshotCompiler {
         returnByValue: true,
       });
       if (scrollResult.result?.value) {
-        scroll = JSON.parse(scrollResult.result.value as string);
+        scroll = JSON.parse(scrollResult.result.value as string) as { x: number; y: number };
       }
     } catch {
       // Scroll position is non-critical; snapshot is still valid without it
