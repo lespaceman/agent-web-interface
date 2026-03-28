@@ -373,8 +373,7 @@ export async function getFormUnderstanding(rawInput: unknown, ctx: ToolContext):
   const registry = ctx.getStateManager(pageId).getElementRegistry();
   const nodeIdToBackendId = new Map(snapshot.nodes.map((n) => [n.node_id, n.backend_node_id]));
 
-  const resolveEid = (backendNodeId: number) =>
-    registry.getEidByBackendNodeId(backendNodeId);
+  const resolveEid = (backendNodeId: number) => registry.getEidByBackendNodeId(backendNodeId);
 
   for (const form of allForms) {
     for (const field of form.fields) {
@@ -412,7 +411,8 @@ export async function getFormUnderstanding(rawInput: unknown, ctx: ToolContext):
       backend_node_id: f.backend_node_id,
       frame_id: f.frame_id,
       semantic_type: f.purpose.semantic_type,
-      input_type: snapshot.nodes.find((n) => n.backend_node_id === f.backend_node_id)?.attributes?.input_type,
+      input_type: snapshot.nodes.find((n) => n.backend_node_id === f.backend_node_id)?.attributes
+        ?.input_type,
       label: f.label,
     }));
 

@@ -134,10 +134,7 @@ export async function getElementTopLeft(
 /**
  * Compute center point from a content quad, with validation.
  */
-function centerFromContentQuad(
-  content: number[],
-  backendNodeId: number
-): { x: number; y: number } {
+function centerFromContentQuad(content: number[], backendNodeId: number): { x: number; y: number } {
   const [x1, y1, x2, , , y3] = content;
   const x = x1 + (x2 - x1) / 2;
   const y = y1 + (y3 - y1) / 2;
@@ -180,10 +177,7 @@ const MIN_CLICKABLE_SIZE = 5;
  *
  * @returns backendNodeId of a better click target, or the original if none found
  */
-async function findClickableAncestor(
-  cdp: CdpClient,
-  backendNodeId: number
-): Promise<number> {
+async function findClickableAncestor(cdp: CdpClient, backendNodeId: number): Promise<number> {
   try {
     const { object } = await cdp.send('DOM.resolveNode', { backendNodeId });
     if (!object.objectId) return backendNodeId;

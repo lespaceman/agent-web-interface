@@ -13,7 +13,13 @@
  */
 
 import type { NodeState } from '../snapshot.types.js';
-import type { RawDomNode, RawAxNode, NodeLayoutInfo, AxProperty, InteractivitySignals } from './types.js';
+import type {
+  RawDomNode,
+  RawAxNode,
+  NodeLayoutInfo,
+  AxProperty,
+  InteractivitySignals,
+} from './types.js';
 
 /**
  * Get AX property value by name.
