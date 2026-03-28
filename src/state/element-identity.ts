@@ -63,13 +63,19 @@ function computeLayerFromRegion(node: ReadableNode): string {
  * - Trim whitespace
  * - Lowercase
  * - Collapse multiple spaces
+ * - Replace digit sequences with '#' (stabilizes dynamic counters)
  * - Cap length at 100 chars
  *
  * @param label - Raw label text
  * @returns Normalized label
  */
 export function normalizeAccessibleName(label: string): string {
-  return label.trim().toLowerCase().replace(/\s+/g, ' ').substring(0, 100);
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/\d+/g, '#')
+    .substring(0, 100);
 }
 
 /**

@@ -268,6 +268,11 @@ export function extractAttributes(
     attrs.autocomplete = domAttrs.autocomplete;
   }
 
+  // Name attribute (for radio group linking and form field identity)
+  if (domAttrs.name) {
+    attrs.name = domAttrs.name;
+  }
+
   // Test ID (any kind)
   const testId = extractTestId(domAttrs);
   if (testId) {

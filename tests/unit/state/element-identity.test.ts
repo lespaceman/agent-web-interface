@@ -68,6 +68,24 @@ describe('Element Identity', () => {
     it('should handle unicode characters', () => {
       expect(normalizeAccessibleName('Café  Résumé')).toBe('café résumé');
     });
+
+    it('should replace digit sequences with # placeholder', () => {
+      expect(normalizeAccessibleName('Cart (3)')).toBe('cart (#)');
+      expect(normalizeAccessibleName('Cart (42)')).toBe('cart (#)');
+    });
+
+    it('should stabilize dynamic counters', () => {
+      // "Cart (3)" and "Cart (4)" should produce the same normalized name
+      expect(normalizeAccessibleName('Cart (3)')).toBe(normalizeAccessibleName('Cart (4)'));
+    });
+
+    it('should replace multiple digit sequences', () => {
+      expect(normalizeAccessibleName('Page 2 of 10')).toBe('page # of #');
+    });
+
+    it('should handle labels with no digits unchanged', () => {
+      expect(normalizeAccessibleName('Submit Form')).toBe('submit form');
+    });
   });
 
   describe('computeLandmarkPath', () => {

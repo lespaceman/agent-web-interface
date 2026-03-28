@@ -491,6 +491,14 @@ describe('ElementResolver', () => {
       expect(mockCdp.send).toHaveBeenCalledWith(
         'Input.dispatchMouseEvent',
         expect.objectContaining({
+          type: 'mouseMoved',
+          x: 100,
+          y: 200,
+        })
+      );
+      expect(mockCdp.send).toHaveBeenCalledWith(
+        'Input.dispatchMouseEvent',
+        expect.objectContaining({
           type: 'mousePressed',
           x: 100,
           y: 200,
@@ -508,7 +516,7 @@ describe('ElementResolver', () => {
           clickCount: 1,
         })
       );
-      expect(mockCdp.send).toHaveBeenCalledTimes(2);
+      expect(mockCdp.send).toHaveBeenCalledTimes(3);
     });
 
     it('should reject negative X coordinate', async () => {

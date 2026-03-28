@@ -345,12 +345,13 @@ describe('StateManager', () => {
   describe('large mutations always use diff', () => {
     it('should return diff even when many elements change (no threshold)', () => {
       // First snapshot with many elements
+      const alphabet = 'abcdefghijklmnopqrst';
       const snapshot1 = createTestSnapshot({
         nodes: Array.from({ length: 20 }, (_, i) => ({
           node_id: `node-${i}`,
           backend_node_id: 100 + i,
           kind: 'button' as const,
-          label: `Button ${i}`,
+          label: `Button ${alphabet[i]}`,
           where: { region: 'main' as const },
           state: { visible: true, enabled: true },
         })),
@@ -364,7 +365,7 @@ describe('StateManager', () => {
           node_id: `new-node-${i}`,
           backend_node_id: 200 + i,
           kind: 'link' as const,
-          label: `Link ${i}`,
+          label: `Link ${alphabet[i]}`,
           where: { region: 'main' as const },
           state: { visible: true, enabled: true },
         })),

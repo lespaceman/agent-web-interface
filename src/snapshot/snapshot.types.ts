@@ -345,6 +345,9 @@ export interface NodeAttributes {
 
   /** Data-testid or similar test identifier */
   test_id?: string;
+
+  /** Input/select name attribute */
+  name?: string;
 }
 
 // ============================================================================

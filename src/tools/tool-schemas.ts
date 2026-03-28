@@ -42,9 +42,10 @@ export const NodeDetailsSchema = z.object({
     .object({
       visible: z.boolean().optional(),
       enabled: z.boolean().optional(),
-      checked: z.boolean().optional(),
+      checked: z.union([z.boolean(), z.literal('mixed')]).optional(),
       expanded: z.boolean().optional(),
       selected: z.boolean().optional(),
+      pressed: z.boolean().optional(),
       focused: z.boolean().optional(),
       required: z.boolean().optional(),
       invalid: z.boolean().optional(),
@@ -111,39 +112,6 @@ export type ClosePageInput = z.infer<typeof ClosePageInputSchema>;
 export type ClosePageOutput = z.infer<typeof ClosePageOutputSchema>;
 
 // ============================================================================
-// close_session - Close the entire browser session
-// ============================================================================
-
-export const CloseSessionInputSchema = z.object({});
-
-/** Returns XML result string */
-export const CloseSessionOutputSchema = z.string();
-
-export type CloseSessionInput = z.infer<typeof CloseSessionInputSchema>;
-export type CloseSessionOutput = z.infer<typeof CloseSessionOutputSchema>;
-
-// ============================================================================
-// configure_browser - Set browser preferences before first tool call
-// ============================================================================
-
-export const ConfigureBrowserInputSchema = z.object({
-  /** Run browser in headless mode. Default: false */
-  headless: z.boolean().optional().describe('Run browser without a visible window.'),
-  /** Use an isolated temp profile instead of persistent. Default: false */
-  isolated: z
-    .boolean()
-    .optional()
-    .describe('Use a temporary profile that is discarded after the session.'),
-  /** Auto-connect to Chrome 144+ via DevToolsActivePort */
-  auto_connect: z
-    .boolean()
-    .optional()
-    .describe('Auto-discover Chrome via DevToolsActivePort file.'),
-});
-
-export type ConfigureBrowserInput = z.infer<typeof ConfigureBrowserInputSchema>;
-
-// ============================================================================
 // navigate - Navigate to a URL
 // ============================================================================
 
@@ -152,6 +120,12 @@ export const NavigateInputSchema = z.object({
   url: z.string().url(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
+  /** Launch browser without a visible window. Ignored if browser is already running. */
+  headless: z.boolean().optional().describe('Launch browser without a visible window.'),
+  /** Use a fresh temporary profile instead of the persistent one. Ignored if browser is already running. */
+  isolated: z.boolean().optional().describe('Use a fresh temporary browser profile.'),
+  /** Connect to an already-running Chrome instead of launching a new one. Ignored if browser is already running. */
+  auto_connect: z.boolean().optional().describe('Connect to an already-running Chrome.'),
 });
 
 /** Returns XML state response string directly */

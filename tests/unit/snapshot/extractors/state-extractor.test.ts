@@ -88,9 +88,7 @@ describe('State Extractor', () => {
 
       const state = extractState(undefined, axNode, undefined);
 
-      // Mixed state should be represented as undefined or a specific value
-      // For simplicity, we treat it as neither true nor false
-      expect(state.checked).toBeUndefined();
+      expect(state.checked).toBe('mixed');
     });
 
     it('should extract disabled state from AX properties', () => {

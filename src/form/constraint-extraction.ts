@@ -69,7 +69,7 @@ export function extractRadioOptions(node: ReadableNode, snapshot: BaseSnapshot):
     options.push({
       value: radio.label,
       label: radio.label,
-      selected: radio.state?.checked ?? false,
+      selected: radio.state?.checked === true || radio.state?.checked === 'mixed',
       disabled: !(radio.state?.enabled ?? true),
       eid: radio.node_id,
     });
