@@ -66,10 +66,7 @@ function extractField(
   // Infer purpose
   const purpose = inferPurpose(node);
 
-  // Extract constraints
   const constraints = extractConstraints(node, snapshot);
-
-  // Extract state
   const state = extractFieldState(node, config, purpose.semantic_type);
 
   return {

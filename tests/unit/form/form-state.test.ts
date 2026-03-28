@@ -102,7 +102,7 @@ describe('computeFormState', () => {
   });
 
   describe('completion percentage', () => {
-    it('should return 100% when no required fields', () => {
+    it('should return 0% when no required fields and none filled', () => {
       const fields = [
         createField({ constraints: { required: false, required_confidence: 0 } }),
         createField({ constraints: { required: false, required_confidence: 0 } }),
@@ -110,7 +110,7 @@ describe('computeFormState', () => {
 
       const result = computeFormState(fields);
 
-      expect(result.completion_pct).toBe(100);
+      expect(result.completion_pct).toBe(0);
     });
 
     it('should return 0% when no required fields are filled', () => {
@@ -348,7 +348,8 @@ describe('computeFormState', () => {
 
       const result = computeFormState(fields);
 
-      expect(result.can_submit).toBe(true);
+      // With unfilled enabled optional fields, can_submit is false
+      expect(result.can_submit).toBe(false);
     });
   });
 

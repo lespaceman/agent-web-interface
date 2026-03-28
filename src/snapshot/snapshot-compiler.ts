@@ -455,12 +455,26 @@ export class SnapshotCompiler {
       meta.warnings = warnings;
     }
 
+    let scroll: { x: number; y: number } | undefined;
+    try {
+      const scrollResult = await cdp.send('Runtime.evaluate', {
+        expression: 'JSON.stringify({x:Math.round(window.scrollX),y:Math.round(window.scrollY)})',
+        returnByValue: true,
+      });
+      if (scrollResult.result?.value) {
+        scroll = JSON.parse(scrollResult.result.value as string);
+      }
+    } catch {
+      // Scroll position is non-critical; snapshot is still valid without it
+    }
+
     return {
       snapshot_id: this.generateSnapshotId(),
       url: page.url(),
       title: await page.title(),
       captured_at: new Date().toISOString(),
       viewport,
+      scroll,
       nodes,
       meta,
     };
@@ -565,8 +579,7 @@ export class SnapshotCompiler {
           bbox: { x: 0, y: 0, w: 0, h: 0 },
         };
 
-    // Extract state
-    const state: NodeState = extractState(domNode, axNode, layout);
+    const state: NodeState = extractState(domNode, axNode, layout, nodeData.interactivity);
 
     // Build locators
     const locators: NodeLocators = buildLocators(domNode, axNode, label);

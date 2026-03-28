@@ -57,8 +57,8 @@ export function extractAtoms(snapshot: BaseSnapshot): Atoms {
       dpr: 1.0, // TODO: get from CDP or page context
     },
     scroll: {
-      x: 0, // TODO: extract from page.evaluate(() => window.scrollX)
-      y: 0, // TODO: extract from page.evaluate(() => window.scrollY)
+      x: snapshot.scroll?.x ?? 0,
+      y: snapshot.scroll?.y ?? 0,
     },
   };
 

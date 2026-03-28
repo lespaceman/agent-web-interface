@@ -13,7 +13,7 @@
  */
 
 import type { NodeState } from '../snapshot.types.js';
-import type { RawDomNode, RawAxNode, NodeLayoutInfo, AxProperty } from './types.js';
+import type { RawDomNode, RawAxNode, NodeLayoutInfo, AxProperty, InteractivitySignals } from './types.js';
 
 /**
  * Get AX property value by name.
@@ -100,7 +100,8 @@ function parseBooleanState(value: unknown): boolean | undefined {
 export function extractState(
   domNode: RawDomNode | undefined,
   axNode: RawAxNode | undefined,
-  layout: NodeLayoutInfo | undefined
+  layout: NodeLayoutInfo | undefined,
+  interactivity?: InteractivitySignals
 ): NodeState {
   const attributes = domNode?.attributes;
   const properties = axNode?.properties;
@@ -124,6 +125,16 @@ export function extractState(
       enabled = false;
     } else if (getAriaAttribute(attributes, 'aria-disabled') === 'true') {
       enabled = false;
+    }
+  }
+
+  // Override: if AX reports disabled but the element has interactivity signals
+  // (click listeners, cursor:pointer), it's likely a custom widget that is actually
+  // interactive. Common with hidden radio/checkbox inputs wrapped in visual labels.
+  if (!enabled && interactivity) {
+    const { has_click_listener, has_cursor_pointer } = interactivity;
+    if (has_click_listener || has_cursor_pointer) {
+      enabled = true;
     }
   }
 

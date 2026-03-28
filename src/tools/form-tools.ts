@@ -368,8 +368,32 @@ export async function getFormUnderstanding(rawInput: unknown, ctx: ToolContext):
     return '<error>No snapshot available. Use snapshot first.</error>';
   }
 
-  // Detect forms
   const allForms = detectForms(snapshot);
+
+  const registry = ctx.getStateManager(pageId).getElementRegistry();
+  const nodeIdToBackendId = new Map(snapshot.nodes.map((n) => [n.node_id, n.backend_node_id]));
+
+  const resolveEid = (backendNodeId: number) =>
+    registry.getEidByBackendNodeId(backendNodeId);
+
+  for (const form of allForms) {
+    for (const field of form.fields) {
+      field.eid = resolveEid(field.backend_node_id) ?? field.eid;
+      if (field.constraints.options) {
+        for (const opt of field.constraints.options) {
+          if (opt.eid) {
+            const backendId = nodeIdToBackendId.get(opt.eid);
+            if (backendId !== undefined) {
+              opt.eid = resolveEid(backendId) ?? opt.eid;
+            }
+          }
+        }
+      }
+    }
+    for (const action of form.actions) {
+      action.eid = resolveEid(action.backend_node_id) ?? action.eid;
+    }
+  }
 
   // Filter by form_id if specified
   const forms = input.form_id ? allForms.filter((f) => f.form_id === input.form_id) : allForms;
@@ -388,7 +412,7 @@ export async function getFormUnderstanding(rawInput: unknown, ctx: ToolContext):
       backend_node_id: f.backend_node_id,
       frame_id: f.frame_id,
       semantic_type: f.purpose.semantic_type,
-      input_type: snapshot.nodes.find((n) => n.node_id === f.eid)?.attributes?.input_type,
+      input_type: snapshot.nodes.find((n) => n.backend_node_id === f.backend_node_id)?.attributes?.input_type,
       label: f.label,
     }));
 

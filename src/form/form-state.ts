@@ -27,13 +27,22 @@ export function computeFormState(fields: FormField[]): FormState {
   const errorFields = fields.filter((f) => !f.state.valid);
   const dirtyFields = fields.filter((f) => f.state.touched);
 
-  const completionPct =
-    requiredFields.length > 0
-      ? Math.round((filledRequiredFields.length / requiredFields.length) * 100)
-      : 100;
+  let completionPct: number;
+  if (requiredFields.length > 0) {
+    completionPct = Math.round((filledRequiredFields.length / requiredFields.length) * 100);
+  } else if (fields.length > 0) {
+    // No explicit required fields — use fill ratio so agents see progress
+    const filledFields = fields.filter((f) => f.state.filled);
+    completionPct = Math.round((filledFields.length / fields.length) * 100);
+  } else {
+    completionPct = 100;
+  }
 
   const canSubmit =
-    errorFields.length === 0 && filledRequiredFields.length === requiredFields.length;
+    errorFields.length === 0 &&
+    (requiredFields.length > 0
+      ? filledRequiredFields.length === requiredFields.length
+      : fields.every((f) => f.state.filled || !f.state.enabled));
 
   return {
     completion_pct: completionPct,

@@ -132,14 +132,12 @@ export async function getElementTopLeft(
 }
 
 /**
- * Get the center coordinates of an element by its backendNodeId.
- * Scrolls the element into view first.
+ * Compute center point from a content quad, with validation.
  */
-async function getElementCenter(
-  cdp: CdpClient,
+function centerFromContentQuad(
+  content: number[],
   backendNodeId: number
-): Promise<{ x: number; y: number }> {
-  const content = await scrollAndGetContentQuad(cdp, backendNodeId);
+): { x: number; y: number } {
   const [x1, y1, x2, , , y3] = content;
   const x = x1 + (x2 - x1) / 2;
   const y = y1 + (y3 - y1) / 2;
@@ -154,22 +152,102 @@ async function getElementCenter(
   return { x, y };
 }
 
+/**
+ * Get the center coordinates of an element by its backendNodeId.
+ * Scrolls the element into view first.
+ */
+async function getElementCenter(
+  cdp: CdpClient,
+  backendNodeId: number
+): Promise<{ x: number; y: number }> {
+  const content = await scrollAndGetContentQuad(cdp, backendNodeId);
+  return centerFromContentQuad(content, backendNodeId);
+}
+
 // ============================================================================
 // Click Operations
 // ============================================================================
 
 /**
+ * Minimum element dimension (px) below which we search for a larger clickable ancestor.
+ * Hidden radio/checkbox inputs are commonly 1x1 or 0x0 with a visible label wrapper.
+ */
+const MIN_CLICKABLE_SIZE = 5;
+
+/**
+ * Find a clickable ancestor when the target element is too small to reliably click.
+ * Walks up the DOM looking for a parent/label with a reasonable bounding box.
+ *
+ * @returns backendNodeId of a better click target, or the original if none found
+ */
+async function findClickableAncestor(
+  cdp: CdpClient,
+  backendNodeId: number
+): Promise<number> {
+  try {
+    const { object } = await cdp.send('DOM.resolveNode', { backendNodeId });
+    if (!object.objectId) return backendNodeId;
+
+    const result = await cdp.send('Runtime.callFunctionOn', {
+      objectId: object.objectId,
+      functionDeclaration: `function() {
+        var MIN = ${MIN_CLICKABLE_SIZE};
+        var el = this;
+        if (el.id) {
+          var label = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+          if (label && label.offsetWidth > MIN && label.offsetHeight > MIN) return label;
+        }
+        var current = el.parentElement;
+        for (var i = 0; i < 5 && current; i++) {
+          if (current.offsetWidth > MIN && current.offsetHeight > MIN) return current;
+          current = current.parentElement;
+        }
+        return null;
+      }`,
+      returnByValue: false,
+    });
+
+    if (result.result?.objectId) {
+      const desc = await cdp.send('DOM.describeNode', {
+        objectId: result.result.objectId,
+      });
+      if (desc.node?.backendNodeId) {
+        return desc.node.backendNodeId;
+      }
+    }
+  } catch {
+    // Non-critical — ancestor lookup can fail for detached nodes
+  }
+  return backendNodeId;
+}
+
+/**
  * Click an element at its center using CDP's backendNodeId.
  *
- * Bypasses Playwright's locator system to avoid strict mode violations
- * when multiple elements match the same selector.
+ * If the element is tiny (< 5x5 px), searches for a larger clickable
+ * ancestor (label, parent wrapper) to click instead — common for hidden
+ * radio/checkbox inputs with custom visual wrappers.
  */
 export async function clickByBackendNodeId(
   cdp: CdpClient,
   backendNodeId: number,
   modifiers?: string[]
 ): Promise<void> {
-  const { x, y } = await getElementCenter(cdp, backendNodeId);
+  const content = await scrollAndGetContentQuad(cdp, backendNodeId);
+  const [x1, y1, x2, , , y3] = content;
+  const width = x2 - x1;
+  const height = y3 - y1;
+
+  if (width < MIN_CLICKABLE_SIZE && height < MIN_CLICKABLE_SIZE) {
+    const ancestor = await findClickableAncestor(cdp, backendNodeId);
+    if (ancestor !== backendNodeId) {
+      const center = await getElementCenter(cdp, ancestor);
+      await clickAtCoordinates(cdp, center.x, center.y, modifiers);
+      return;
+    }
+  }
+
+  const { x, y } = centerFromContentQuad(content, backendNodeId);
   await clickAtCoordinates(cdp, x, y, modifiers);
 }
 

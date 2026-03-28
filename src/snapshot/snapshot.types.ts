@@ -47,6 +47,9 @@ export interface BaseSnapshot {
   /** Ordered list of semantic nodes (preserves visual/DOM order) */
   nodes: ReadableNode[];
 
+  /** Scroll position at capture time */
+  scroll?: { x: number; y: number };
+
   /** Metadata about the snapshot */
   meta: SnapshotMeta;
 
