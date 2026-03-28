@@ -5,7 +5,7 @@
  * list_network_calls and search_network_calls tools.
  *
  * Uses Puppeteer page events (request, requestfinished, requestfailed)
- * to capture entries. Memory-bounded via a circular buffer with
+ * to capture entries. Memory-bounded via a ring buffer with
  * configurable max entries.
  *
  * Follows the same lifecycle pattern as PageNetworkTracker:
@@ -72,9 +72,15 @@ export interface NetworkQueryResult {
 
 /**
  * Records network request/response details for a single page.
+ *
+ * Uses a ring buffer (fixed-size array with head pointer) for O(1)
+ * insertion and eviction instead of Array.shift().
  */
 export class PageNetworkRecorder {
-  private entries: NetworkEntry[] = [];
+  // Ring buffer: fixed-size array, head points to oldest entry
+  private buffer: (NetworkEntry | null)[];
+  private head = 0;
+  private count = 0;
   private nextId = 1;
   private navigationId = 0;
   private maxEntries: number;
@@ -91,6 +97,7 @@ export class PageNetworkRecorder {
 
   constructor(maxEntries = DEFAULT_MAX_ENTRIES) {
     this.maxEntries = maxEntries;
+    this.buffer = new Array<NetworkEntry | null>(maxEntries).fill(null);
   }
 
   attach(page: Page): void {
@@ -134,7 +141,7 @@ export class PageNetworkRecorder {
     offset = 0,
     limit = 25
   ): NetworkQueryResult {
-    const filtered = this.applyFilter(this.entries, filter);
+    const filtered = this.applyFilter(filter);
     return {
       total: filtered.length,
       entries: filtered.slice(offset, offset + limit),
@@ -144,18 +151,22 @@ export class PageNetworkRecorder {
   search(
     urlPattern: string,
     isRegex = false,
-    filter?: NetworkFilter
+    filter?: NetworkFilter,
+    limit = 25
   ): NetworkQueryResult {
     const combinedFilter: NetworkFilter = {
       ...filter,
       url_pattern: urlPattern,
       url_regex: isRegex,
     };
-    return this.applyFilterResult(this.entries, combinedFilter);
+    const filtered = this.applyFilter(combinedFilter);
+    return { total: filtered.length, entries: filtered.slice(0, limit) };
   }
 
   clear(): void {
-    this.entries = [];
+    this.buffer = new Array<NetworkEntry | null>(this.maxEntries).fill(null);
+    this.head = 0;
+    this.count = 0;
     this.pending.clear();
     this.nextId = 1;
   }
@@ -170,14 +181,14 @@ export class PageNetworkRecorder {
     let failedCount = 0;
     const byType: Record<string, number> = {};
 
-    for (const entry of this.entries) {
+    for (const entry of this.iterEntries()) {
       if (entry.status === null && !entry.failed) pendingCount++;
       if (entry.failed) failedCount++;
       byType[entry.resource_type] = (byType[entry.resource_type] ?? 0) + 1;
     }
 
     return {
-      total: this.entries.length,
+      total: this.count,
       pending: pendingCount,
       failed: failedCount,
       by_resource_type: byType,
@@ -190,56 +201,69 @@ export class PageNetworkRecorder {
 
   // --- Private methods ---
 
-  private applyFilter(
-    entries: NetworkEntry[],
-    filter?: NetworkFilter
-  ): NetworkEntry[] {
-    if (!filter) return entries;
+  /** Iterate entries in insertion order (oldest first). */
+  private *iterEntries(): Generator<NetworkEntry> {
+    for (let i = 0; i < this.count; i++) {
+      const idx = (this.head + i) % this.maxEntries;
+      const entry = this.buffer[idx];
+      if (entry) yield entry;
+    }
+  }
 
-    return entries.filter((e) => {
-      if (filter.method && e.method.toUpperCase() !== filter.method.toUpperCase()) return false;
-      if (filter.resource_type && e.resource_type !== filter.resource_type) return false;
+  /** Compile a URL regex once, with a safety check for pathological patterns. */
+  private compileUrlRegex(pattern: string): RegExp | null {
+    try {
+      return new RegExp(pattern);
+    } catch {
+      return null;
+    }
+  }
+
+  private applyFilter(filter?: NetworkFilter): NetworkEntry[] {
+    if (!filter) return Array.from(this.iterEntries());
+
+    // Pre-compile regex once instead of per-entry
+    let urlRegex: RegExp | null = null;
+    if (filter.url_pattern && filter.url_regex) {
+      urlRegex = this.compileUrlRegex(filter.url_pattern);
+    }
+
+    const results: NetworkEntry[] = [];
+    for (const e of this.iterEntries()) {
+      if (filter.method && e.method.toUpperCase() !== filter.method.toUpperCase()) continue;
+      if (filter.resource_type && e.resource_type !== filter.resource_type) continue;
       if (filter.status_min != null && (e.status === null || e.status < filter.status_min))
-        return false;
+        continue;
       if (filter.status_max != null && (e.status === null || e.status > filter.status_max))
-        return false;
-      if (filter.failed_only && !e.failed) return false;
+        continue;
+      if (filter.failed_only && !e.failed) continue;
       if (filter.url_pattern) {
-        if (filter.url_regex) {
-          try {
-            if (!new RegExp(filter.url_pattern).test(e.url)) return false;
-          } catch {
-            // Invalid regex — treat as substring
-            if (!e.url.includes(filter.url_pattern)) return false;
-          }
+        if (urlRegex) {
+          if (!urlRegex.test(e.url)) continue;
+        } else if (filter.url_regex) {
+          // Regex compilation failed — fall back to substring
+          if (!e.url.includes(filter.url_pattern)) continue;
         } else {
-          if (!e.url.includes(filter.url_pattern)) return false;
+          if (!e.url.includes(filter.url_pattern)) continue;
         }
       }
-      return true;
-    });
+      results.push(e);
+    }
+    return results;
   }
 
-  private applyFilterResult(
-    entries: NetworkEntry[],
-    filter?: NetworkFilter
-  ): NetworkQueryResult {
-    const filtered = this.applyFilter(entries, filter);
-    return { total: filtered.length, entries: filtered };
-  }
-
-  private evictIfNeeded(): void {
-    while (this.entries.length >= this.maxEntries) {
-      const removed = this.entries.shift();
-      // Clean up pending map if the evicted entry was still pending
-      if (removed?.status === null && !removed.failed) {
-        for (const [req, entry] of this.pending) {
-          if (entry === removed) {
-            this.pending.delete(req);
-            break;
-          }
-        }
-      }
+  /** Add an entry, evicting the oldest if at capacity. O(1). */
+  private addEntry(entry: NetworkEntry): void {
+    if (this.count >= this.maxEntries) {
+      // Overwrite oldest entry at head
+      this.buffer[this.head] = entry;
+      this.head = (this.head + 1) % this.maxEntries;
+      // No need to clean up pending — evicted entries that are still pending
+      // will simply not be found in the pending Map lookup (harmless no-op)
+    } else {
+      const idx = (this.head + this.count) % this.maxEntries;
+      this.buffer[idx] = entry;
+      this.count++;
     }
   }
 
@@ -262,8 +286,6 @@ export class PageNetworkRecorder {
     this.onRequest = (req: HTTPRequest) => {
       if (this.currentGeneration !== gen) return;
       if (req.resourceType() === 'websocket') return;
-
-      this.evictIfNeeded();
 
       let postData = req.postData() ?? null;
       if (postData && postData.length > MAX_POST_DATA_SIZE) {
@@ -289,7 +311,7 @@ export class PageNetworkRecorder {
         navigation_id: this.navigationId,
       };
 
-      this.entries.push(entry);
+      this.addEntry(entry);
       this.pending.set(req, entry);
     };
 

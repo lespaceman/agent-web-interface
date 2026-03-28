@@ -1,7 +1,7 @@
 /**
  * Tool Registration
  *
- * Extracts all 23 MCP tool registrations into a reusable function.
+ * Extracts all 25 MCP tool registrations into a reusable function.
  * Used by both stdio (index.ts) and HTTP (http-gateway.ts) entry points.
  */
 

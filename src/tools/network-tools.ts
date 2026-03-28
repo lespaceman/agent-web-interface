@@ -29,6 +29,25 @@ function formatDuration(ms: number | null): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** Build a NetworkFilter from the common filter fields shared by both tools. */
+function buildFilter(input: {
+  resource_type?: string;
+  method?: string;
+  status_min?: number | null;
+  status_max?: number | null;
+  failed_only?: boolean;
+  url_pattern?: string;
+}): NetworkFilter {
+  const filter: NetworkFilter = {};
+  if (input.resource_type) filter.resource_type = input.resource_type;
+  if (input.method) filter.method = input.method;
+  if (input.status_min != null) filter.status_min = input.status_min;
+  if (input.status_max != null) filter.status_max = input.status_max;
+  if (input.failed_only) filter.failed_only = true;
+  if (input.url_pattern) filter.url_pattern = input.url_pattern;
+  return filter;
+}
+
 function entryToXml(entry: NetworkEntry, includeHeaders: boolean, includeBody: boolean): string {
   const attrs: string[] = [
     `id="${entry.id}"`,
@@ -97,14 +116,7 @@ export function listNetworkCalls(rawInput: unknown, ctx: ToolContext): string {
   const handle = ctx.resolveExistingPage(input.page_id);
 
   const recorder = getOrCreateRecorder(handle.page);
-  const filter: NetworkFilter = {};
-  if (input.resource_type) filter.resource_type = input.resource_type;
-  if (input.method) filter.method = input.method;
-  if (input.status_min != null) filter.status_min = input.status_min;
-  if (input.status_max != null) filter.status_max = input.status_max;
-  if (input.failed_only) filter.failed_only = true;
-  if (input.url_pattern) filter.url_pattern = input.url_pattern;
-
+  const filter = buildFilter(input);
   const result = recorder.getEntries(filter, input.offset, input.limit);
   const stats = recorder.getStats();
 
@@ -126,21 +138,15 @@ export function searchNetworkCalls(rawInput: unknown, ctx: ToolContext): string 
   const handle = ctx.resolveExistingPage(input.page_id);
 
   const recorder = getOrCreateRecorder(handle.page);
-  const filter: NetworkFilter = {};
-  if (input.resource_type) filter.resource_type = input.resource_type;
-  if (input.method) filter.method = input.method;
-  if (input.status_min != null) filter.status_min = input.status_min;
-  if (input.status_max != null) filter.status_max = input.status_max;
-
-  const result = recorder.search(input.url_pattern, input.url_regex, filter);
-  const limited = result.entries.slice(0, input.limit);
+  const filter = buildFilter(input);
+  const result = recorder.search(input.url_pattern, input.url_regex, filter, input.limit);
 
   const lines: string[] = [];
   lines.push(
-    `<network_calls page_id="${escapeXml(handle.page_id)}" total="${result.total}" shown="${limited.length}" pattern="${escapeXml(input.url_pattern)}">`
+    `<network_calls page_id="${escapeXml(handle.page_id)}" total="${result.total}" shown="${result.entries.length}" pattern="${escapeXml(input.url_pattern)}">`
   );
 
-  for (const entry of limited) {
+  for (const entry of result.entries) {
     lines.push(entryToXml(entry, input.include_headers, input.include_body));
   }
 

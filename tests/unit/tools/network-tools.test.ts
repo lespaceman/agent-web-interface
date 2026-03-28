@@ -172,7 +172,7 @@ describe('searchNetworkCalls', () => {
 
     searchNetworkCalls({ url_pattern: '/api/v1', url_regex: true }, mockCtx);
 
-    expect(mockSearch).toHaveBeenCalledWith('/api/v1', true, expect.any(Object));
+    expect(mockSearch).toHaveBeenCalledWith('/api/v1', true, expect.any(Object), 25);
   });
 
   it('should include headers when requested', () => {
@@ -242,10 +242,10 @@ describe('searchNetworkCalls', () => {
     expect(result).toContain('{&quot;key&quot;:&quot;value&quot;}');
   });
 
-  it('should respect limit', () => {
+  it('should pass limit to recorder search', () => {
     mockSearch.mockReturnValue({
       total: 50,
-      entries: Array.from({ length: 50 }, (_, i) => ({
+      entries: Array.from({ length: 5 }, (_, i) => ({
         id: i + 1,
         method: 'GET',
         url: `https://example.com/${i}`,
@@ -263,6 +263,7 @@ describe('searchNetworkCalls', () => {
 
     const result = searchNetworkCalls({ url_pattern: 'example', limit: 5 }, mockCtx);
 
+    expect(mockSearch).toHaveBeenCalledWith('example', false, expect.any(Object), 5);
     expect(result).toContain('total="50"');
     expect(result).toContain('shown="5"');
   });
