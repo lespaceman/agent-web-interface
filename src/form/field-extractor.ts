@@ -18,7 +18,7 @@
 import type { BaseSnapshot, ReadableNode } from '../snapshot/snapshot.types.js';
 import type { FormField, FormDetectionConfig } from './types.js';
 import { inferPurpose } from './purpose-inference.js';
-import { extractConstraints } from './constraint-extraction.js';
+import { extractConstraints, sameRadioGroup } from './constraint-extraction.js';
 import { extractFieldState } from './field-state-extractor.js';
 
 /**
@@ -95,13 +95,19 @@ function linkRadioGroups(fields: FormField[], snapshot: BaseSnapshot): void {
     const node = snapshot.nodes.find((n) => n.node_id === field.eid);
     if (!node) continue;
 
-    const name = node.attributes?.name;
-    const key = name
-      ? `${node.where.region}:name:${name}`
-      : `${node.where.region}:${node.where.heading_context ?? ''}:${node.where.group_id ?? ''}`;
-    const group = groups.get(key) ?? [];
-    group.push(field);
-    groups.set(key, group);
+    // Find existing group this radio belongs to
+    let matched = false;
+    for (const [key, group] of groups) {
+      const groupNode = snapshot.nodes.find((n) => n.node_id === group[0].eid);
+      if (groupNode && sameRadioGroup(node, groupNode)) {
+        group.push(field);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      groups.set(`radio-${groups.size}`, [field]);
+    }
   }
 
   // Link fields within each group

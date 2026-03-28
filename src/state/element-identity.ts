@@ -60,21 +60,18 @@ function computeLayerFromRegion(node: ReadableNode): string {
 
 /**
  * Normalize accessible name for stable hashing.
- * - Trim whitespace
- * - Lowercase
- * - Collapse multiple spaces
- * - Replace digit sequences with '#' (stabilizes dynamic counters)
- * - Cap length at 100 chars
  *
- * @param label - Raw label text
- * @returns Normalized label
+ * Strips dynamic counter patterns (parenthesized numbers, standalone trailing
+ * numbers) to stabilize eids when badge counts change, but preserves numbers
+ * that are part of names (e.g., "Boeing 747", "v2.0", addresses).
  */
 export function normalizeAccessibleName(label: string): string {
   return label
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ')
-    .replace(/\d+/g, '#')
+    .replace(/\(\d+\)/g, '(#)')     // "(3)" → "(#)" — badge/counter patterns
+    .replace(/\s\d+\s*$/g, ' #')   // trailing standalone number: "page 3" → "page #"
     .substring(0, 100);
 }
 

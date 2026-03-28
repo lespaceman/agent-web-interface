@@ -299,34 +299,42 @@ describe('Layout Extractor', () => {
   });
 
   describe('computeVisibility', () => {
+    const visible = { x: 10, y: 20, w: 100, h: 50 };
+
     it('should return true for visible elements', () => {
-      const bbox = { x: 10, y: 20, w: 100, h: 50 };
-      expect(computeVisibility(bbox, 'block', 'visible')).toBe(true);
+      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'visible' })).toBe(true);
     });
 
     it('should return false for display:none', () => {
-      const bbox = { x: 10, y: 20, w: 100, h: 50 };
-      expect(computeVisibility(bbox, 'none', 'visible')).toBe(false);
+      expect(computeVisibility({ bbox: visible, display: 'none', visibility: 'visible' })).toBe(false);
     });
 
     it('should return false for visibility:hidden', () => {
-      const bbox = { x: 10, y: 20, w: 100, h: 50 };
-      expect(computeVisibility(bbox, 'block', 'hidden')).toBe(false);
+      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'hidden' })).toBe(false);
     });
 
     it('should return false for visibility:collapse', () => {
-      const bbox = { x: 10, y: 20, w: 100, h: 50 };
-      expect(computeVisibility(bbox, 'block', 'collapse')).toBe(false);
+      expect(computeVisibility({ bbox: visible, display: 'block', visibility: 'collapse' })).toBe(false);
     });
 
     it('should return false for zero-width elements', () => {
-      const bbox = { x: 10, y: 20, w: 0, h: 50 };
-      expect(computeVisibility(bbox, 'block', 'visible')).toBe(false);
+      expect(computeVisibility({ bbox: { x: 10, y: 20, w: 0, h: 50 } })).toBe(false);
     });
 
     it('should return false for zero-height elements', () => {
-      const bbox = { x: 10, y: 20, w: 100, h: 0 };
-      expect(computeVisibility(bbox, 'block', 'visible')).toBe(false);
+      expect(computeVisibility({ bbox: { x: 10, y: 20, w: 100, h: 0 } })).toBe(false);
+    });
+
+    it('should return false for opacity:0', () => {
+      expect(computeVisibility({ bbox: visible, opacity: '0' })).toBe(false);
+    });
+
+    it('should return false for pointer-events:none', () => {
+      expect(computeVisibility({ bbox: visible, pointerEvents: 'none' })).toBe(false);
+    });
+
+    it('should return false for clip-path:inset(100%)', () => {
+      expect(computeVisibility({ bbox: visible, clipPath: 'inset(100%)' })).toBe(false);
     });
   });
 });

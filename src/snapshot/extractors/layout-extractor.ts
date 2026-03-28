@@ -114,53 +114,23 @@ export function computeScreenZone(bbox: BBox, viewport: Viewport): ScreenZone {
 
 /**
  * Compute visibility from CSS properties and bbox.
- *
- * @param bbox - Element bounding box
- * @param display - CSS display value
- * @param visibility - CSS visibility value
- * @param opacity - CSS opacity value
- * @param pointerEvents - CSS pointer-events value
- * @param clipPath - CSS clip-path value
- * @returns true if element is visible
  */
-export function computeVisibility(
-  bbox: BBox,
-  display?: string,
-  visibility?: string,
-  opacity?: string,
-  pointerEvents?: string,
-  clipPath?: string
-): boolean {
-  // Check CSS display
-  if (display === 'none') {
-    return false;
-  }
-
-  // Check CSS visibility
-  if (visibility === 'hidden' || visibility === 'collapse') {
-    return false;
-  }
-
-  // Check opacity (fully transparent elements are not visible)
-  if (opacity === '0') {
-    return false;
-  }
-
-  // Check pointer-events (non-interactive elements treated as not visible for interaction)
-  if (pointerEvents === 'none') {
-    return false;
-  }
-
-  // Check clip-path (fully clipped elements are not visible)
-  if (clipPath === 'inset(100%)') {
-    return false;
-  }
-
-  // Check size (zero-size elements are not visible)
-  if (bbox.w === 0 || bbox.h === 0) {
-    return false;
-  }
-
+export function computeVisibility(layout: {
+  bbox: BBox;
+  display?: string;
+  visibility?: string;
+  opacity?: string;
+  pointerEvents?: string;
+  clipPath?: string;
+}): boolean {
+  if (layout.display === 'none') return false;
+  if (layout.visibility === 'hidden' || layout.visibility === 'collapse') return false;
+  if (layout.opacity === '0') return false;
+  // pointer-events:none means the element can't receive interactions
+  if (layout.pointerEvents === 'none') return false;
+  // clip-path: inset(100%) fully clips the element from view
+  if (layout.clipPath === 'inset(100%)') return false;
+  if (layout.bbox.w === 0 || layout.bbox.h === 0) return false;
   return true;
 }
 
@@ -236,7 +206,7 @@ async function extractNodeLayout(
 
   const isVisible = boxModelError
     ? false
-    : computeVisibility(bbox, display, visibility, opacity, pointerEvents, clipPath);
+    : computeVisibility({ bbox, display, visibility, opacity, pointerEvents, clipPath });
   const screenZone = isVisible ? computeScreenZone(bbox, viewport) : undefined;
 
   return {
@@ -296,7 +266,7 @@ export async function extractLayout(
       for (const { backendNodeId, layout } of batchResults) {
         if (layout?.bbox) {
           // Compute derived fields that weren't in the batch script
-          const isVisible = computeVisibility(layout.bbox, layout.display, layout.visibility);
+          const isVisible = computeVisibility(layout as { bbox: BBox } & typeof layout);
           const screenZone = isVisible ? computeScreenZone(layout.bbox, ctx.viewport) : undefined;
 
           layouts.set(backendNodeId, {
@@ -348,6 +318,9 @@ interface BatchLayoutResult {
   display: string;
   visibility: string;
   zIndex: number | null;
+  opacity: string;
+  pointerEvents: string;
+  clipPath: string;
 }
 
 /**
@@ -488,7 +461,10 @@ async function extractLayoutBatch(
             h: rect.height,
             display: style.display,
             visibility: style.visibility,
-            zIndex: isNaN(zIndex) ? null : zIndex
+            zIndex: isNaN(zIndex) ? null : zIndex,
+            opacity: style.opacity,
+            pointerEvents: style.pointerEvents,
+            clipPath: style.clipPath
           };
         } catch (e) {
           return null;
@@ -524,6 +500,9 @@ async function extractLayoutBatch(
           display: res.display,
           visibility: res.visibility,
           zIndex: res.zIndex ?? undefined,
+          opacity: res.opacity,
+          pointerEvents: res.pointerEvents,
+          clipPath: res.clipPath,
         },
       };
     });

@@ -50,19 +50,23 @@ export function extractConstraints(node: ReadableNode, snapshot: BaseSnapshot): 
 }
 
 /**
+ * Check if two radio nodes belong to the same group.
+ * Uses `name` attribute as primary signal, falls back to heading/group context.
+ */
+export function sameRadioGroup(a: ReadableNode, b: ReadableNode): boolean {
+  if (a.where.region !== b.where.region) return false;
+  if (a.attributes?.name && b.attributes?.name) return a.attributes.name === b.attributes.name;
+  return a.where.heading_context === b.where.heading_context || a.where.group_id === b.where.group_id;
+}
+
+/**
  * Extract options for radio button groups.
  */
 export function extractRadioOptions(node: ReadableNode, snapshot: BaseSnapshot): FieldOption[] {
   const options: FieldOption[] = [];
 
-  // Find all radio buttons in the same region/group
   const radioButtons = snapshot.nodes.filter(
-    (n) =>
-      n.kind === 'radio' &&
-      n.where.region === node.where.region &&
-      ((node.attributes?.name && n.attributes?.name === node.attributes.name) ||
-        n.where.heading_context === node.where.heading_context ||
-        n.where.group_id === node.where.group_id)
+    (n) => n.kind === 'radio' && sameRadioGroup(node, n)
   );
 
   for (const radio of radioButtons) {

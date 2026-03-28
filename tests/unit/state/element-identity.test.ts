@@ -69,18 +69,23 @@ describe('Element Identity', () => {
       expect(normalizeAccessibleName('Café  Résumé')).toBe('café résumé');
     });
 
-    it('should replace digit sequences with # placeholder', () => {
+    it('should strip parenthesized counter patterns', () => {
       expect(normalizeAccessibleName('Cart (3)')).toBe('cart (#)');
-      expect(normalizeAccessibleName('Cart (42)')).toBe('cart (#)');
+      expect(normalizeAccessibleName('Notifications (42)')).toBe('notifications (#)');
     });
 
     it('should stabilize dynamic counters', () => {
-      // "Cart (3)" and "Cart (4)" should produce the same normalized name
       expect(normalizeAccessibleName('Cart (3)')).toBe(normalizeAccessibleName('Cart (4)'));
     });
 
-    it('should replace multiple digit sequences', () => {
-      expect(normalizeAccessibleName('Page 2 of 10')).toBe('page # of #');
+    it('should strip trailing standalone numbers', () => {
+      expect(normalizeAccessibleName('Page 3')).toBe('page #');
+    });
+
+    it('should preserve numbers that are part of names', () => {
+      expect(normalizeAccessibleName('Boeing 747 Details')).toBe('boeing 747 details');
+      expect(normalizeAccessibleName('v2.0')).toBe('v2.0');
+      expect(normalizeAccessibleName('123 Main St')).toBe('123 main st');
     });
 
     it('should handle labels with no digits unchanged', () => {
