@@ -179,6 +179,10 @@ export class SessionController implements ToolContext {
     this._browserConfig = { ...this._browserConfig, ...overrides };
   }
 
+  getBrowserConfig(): BrowserSessionConfig {
+    return { ...this._browserConfig };
+  }
+
   /**
    * Ensure the session's browser is ready.
    *

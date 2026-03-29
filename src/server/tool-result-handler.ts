@@ -10,6 +10,7 @@
 
 import { isCompositeResult, isImageResult, isFileResult } from '../tools/tool-result.types.js';
 import { getLogger } from '../shared/services/logging.service.js';
+import { BrowserSessionError } from '../shared/errors/browser-session.error.js';
 
 /** MCP text content */
 interface TextContent {
@@ -123,17 +124,44 @@ export function formatToolResult(result: unknown, hasOutputSchema = false): Form
  * @returns MCP-compatible error content
  */
 export function formatToolError(error: unknown): FormattedToolResult {
+  const message = formatUserFacingErrorMessage(error);
   return {
     content: [
       {
         type: 'text' as const,
         text: JSON.stringify({
-          error: error instanceof Error ? error.message : String(error),
+          error: message,
         }),
       },
     ],
     isError: true,
   };
+}
+
+function formatUserFacingErrorMessage(error: unknown): string {
+  if (!BrowserSessionError.isBrowserSessionError(error)) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  if (
+    error.code === 'CONNECTION_FAILED' &&
+    error.context?.operation === 'autoConnect' &&
+    error.cause?.message.includes('DevToolsActivePort')
+  ) {
+    return (
+      'Could not connect to your existing Chrome session. Open Chrome first and enable remote debugging, then retry with auto_connect=true. ' +
+      'Or launch an AWI-managed browser with isolated=true or headless=true.'
+    );
+  }
+
+  if (error.code === 'BROWSER_DISCONNECTED' && error.context?.connectionMode === 'external') {
+    return (
+      'The connected Chrome session was closed. Open Chrome again and retry with auto_connect=true. ' +
+      'Or launch an AWI-managed browser with isolated=true or headless=true.'
+    );
+  }
+
+  return error.message;
 }
 
 /**

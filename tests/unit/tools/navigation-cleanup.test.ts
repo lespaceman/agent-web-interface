@@ -25,6 +25,14 @@ const mockNavigateTo = vi.fn().mockResolvedValue(undefined);
 const mockClosePage = vi.fn().mockResolvedValue(undefined);
 const mockShutdown = vi.fn().mockResolvedValue(undefined);
 const mockTouchPage = vi.fn();
+const mockSetBrowserConfig = vi.fn();
+const mockGetBrowserConfig = vi.fn().mockReturnValue({
+  headless: false,
+  isolated: false,
+  autoConnect: false,
+});
+const mockCanReconfigure = vi.fn().mockReturnValue(true);
+const mockResetBrowser = vi.fn().mockResolvedValue(undefined);
 const mockResolvePageOrCreate = vi.fn().mockResolvedValue({
   page_id: 'test-page',
   page: {
@@ -109,6 +117,10 @@ describe('Navigation tools dependency tracker cleanup', () => {
       getDependencyTracker: vi
         .fn()
         .mockReturnValue(mockTracker) as ToolContext['getDependencyTracker'],
+      setBrowserConfig: mockSetBrowserConfig as ToolContext['setBrowserConfig'],
+      getBrowserConfig: mockGetBrowserConfig as ToolContext['getBrowserConfig'],
+      canReconfigure: mockCanReconfigure as ToolContext['canReconfigure'],
+      resetBrowser: mockResetBrowser as ToolContext['resetBrowser'],
     });
   });
 
@@ -138,6 +150,42 @@ describe('Navigation tools dependency tracker cleanup', () => {
       await navigate({ url: 'https://example.com', page_id: 'test-page' }, ctx);
 
       expect(callOrder).toEqual(['clearPage', 'navigateTo']);
+    });
+
+    it('resets the browser when requested mode differs from the running session', async () => {
+      mockCanReconfigure.mockReturnValueOnce(false).mockReturnValue(true);
+      mockGetBrowserConfig.mockReturnValue({
+        headless: false,
+        isolated: false,
+        autoConnect: false,
+      });
+
+      await navigate({ url: 'https://example.com', headless: true, isolated: true }, ctx);
+
+      expect(mockResetBrowser).toHaveBeenCalledTimes(1);
+      expect(mockSetBrowserConfig).toHaveBeenCalledWith({
+        headless: true,
+        isolated: true,
+        autoConnect: undefined,
+      });
+    });
+
+    it('does not reset the browser when requested mode matches the running session', async () => {
+      mockCanReconfigure.mockReturnValue(false);
+      mockGetBrowserConfig.mockReturnValue({
+        headless: true,
+        isolated: true,
+        autoConnect: false,
+      });
+      mockCanReconfigure
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false);
+
+      await navigate({ url: 'https://example.com', headless: true, isolated: true }, ctx);
+
+      expect(mockResetBrowser).not.toHaveBeenCalled();
+      expect(mockSetBrowserConfig).not.toHaveBeenCalled();
     });
   });
 

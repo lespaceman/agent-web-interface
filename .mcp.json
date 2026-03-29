@@ -3,7 +3,7 @@
     "agent-web-interface-dev": {
       "command": "node",
       "args": ["dist/src/index.js"],
-      "cwd": "/home/nadeemm/athena/agent-web-interface"
+      "cwd": "/Users/nadeem/athena/agent-web-interface"
     }
   }
 }

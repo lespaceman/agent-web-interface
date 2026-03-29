@@ -253,6 +253,37 @@ describe('SessionManager', () => {
         sessionManager.navigateTo(handle.page_id, 'https://example.com')
       ).resolves.not.toThrow();
     });
+
+    it('should normalize detached frame errors into browser disconnected', async () => {
+      const handle = await sessionManager.createPage();
+      mockPage.goto.mockRejectedValue(new Error("Attempted to use detached Frame 'abc'."));
+
+      await expect(
+        sessionManager.navigateTo(handle.page_id, 'https://example.com')
+      ).rejects.toMatchObject({
+        name: 'BrowserSessionError',
+        code: 'BROWSER_DISCONNECTED',
+        message: 'Browser disconnected unexpectedly',
+      });
+
+      expect(sessionManager.isRunning()).toBe(false);
+      expect(sessionManager.listPages()).toHaveLength(0);
+    });
+
+    it('should fail cleanly when browser connection is already gone before navigation', async () => {
+      const handle = await sessionManager.createPage();
+      Object.defineProperty(mockBrowser, 'connected', { value: false });
+
+      await expect(
+        sessionManager.navigateTo(handle.page_id, 'https://example.com')
+      ).rejects.toMatchObject({
+        name: 'BrowserSessionError',
+        code: 'BROWSER_DISCONNECTED',
+        message: 'Browser disconnected unexpectedly',
+      });
+
+      expect(sessionManager.listPages()).toHaveLength(0);
+    });
   });
 
   describe('shutdown', () => {

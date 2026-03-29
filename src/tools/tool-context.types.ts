@@ -68,6 +68,13 @@ export interface ToolContext {
   setBrowserConfig(config: BrowserSessionConfig): void;
 
   /**
+   * Get the current browser configuration for this session.
+   *
+   * Returns the desired session-level configuration, not live browser metadata.
+   */
+  getBrowserConfig(): BrowserSessionConfig;
+
+  /**
    * Check if browser configuration can be changed.
    * Returns true if no browser is running (allows config before launch or after crash).
    */

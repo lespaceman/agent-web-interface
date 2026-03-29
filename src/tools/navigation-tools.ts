@@ -20,6 +20,17 @@ import type { ToolContext } from './tool-context.types.js';
  */
 type NavigationAction = 'back' | 'forward' | 'reload';
 
+function browserConfigDiffers(
+  current: import('../browser/browser-session-config.js').BrowserSessionConfig,
+  requested: import('../browser/browser-session-config.js').BrowserSessionConfig
+): boolean {
+  return (
+    (requested.headless !== undefined && requested.headless !== current.headless) ||
+    (requested.isolated !== undefined && requested.isolated !== current.isolated) ||
+    (requested.autoConnect !== undefined && requested.autoConnect !== current.autoConnect)
+  );
+}
+
 /**
  * Execute a navigation action with snapshot capture.
  * Consolidates goBack, goForward, and reload handlers.
@@ -144,6 +155,11 @@ export async function navigate(
   ctx: ToolContext
 ): Promise<import('./tool-schemas.js').NavigateOutput> {
   const input = NavigateInputSchema.parse(rawInput);
+  const requestedConfig = {
+    headless: input.headless,
+    isolated: input.isolated,
+    autoConnect: input.auto_connect,
+  };
 
   // Apply browser preferences if provided
   if (
@@ -151,19 +167,14 @@ export async function navigate(
     input.isolated !== undefined ||
     input.auto_connect !== undefined
   ) {
-    // auto_connect means "connect to my existing Chrome, not a launched browser".
-    // If a launched browser is already running, shut it down first so we can
-    // reconnect to the user's Chrome instead.
-    if (input.auto_connect && !ctx.canReconfigure()) {
+    // Browser mode is session-scoped. If the caller requests a different mode
+    // mid-session, reset first so the next ensureBrowser() actually honors it.
+    if (!ctx.canReconfigure() && browserConfigDiffers(ctx.getBrowserConfig(), requestedConfig)) {
       await ctx.resetBrowser();
     }
 
     if (ctx.canReconfigure()) {
-      ctx.setBrowserConfig({
-        headless: input.headless,
-        isolated: input.isolated,
-        autoConnect: input.auto_connect,
-      });
+      ctx.setBrowserConfig(requestedConfig);
     }
   }
 

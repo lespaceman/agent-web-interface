@@ -316,6 +316,7 @@ export class SessionManager {
       channel?: 'chrome' | 'chrome-beta' | 'chrome-canary' | 'chrome-dev';
     };
     let endpointForLogging: string;
+    const operation = options.autoConnect ? 'autoConnect' : 'connect';
 
     // Determine connection method
     if (options.autoConnect && !options.userDataDir) {
@@ -458,7 +459,7 @@ export class SessionManager {
       }
       throw BrowserSessionError.connectionFailed(
         error instanceof Error ? error : new Error(extractErrorMessage(error)),
-        { endpointUrl: endpointForLogging }
+        { endpointUrl: endpointForLogging, operation }
       );
     } finally {
       if (timeoutId) {
@@ -674,6 +675,16 @@ export class SessionManager {
       throw new Error('Page not found');
     }
 
+    if (!this.browser?.connected || !this.context) {
+      this.registry.clear();
+      this.transitionTo('failed');
+      throw BrowserSessionError.browserDisconnected({
+        page_id,
+        url,
+        connectionMode: this.isExternalBrowser ? 'external' : 'launched',
+      });
+    }
+
     try {
       // Wait for DOM ready first (fast baseline)
       await handle.page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -702,6 +713,23 @@ export class SessionManager {
 
       this.logger.debug('Navigated page', { page_id, url });
     } catch (error) {
+      if (isDisconnectedNavigationError(error)) {
+        this.logger.warning('Navigation failed because browser/page disconnected', {
+          page_id,
+          url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.browser = null;
+        this.context = null;
+        this.registry.clear();
+        this.transitionTo('failed');
+        throw BrowserSessionError.browserDisconnected({
+          page_id,
+          url,
+          connectionMode: this.isExternalBrowser ? 'external' : 'launched',
+        });
+      }
+
       this.logger.error('Navigation failed', error instanceof Error ? error : undefined, {
         page_id,
         url,
@@ -1187,4 +1215,17 @@ export class SessionManager {
       removeRecorder(page);
     });
   }
+}
+
+function isDisconnectedNavigationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('Attempted to use detached Frame') ||
+    message.includes('detached frame') ||
+    message.includes('Frame detached') ||
+    message.includes('Target closed') ||
+    message.includes('Session closed') ||
+    message.includes('Browsing context already closed') ||
+    message.includes('browser has disconnected')
+  );
 }
