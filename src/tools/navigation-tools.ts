@@ -20,17 +20,6 @@ import type { ToolContext } from './tool-context.types.js';
  */
 type NavigationAction = 'back' | 'forward' | 'reload';
 
-function browserConfigDiffers(
-  current: import('../browser/browser-session-config.js').BrowserSessionConfig,
-  requested: import('../browser/browser-session-config.js').BrowserSessionConfig
-): boolean {
-  return (
-    (requested.headless !== undefined && requested.headless !== current.headless) ||
-    (requested.isolated !== undefined && requested.isolated !== current.isolated) ||
-    (requested.autoConnect !== undefined && requested.autoConnect !== current.autoConnect)
-  );
-}
-
 /**
  * Execute a navigation action with snapshot capture.
  * Consolidates goBack, goForward, and reload handlers.
@@ -138,8 +127,8 @@ export async function closePage(
 
   await ctx.closePage(input.page_id);
   ctx.getSnapshotStore().removeByPageId(input.page_id);
-  ctx.removeStateManager(input.page_id); // Clean up state manager
-  ctx.getDependencyTracker().clearPage(input.page_id); // Clean up dependencies
+  ctx.removeStateManager(input.page_id);
+  ctx.getDependencyTracker().clearPage(input.page_id);
 
   return buildClosePageResponse(input.page_id);
 }
@@ -155,32 +144,6 @@ export async function navigate(
   ctx: ToolContext
 ): Promise<import('./tool-schemas.js').NavigateOutput> {
   const input = NavigateInputSchema.parse(rawInput);
-  const requestedConfig = {
-    headless: input.headless,
-    isolated: input.isolated,
-    autoConnect: input.auto_connect,
-  };
-
-  // Apply browser preferences if provided
-  if (
-    input.headless !== undefined ||
-    input.isolated !== undefined ||
-    input.auto_connect !== undefined
-  ) {
-    // Browser mode is session-scoped. If the caller requests a different mode
-    // mid-session, reset first so the next ensureBrowser() actually honors it.
-    if (!ctx.canReconfigure() && browserConfigDiffers(ctx.getBrowserConfig(), requestedConfig)) {
-      await ctx.resetBrowser();
-    }
-
-    if (ctx.canReconfigure()) {
-      ctx.setBrowserConfig(requestedConfig);
-    }
-  }
-
-  // navigate is excluded from the pre-handler ensureBrowser() call so that
-  // browser config (auto_connect, headless, isolated) can be set first.
-  await ctx.ensureBrowser();
 
   let handle = await ctx.resolvePageOrCreate(input.page_id);
   const page_id = handle.page_id;
@@ -204,9 +167,6 @@ export async function navigate(
 
 /**
  * Go back in browser history.
- *
- * @param rawInput - Navigation options (will be validated)
- * @returns Navigation result with snapshot data
  */
 export async function goBack(
   rawInput: unknown,
@@ -218,9 +178,6 @@ export async function goBack(
 
 /**
  * Go forward in browser history.
- *
- * @param rawInput - Navigation options (will be validated)
- * @returns Navigation result with snapshot data
  */
 export async function goForward(
   rawInput: unknown,
@@ -232,9 +189,6 @@ export async function goForward(
 
 /**
  * Reload the current page.
- *
- * @param rawInput - Navigation options (will be validated)
- * @returns Navigation result with snapshot data
  */
 export async function reload(
   rawInput: unknown,

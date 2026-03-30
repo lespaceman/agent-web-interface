@@ -61,7 +61,7 @@ import { ListNetworkCallsInputSchema, SearchNetworkCallsInputSchema } from './to
 export type ContextResolver = () => ToolContext | Promise<ToolContext>;
 
 /** Tools that should not trigger lazy browser initialization */
-const SKIP_BROWSER_INIT = new Set(['close_page', 'list_pages', 'navigate']);
+const SKIP_BROWSER_INIT = new Set(['close_page', 'list_pages']);
 
 /**
  * Register all browser automation tools on an MCP server.

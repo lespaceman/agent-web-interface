@@ -149,15 +149,15 @@ function formatUserFacingErrorMessage(error: unknown): string {
     error.cause?.message.includes('DevToolsActivePort')
   ) {
     return (
-      'Could not connect to your existing Chrome session. Open Chrome first and enable remote debugging, then retry with auto_connect=true. ' +
-      'Or launch an AWI-managed browser with isolated=true or headless=true.'
+      'Could not connect to your existing Chrome session. Open Chrome first and enable remote debugging. ' +
+      'Or set AWI_BROWSER_MODE=persistent to launch a dedicated browser.'
     );
   }
 
   if (error.code === 'BROWSER_DISCONNECTED' && error.context?.connectionMode === 'external') {
     return (
-      'The connected Chrome session was closed. Open Chrome again and retry with auto_connect=true. ' +
-      'Or launch an AWI-managed browser with isolated=true or headless=true.'
+      'The connected Chrome session was closed. Open Chrome again, ' +
+      'or set AWI_BROWSER_MODE=persistent to launch a dedicated browser.'
     );
   }
 

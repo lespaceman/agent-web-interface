@@ -1,12 +1,18 @@
 /**
  * ensureBrowserReady Tests
  *
- * TDD tests for lazy browser initialization.
+ * Tests for lazy browser initialization with BrowserSessionConfig.
  * Uses mocked Puppeteer - no real browser required.
+ *
+ * Modes:
+ *   - cdpUrl set → connect to explicit endpoint, no fallback
+ *   - browserMode set → try that mode only, fail on error
+ *   - browserMode undefined (auto) → fallback chain: user → persistent → isolated
  */
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { SessionManager } from '../../../src/browser/session-manager.js';
+import type { BrowserSessionConfig } from '../../../src/browser/browser-session-config.js';
 import { createLinkedMocks, type MockBrowser } from '../../mocks/puppeteer.mock.js';
 
 // Mock Puppeteer module
@@ -79,79 +85,238 @@ describe('ensureBrowserReady', () => {
   };
 
   describe('when browser is already running', () => {
-    it('should return immediately without launching', async () => {
+    it('should return immediately without launching or connecting', async () => {
       // First launch browser
       await sessionManager.launch();
       expect(sessionManager.isRunning()).toBe(true);
 
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      // Reset mock call count
+      // Reset mock call counts
       (puppeteer.launch as Mock).mockClear();
+      (puppeteer.connect as Mock).mockClear();
 
-      // Call ensure - should not launch again
-      await ensureBrowserReady(sessionManager, {});
+      const config: BrowserSessionConfig = { headless: false };
+      await ensureBrowserReady(sessionManager, config);
 
       expect(puppeteer.launch).not.toHaveBeenCalled();
+      expect(puppeteer.connect).not.toHaveBeenCalled();
       expect(sessionManager.isRunning()).toBe(true);
     });
   });
 
-  describe('when browser is not running', () => {
-    it('should launch browser with default options (headless: false)', async () => {
+  describe('explicit CDP URL', () => {
+    it('should connect via endpointUrl and not launch', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      await ensureBrowserReady(sessionManager, {});
+      const config: BrowserSessionConfig = {
+        headless: false,
+        cdpUrl: 'http://localhost:9222',
+      };
+
+      await ensureBrowserReady(sessionManager, config);
+
+      expect(puppeteer.connect).toHaveBeenCalled();
+      expect(puppeteer.launch).not.toHaveBeenCalled();
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+
+    it('should throw when connect to CDP URL fails (no fallback)', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      (puppeteer.connect as Mock).mockRejectedValueOnce(new Error('Connection refused'));
+
+      const config: BrowserSessionConfig = {
+        headless: false,
+        cdpUrl: 'http://localhost:9222',
+      };
+
+      await expect(ensureBrowserReady(sessionManager, config)).rejects.toThrow(
+        'Failed to connect to CDP endpoint'
+      );
+      expect(puppeteer.launch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('explicit browserMode: user', () => {
+    it('should call connect({ autoConnect: true })', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      // autoConnect needs DevToolsActivePort to exist
+      mockAccess.mockResolvedValue(undefined);
+      mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
+
+      const config: BrowserSessionConfig = {
+        headless: false,
+        browserMode: 'user',
+      };
+
+      await ensureBrowserReady(sessionManager, config);
+
+      expect(puppeteer.connect).toHaveBeenCalled();
+      expect(puppeteer.launch).not.toHaveBeenCalled();
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+
+    it('should NOT fall back on failure', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      (puppeteer.connect as Mock).mockRejectedValue(new Error('No Chrome found'));
+
+      const config: BrowserSessionConfig = {
+        headless: false,
+        browserMode: 'user',
+      };
+
+      await expect(ensureBrowserReady(sessionManager, config)).rejects.toThrow();
+      expect(puppeteer.launch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('explicit browserMode: persistent', () => {
+    it('should call launch({ isolated: false })', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      const config: BrowserSessionConfig = {
+        headless: false,
+        browserMode: 'persistent',
+      };
+
+      await ensureBrowserReady(sessionManager, config);
 
       expect(puppeteer.launch).toHaveBeenCalledWith(
         expect.objectContaining({
           headless: false,
         })
       );
+      expect(puppeteer.connect).not.toHaveBeenCalled();
       expect(sessionManager.isRunning()).toBe(true);
     });
 
-    it('should launch with headless=true when specified', async () => {
+    it('should NOT fall back on failure', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
-      await ensureBrowserReady(sessionManager, { headless: true });
+      (puppeteer.launch as Mock).mockRejectedValue(new Error('Launch failed'));
+
+      const config: BrowserSessionConfig = {
+        headless: false,
+        browserMode: 'persistent',
+      };
+
+      await expect(ensureBrowserReady(sessionManager, config)).rejects.toThrow();
+      expect(puppeteer.connect).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('explicit browserMode: isolated', () => {
+    it('should call launch({ isolated: true })', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      const config: BrowserSessionConfig = {
+        headless: false,
+        browserMode: 'isolated',
+      };
+
+      await ensureBrowserReady(sessionManager, config);
 
       expect(puppeteer.launch).toHaveBeenCalledWith(
         expect.objectContaining({
-          headless: true,
+          headless: false,
         })
       );
-    });
-
-    it('should connect instead of launch when AWI_CDP_URL env var is set', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      process.env.AWI_CDP_URL = 'http://localhost:9222';
-      try {
-        await ensureBrowserReady(sessionManager, {});
-
-        expect(puppeteer.launch).not.toHaveBeenCalled();
-        expect(puppeteer.connect).toHaveBeenCalled();
-      } finally {
-        delete process.env.AWI_CDP_URL;
-      }
-    });
-
-    it('should pass isolated option to launch', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      await ensureBrowserReady(sessionManager, { isolated: true });
-
+      // Isolated means no userDataDir (temp profile)
       expect(puppeteer.launch).toHaveBeenCalledWith(
         expect.objectContaining({
-          userDataDir: undefined, // isolated means no persistent profile
+          userDataDir: undefined,
         })
+      );
+      expect(puppeteer.connect).not.toHaveBeenCalled();
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+
+    it('should NOT fall back on failure', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      (puppeteer.launch as Mock).mockRejectedValue(new Error('Launch failed'));
+
+      const config: BrowserSessionConfig = {
+        headless: false,
+        browserMode: 'isolated',
+      };
+
+      await expect(ensureBrowserReady(sessionManager, config)).rejects.toThrow();
+      expect(puppeteer.connect).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('auto mode (browserMode undefined)', () => {
+    it('should try user first (connect), succeed immediately', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      // autoConnect needs DevToolsActivePort to exist
+      mockAccess.mockResolvedValue(undefined);
+      mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
+
+      const config: BrowserSessionConfig = { headless: false };
+
+      await ensureBrowserReady(sessionManager, config);
+
+      expect(puppeteer.connect).toHaveBeenCalled();
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+
+    it('should fall back: user fails → persistent works', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      // user mode connect fails
+      (puppeteer.connect as Mock).mockRejectedValueOnce(new Error('No Chrome found'));
+      // persistent mode launch succeeds (default mock)
+
+      const config: BrowserSessionConfig = { headless: false };
+
+      await ensureBrowserReady(sessionManager, config);
+
+      expect(puppeteer.launch).toHaveBeenCalled();
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+
+    it('should fall back: user fails → persistent fails → isolated works', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      // user mode connect fails
+      (puppeteer.connect as Mock).mockRejectedValueOnce(new Error('No Chrome found'));
+      // persistent mode launch fails first time
+      (puppeteer.launch as Mock)
+        .mockRejectedValueOnce(new Error('Profile locked'))
+        // isolated mode launch succeeds second time
+        .mockResolvedValueOnce(mockBrowser);
+
+      const config: BrowserSessionConfig = { headless: false };
+
+      await ensureBrowserReady(sessionManager, config);
+
+      expect(puppeteer.launch).toHaveBeenCalledTimes(2);
+      expect(sessionManager.isRunning()).toBe(true);
+    });
+
+    it('should throw when all modes in fallback chain fail', async () => {
+      const ensureBrowserReady = await getEnsureBrowserReady();
+
+      // user mode connect fails
+      (puppeteer.connect as Mock).mockRejectedValue(new Error('No Chrome found'));
+      // persistent and isolated launch both fail
+      (puppeteer.launch as Mock).mockRejectedValue(new Error('Launch failed'));
+
+      const config: BrowserSessionConfig = { headless: false };
+
+      await expect(ensureBrowserReady(sessionManager, config)).rejects.toThrow(
+        'All browser modes exhausted'
       );
     });
   });
 
-  describe('when connection is in progress', () => {
-    it('should await in-flight connection instead of launching again', async () => {
+  describe('in-flight deduplication', () => {
+    it('should await same promise for concurrent calls', async () => {
       const ensureBrowserReady = await getEnsureBrowserReady();
 
       // Use a deferred promise to control launch timing
@@ -163,16 +328,22 @@ describe('ensureBrowserReady', () => {
           })
       );
 
-      // First call starts the launch (use isolated to skip reconnect + fs.promises.mkdir)
-      const call1 = ensureBrowserReady(sessionManager, { isolated: true });
+      // Use isolated to skip connect attempts (simplest path)
+      const config: BrowserSessionConfig = {
+        headless: false,
+        browserMode: 'isolated',
+      };
 
-      // Yield to let _doLaunch progress to puppeteer.launch()
+      // First call starts the launch
+      const call1 = ensureBrowserReady(sessionManager, config);
+
+      // Yield to let internal async progress to puppeteer.launch()
       await new Promise((r) => {
         setTimeout(r, 0);
       });
 
-      // Second call should detect 'connecting' state and await the promise
-      const call2 = ensureBrowserReady(sessionManager, { isolated: true });
+      // Second call should detect 'connecting' state and await the same promise
+      const call2 = ensureBrowserReady(sessionManager, config);
 
       // Complete the launch
       resolveLaunch(mockBrowser);
@@ -182,97 +353,6 @@ describe('ensureBrowserReady', () => {
       // Only one launch should have been called
       expect(puppeteer.launch).toHaveBeenCalledTimes(1);
       expect(sessionManager.isRunning()).toBe(true);
-    });
-  });
-
-  describe('reconnection to existing browser', () => {
-    it('should reconnect when existing browser has DevToolsActivePort', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      // Port file exists and readDevToolsActivePort succeeds
-      mockAccess.mockResolvedValue(undefined);
-      mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
-
-      await ensureBrowserReady(sessionManager, {});
-
-      expect(puppeteer.connect).toHaveBeenCalled();
-      expect(puppeteer.launch).not.toHaveBeenCalled();
-      expect(sessionManager.isRunning()).toBe(true);
-    });
-
-    it('should fall back to launch when port file exists but connect fails', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      // Port file exists but connect fails (stale port)
-      mockAccess.mockResolvedValue(undefined);
-      mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
-      (puppeteer.connect as Mock).mockRejectedValueOnce(new Error('Connection refused'));
-
-      await ensureBrowserReady(sessionManager, {});
-
-      expect(puppeteer.connect).toHaveBeenCalledTimes(1);
-      expect(puppeteer.launch).toHaveBeenCalledTimes(1);
-      expect(sessionManager.isRunning()).toBe(true);
-    });
-
-    it('should skip reconnect and launch directly when no port file exists', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      // Default: access rejects (no DevToolsActivePort), hasPortFile returns false
-      await ensureBrowserReady(sessionManager, {});
-
-      expect(puppeteer.launch).toHaveBeenCalledTimes(1);
-      // connect should not be called — no port file to reconnect to
-      expect(puppeteer.connect).not.toHaveBeenCalled();
-      expect(sessionManager.isRunning()).toBe(true);
-    });
-
-    it('should fall back to connect on profile lock error during launch', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      // No port file initially → hasPortFile false → skip first tryReconnect
-      // Launch fails with profile lock → second tryReconnect succeeds
-      // (other process wrote port file between our check and launch)
-      mockReadFile.mockResolvedValue('9222\n/devtools/browser/abc-123\n');
-
-      (puppeteer.launch as Mock).mockRejectedValueOnce(
-        new Error(
-          'The browser is already running for /some/path/chrome-profile. Use a different `userDataDir` or stop the running browser first.'
-        )
-      );
-
-      await ensureBrowserReady(sessionManager, {});
-
-      expect(puppeteer.launch).toHaveBeenCalledTimes(1);
-      expect(puppeteer.connect).toHaveBeenCalledTimes(1);
-      expect(sessionManager.isRunning()).toBe(true);
-    });
-
-    it('should skip reconnection logic for isolated mode', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      await ensureBrowserReady(sessionManager, { isolated: true });
-
-      expect(puppeteer.launch).toHaveBeenCalledTimes(1);
-      expect(puppeteer.connect).not.toHaveBeenCalled();
-      // Should not have checked for DevToolsActivePort
-      expect(mockAccess).not.toHaveBeenCalled();
-    });
-
-    it('should throw original error when both launch and fallback connect fail', async () => {
-      const ensureBrowserReady = await getEnsureBrowserReady();
-
-      // Launch fails with profile lock, fallback connect also fails
-      (puppeteer.launch as Mock).mockRejectedValueOnce(
-        new Error(
-          'The browser is already running for /some/path. Use a different `userDataDir` or stop the running browser first.'
-        )
-      );
-      (puppeteer.connect as Mock).mockRejectedValueOnce(
-        new Error('DevToolsActivePort file not found')
-      );
-
-      await expect(ensureBrowserReady(sessionManager, {})).rejects.toThrow('already running');
     });
   });
 });

@@ -31,7 +31,8 @@ export {
 // Browser session config
 export {
   type BrowserSessionConfig,
-  defaultBrowserConfig,
+  type BrowserMode,
+  loadBrowserConfig,
 } from '../browser/browser-session-config.js';
 
 // Schemas - Simplified API

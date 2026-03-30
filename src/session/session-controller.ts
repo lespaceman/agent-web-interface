@@ -5,8 +5,8 @@
  * Each agent/session gets its own SessionController instance
  * with isolated pages, snapshots, state managers, and registries.
  *
- * Each session owns its own SessionManager and browser lifecycle,
- * configured independently via BrowserSessionConfig.
+ * Browser configuration is loaded from environment variables at construction
+ * and is immutable for the lifetime of the session.
  *
  * @module session/session-controller
  */
@@ -28,10 +28,7 @@ import type {
   CdpSessionResult,
   SnapshotCaptureResult,
 } from '../tools/tool-context.types.js';
-import {
-  defaultBrowserConfig,
-  type BrowserSessionConfig,
-} from '../browser/browser-session-config.js';
+import { loadBrowserConfig, type BrowserSessionConfig } from '../browser/browser-session-config.js';
 import { ensureBrowserReady } from '../browser/ensure-browser.js';
 import type { PageHandle } from '../browser/page-registry.js';
 import { getLogger } from '../shared/services/logging.service.js';
@@ -49,7 +46,7 @@ export type SessionState = 'initializing' | 'active' | 'closing' | 'closed';
 export interface SessionControllerOptions {
   /** Unique session identifier */
   sessionId: string;
-  /** Optional browser configuration for this session */
+  /** Optional browser configuration override (defaults to env-var-based config) */
   browserConfig?: BrowserSessionConfig;
 }
 
@@ -67,7 +64,7 @@ export class SessionController implements ToolContext {
   readonly sessionId: string;
 
   private _sessionManager: SessionManager | null = null;
-  private _browserConfig: BrowserSessionConfig;
+  private readonly _browserConfig: BrowserSessionConfig;
   private readonly _snapshotStore: SnapshotStore;
   private readonly _stateManagers = new Map<string, StateManager>();
   private readonly _dependencyTracker: DependencyTracker;
@@ -83,7 +80,7 @@ export class SessionController implements ToolContext {
 
   constructor(options: SessionControllerOptions) {
     this.sessionId = options.sessionId;
-    this._browserConfig = options.browserConfig ?? defaultBrowserConfig();
+    this._browserConfig = options.browserConfig ?? loadBrowserConfig();
     this._snapshotStore = new SnapshotStore();
     this._dependencyTracker = new DependencyTracker();
     this._observationAccumulator = new ObservationAccumulator();
@@ -146,48 +143,10 @@ export class SessionController implements ToolContext {
   // ---------------------------------------------------------------------------
 
   /**
-   * Check if browser configuration can be changed.
-   * Returns true when no browser is running (before first launch or after crash).
-   */
-  canReconfigure(): boolean {
-    if (this._ensureBrowserPromise) return false;
-    return !(this._sessionManager?.isRunning() ?? false);
-  }
-
-  /**
-   * Shut down the current browser and clear session state so the browser
-   * can be reconfigured (e.g., switch from a launched browser to auto_connect).
-   */
-  async resetBrowser(): Promise<void> {
-    if (this._sessionManager) {
-      await this._sessionManager.shutdown();
-    }
-    this.clearSessionState();
-  }
-
-  /**
-   * Set the browser configuration for this session.
-   *
-   * Must be called before the browser is launched/connected (i.e., before
-   * the first browser-touching tool call). Throws if browser is already running.
-   */
-  setBrowserConfig(config: BrowserSessionConfig): void {
-    if (!this.canReconfigure()) {
-      throw new Error('Cannot change browser configuration while the browser is running.');
-    }
-    const overrides = Object.fromEntries(Object.entries(config).filter(([, v]) => v !== undefined));
-    this._browserConfig = { ...this._browserConfig, ...overrides };
-  }
-
-  getBrowserConfig(): BrowserSessionConfig {
-    return { ...this._browserConfig };
-  }
-
-  /**
    * Ensure the session's browser is ready.
    *
    * Lazily creates a SessionManager and launches/connects based on
-   * the session's BrowserSessionConfig. Idempotent — returns immediately
+   * environment configuration. Idempotent — returns immediately
    * if the browser is already running. Concurrent calls are deduplicated.
    */
   async ensureBrowser(): Promise<void> {

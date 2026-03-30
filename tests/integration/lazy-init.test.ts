@@ -70,7 +70,10 @@ describe('Lazy Browser Initialization (SessionController)', () => {
   });
 
   it('launches a browser on ensureBrowser()', async () => {
-    const controller = new SessionController({ sessionId: 'test-launch' });
+    const controller = new SessionController({
+      sessionId: 'test-launch',
+      browserConfig: { browserMode: 'persistent', headless: false },
+    });
 
     await controller.ensureBrowser();
 
@@ -83,6 +86,7 @@ describe('Lazy Browser Initialization (SessionController)', () => {
     try {
       const controller = new SessionController({
         sessionId: 'test-connect',
+        browserConfig: { headless: false },
       });
 
       await controller.ensureBrowser();
@@ -96,7 +100,10 @@ describe('Lazy Browser Initialization (SessionController)', () => {
   });
 
   it('is idempotent — does not re-launch on subsequent calls', async () => {
-    const controller = new SessionController({ sessionId: 'test-idempotent' });
+    const controller = new SessionController({
+      sessionId: 'test-idempotent',
+      browserConfig: { browserMode: 'persistent', headless: false },
+    });
 
     await controller.ensureBrowser();
     await controller.ensureBrowser();
@@ -105,9 +112,11 @@ describe('Lazy Browser Initialization (SessionController)', () => {
     expect(puppeteer.launch).toHaveBeenCalledTimes(1);
   });
 
-  it('respects setBrowserConfig({ headless: true })', async () => {
-    const controller = new SessionController({ sessionId: 'test-headless' });
-    controller.setBrowserConfig({ headless: true });
+  it('respects browserConfig headless: true', async () => {
+    const controller = new SessionController({
+      sessionId: 'test-headless',
+      browserConfig: { browserMode: 'persistent', headless: true },
+    });
 
     await controller.ensureBrowser();
 

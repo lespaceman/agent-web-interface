@@ -316,49 +316,15 @@ describe('SessionController', () => {
     });
 
     it('propagates errors from launch', async () => {
+      // Use explicit mode so there's no fallback chain
+      const { SessionController: SC } = await import('../../../src/session/session-controller.js');
+      const ctrl = new SC({
+        sessionId: 'test-error',
+        browserConfig: { browserMode: 'persistent', headless: false },
+      });
       mockSessionManagerInstance.launch.mockRejectedValueOnce(new Error('launch failed'));
 
-      await expect(controller.ensureBrowser()).rejects.toThrow('launch failed');
-    });
-  });
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // setBrowserConfig()
-  // ══════════════════════════════════════════════════════════════════════════
-
-  describe('setBrowserConfig', () => {
-    it('sets config before browser is started', () => {
-      // Should not throw
-      controller.setBrowserConfig({ headless: true });
-    });
-
-    it('throws if browser is already running', () => {
-      // Force creation of the SessionManager
-      controller.getSessionManager();
-      mockSessionManagerInstance.isRunning.mockReturnValue(true);
-
-      expect(() => controller.setBrowserConfig({ headless: true })).toThrow(
-        'Cannot change browser configuration while the browser is running'
-      );
-    });
-
-    it('allows config change when SessionManager exists but browser is not running', () => {
-      // Force creation of the SessionManager
-      controller.getSessionManager();
-      mockSessionManagerInstance.isRunning.mockReturnValue(false);
-
-      // Should not throw
-      controller.setBrowserConfig({ headless: true });
-    });
-
-    it('merges config with existing values', async () => {
-      controller.setBrowserConfig({ headless: true });
-
-      await controller.ensureBrowser();
-
-      expect(mockSessionManagerInstance.launch).toHaveBeenCalledWith(
-        expect.objectContaining({ headless: true })
-      );
+      await expect(ctrl.ensureBrowser()).rejects.toThrow('launch failed');
     });
   });
 
@@ -414,37 +380,6 @@ describe('SessionController', () => {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // canReconfigure()
-  // ══════════════════════════════════════════════════════════════════════════
-
-  describe('canReconfigure', () => {
-    it('returns true when no SessionManager exists', () => {
-      expect(controller.canReconfigure()).toBe(true);
-    });
-
-    it('returns true when SessionManager exists but browser is not running', () => {
-      controller.getSessionManager();
-      mockSessionManagerInstance.isRunning.mockReturnValue(false);
-
-      expect(controller.canReconfigure()).toBe(true);
-    });
-
-    it('returns false when browser is running', () => {
-      controller.getSessionManager();
-      mockSessionManagerInstance.isRunning.mockReturnValue(true);
-
-      expect(controller.canReconfigure()).toBe(false);
-    });
-
-    it('returns true after browser crash (failed state)', async () => {
-      await controller.ensureBrowser();
-      mockSessionManagerInstance.isRunning.mockReturnValue(false);
-
-      expect(controller.canReconfigure()).toBe(true);
-    });
-  });
-
-  // ══════════════════════════════════════════════════════════════════════════
   // crash recovery
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -464,44 +399,6 @@ describe('SessionController', () => {
       }
 
       expect(clearSpy).toHaveBeenCalled();
-    });
-
-    it('allows setBrowserConfig after browser crash', () => {
-      controller.getSessionManager();
-      mockSessionManagerInstance.isRunning.mockReturnValue(false);
-
-      // Simulate crash
-      for (const listener of stateChangeListeners) {
-        listener({ previousState: 'connected', currentState: 'failed' });
-      }
-
-      // Should not throw — browser is dead, config can change
-      expect(() => controller.setBrowserConfig({ isolated: true })).not.toThrow();
-    });
-
-    it('relaunches with new config after crash + reconfigure', async () => {
-      // First launch with defaults
-      await controller.ensureBrowser();
-      expect(mockSessionManagerInstance.launch).toHaveBeenCalledWith(
-        expect.objectContaining({ isolated: false })
-      );
-
-      // Simulate crash
-      mockSessionManagerInstance.isRunning.mockReturnValue(false);
-      for (const listener of stateChangeListeners) {
-        listener({ previousState: 'connected', currentState: 'failed' });
-      }
-
-      // Reconfigure
-      controller.setBrowserConfig({ isolated: true });
-
-      // Relaunch
-      vi.clearAllMocks();
-      await controller.ensureBrowser();
-
-      expect(mockSessionManagerInstance.launch).toHaveBeenCalledWith(
-        expect.objectContaining({ isolated: true })
-      );
     });
 
     it('does not clear state on non-failed transitions', () => {

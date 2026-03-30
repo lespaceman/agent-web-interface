@@ -15,7 +15,7 @@ describe('formatToolError', () => {
           type: 'text',
           text: JSON.stringify({
             error:
-              'Could not connect to your existing Chrome session. Open Chrome first and enable remote debugging, then retry with auto_connect=true. Or launch an AWI-managed browser with isolated=true or headless=true.',
+              'Could not connect to your existing Chrome session. Open Chrome first and enable remote debugging. Or set AWI_BROWSER_MODE=persistent to launch a dedicated browser.',
           }),
         },
       ],
@@ -32,7 +32,7 @@ describe('formatToolError', () => {
           type: 'text',
           text: JSON.stringify({
             error:
-              'The connected Chrome session was closed. Open Chrome again and retry with auto_connect=true. Or launch an AWI-managed browser with isolated=true or headless=true.',
+              'The connected Chrome session was closed. Open Chrome again, or set AWI_BROWSER_MODE=persistent to launch a dedicated browser.',
           }),
         },
       ],

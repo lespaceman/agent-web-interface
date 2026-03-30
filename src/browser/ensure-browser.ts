@@ -2,35 +2,31 @@
  * Lazy Browser Initialization
  *
  * Ensures a browser is ready before tool execution.
- * If no browser is running, launches or connects based on session configuration.
+ * Supports three modes: user (connect to existing Chrome), persistent
+ * (launch with dedicated profile), and isolated (launch with temp profile).
  *
- * When a persistent profile is in use and Chrome is already running (from a
- * previous session or another agent), reconnects via DevToolsActivePort instead
- * of failing on the profile lock.
+ * Mode is determined by AWI_BROWSER_MODE env var:
+ *   - Set explicitly → try that mode only, fail on error
+ *   - Unset (auto)   → fallback chain: user → persistent → isolated
  *
- * CDP endpoint can be set via AWI_CDP_URL env var (http or ws) to connect
- * to an existing browser instead of launching.
+ * AWI_CDP_URL overrides everything — connect to explicit endpoint, no fallback.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
 import type { SessionManager } from './session-manager.js';
-import { DEFAULT_USER_DATA_DIR } from './session-manager.js';
-import type { BrowserSessionConfig } from './browser-session-config.js';
+import type { BrowserMode, BrowserSessionConfig } from './browser-session-config.js';
 import { extractErrorMessage } from './connection-utils.js';
 import { getLogger } from '../shared/services/logging.service.js';
 
 const logger = getLogger();
 
-/** Short timeout for reconnect attempts — these are fast pre-checks, not full connections */
-const RECONNECT_TIMEOUT_MS = 5000;
+/** Auto-mode fallback order when AWI_BROWSER_MODE is unset */
+const AUTO_FALLBACK_CHAIN: BrowserMode[] = ['user', 'persistent', 'isolated'];
 
 /**
  * Ensure browser is ready for tool execution.
  *
  * If browser is already running, returns immediately.
- * Otherwise, launches or connects based on provided config.
- * Set AWI_CDP_URL env var to connect to an existing CDP endpoint.
+ * Otherwise, launches or connects based on the session config.
  */
 export async function ensureBrowserReady(
   session: SessionManager,
@@ -47,127 +43,77 @@ export async function ensureBrowserReady(
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string must be falsy
-  const cdpUrl = process.env.AWI_CDP_URL?.trim() || undefined;
-
-  // Explicit CDP URL — connect only, no fallback to launch
-  if (cdpUrl) {
-    logger.info('Lazy browser initialization triggered', { mode: 'connect', cdpUrl });
+  // Explicit CDP URL — connect only, no fallback
+  if (config.cdpUrl) {
+    logger.info('Connecting to explicit CDP endpoint', { cdpUrl: config.cdpUrl });
     try {
-      await session.connect({ endpointUrl: cdpUrl });
-      logger.info('Browser initialized successfully', { mode: 'connect' });
+      await session.connect({ endpointUrl: config.cdpUrl });
+      logger.info('Connected to CDP endpoint');
     } catch (error) {
       const msg = extractErrorMessage(error);
-      logger.error('Browser initialization failed', error instanceof Error ? error : undefined, {
-        mode: 'connect',
-      });
       throw new Error(
-        `Failed to connect to CDP endpoint (${cdpUrl}): ${msg}. ` +
-          'Try removing AWI_CDP_URL to auto-connect to a running Chrome, or launch a new browser with auto_connect=false.'
+        `Failed to connect to CDP endpoint (${config.cdpUrl}): ${msg}. ` +
+          'Check that the browser is running and the endpoint is correct.'
       );
     }
     return;
   }
 
-  // Auto-connect: try connecting to an existing Chrome first, fall back to launch
-  if (config.autoConnect) {
-    logger.info('Attempting auto-connect to existing Chrome');
+  // Explicit mode — try it only, no fallback
+  if (config.browserMode) {
+    logger.info('Browser mode (explicit)', { mode: config.browserMode });
+    await attemptMode(session, config.browserMode, config.headless);
+    return;
+  }
+
+  // Auto mode — fallback chain: user → persistent → isolated
+  let lastError: Error | undefined;
+
+  for (const mode of AUTO_FALLBACK_CHAIN) {
     try {
-      await session.connect({ autoConnect: true });
-      logger.info('Auto-connected to existing Chrome');
+      logger.info('Browser mode (auto)', { attempting: mode });
+      await attemptMode(session, mode, config.headless);
       return;
     } catch (error) {
-      logger.info('Auto-connect failed, falling back to launch', {
-        error: extractErrorMessage(error),
+      lastError = error instanceof Error ? error : new Error(extractErrorMessage(error));
+      logger.info('Browser mode failed, trying next', {
+        mode,
+        error: lastError.message,
       });
     }
   }
 
-  // Launch mode — try reconnecting to an existing browser first (persistent profiles only)
-  const profileDir = config.isolated ? undefined : DEFAULT_USER_DATA_DIR;
-
-  if (profileDir && (await hasPortFile(profileDir)) && (await tryReconnect(session, profileDir))) {
-    return;
-  }
-
-  // Launch a new browser
-  logger.info('Lazy browser initialization triggered', { mode: 'launch' });
-  try {
-    await session.launch({
-      headless: config.headless ?? false,
-      isolated: config.isolated ?? false,
-    });
-    logger.info('Browser initialized successfully', { mode: 'launch' });
-  } catch (error) {
-    // Another process may have grabbed the profile between our reconnect attempt
-    // and launch (race condition). Try reconnecting one more time.
-    if (profileDir && isProfileLockError(error) && (await tryReconnect(session, profileDir))) {
-      return;
-    }
-
-    const msg = extractErrorMessage(error);
-    logger.error('Browser initialization failed', error instanceof Error ? error : undefined, {
-      mode: 'launch',
-      headless: config.headless,
-    });
-    const suggestions: string[] = [];
-    if (!config.headless) {
-      suggestions.push('try headless=true if no display is available');
-    }
-    if (!config.isolated) {
-      suggestions.push('try isolated=true to use a fresh profile');
-    }
-    if (config.headless) {
-      suggestions.push('try headless=false to launch a visible browser');
-    }
-    const hint = suggestions.length > 0 ? ` Suggestions: ${suggestions.join('; ')}.` : '';
-    throw new Error(`Failed to launch browser: ${msg}.${hint}`);
-  }
+  throw new Error(`All browser modes exhausted. Last error: ${lastError?.message ?? 'unknown'}`);
 }
 
 /**
- * Check if DevToolsActivePort file exists in the profile directory.
- * Used to skip the reconnect attempt entirely on cold starts where
- * Chrome has never run, avoiding wasted I/O.
+ * Attempt a specific browser mode.
  */
-async function hasPortFile(profileDir: string): Promise<boolean> {
-  try {
-    await fs.promises.access(path.join(profileDir, 'DevToolsActivePort'), fs.constants.F_OK);
-    return true;
-  } catch {
-    return false;
+async function attemptMode(
+  session: SessionManager,
+  mode: BrowserMode,
+  headless: boolean
+): Promise<void> {
+  if (mode === 'user') {
+    // Puppeteer's channel:'chrome' reads DevToolsActivePort from Chrome's well-known user data dir
+    try {
+      await session.connect({ autoConnect: true });
+      logger.info('Connected to user Chrome');
+    } catch (error) {
+      const msg = extractErrorMessage(error);
+      throw new Error(
+        `Could not connect to Chrome: ${msg}. ` +
+          'Ensure Chrome is running with remote debugging enabled.'
+      );
+    }
+  } else {
+    const isolated = mode === 'isolated';
+    try {
+      await session.launch({ headless, isolated });
+      logger.info(`Launched browser (${mode} profile)`);
+    } catch (error) {
+      const msg = extractErrorMessage(error);
+      throw new Error(`Failed to launch browser (${mode}): ${msg}.`);
+    }
   }
-}
-
-/**
- * Attempt to reconnect to an existing Chrome via its DevToolsActivePort file.
- * Returns true on success. On failure, returns false.
- * Uses a short timeout since this is a fast pre-check, not a full connection attempt.
- */
-async function tryReconnect(session: SessionManager, profileDir: string): Promise<boolean> {
-  try {
-    await session.connect({
-      autoConnect: true,
-      userDataDir: profileDir,
-      ownedReconnect: true,
-      timeout: RECONNECT_TIMEOUT_MS,
-    });
-    logger.info('Reconnected to existing browser');
-    return true;
-  } catch (error) {
-    logger.warning('Reconnect to existing browser failed', {
-      error: extractErrorMessage(error),
-    });
-    return false;
-  }
-}
-
-/**
- * Detect Chrome profile-lock errors from Puppeteer.
- * Matches against Puppeteer's error text which includes "already running for <path>"
- * when the SingletonLock file prevents a second Chrome instance.
- */
-function isProfileLockError(error: unknown): boolean {
-  const msg = extractErrorMessage(error);
-  return /already running for|already in use|SingletonLock/i.test(msg);
 }

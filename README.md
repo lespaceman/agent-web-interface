@@ -105,11 +105,14 @@ Example workflows include:
 ## Claude Code
 
 ```bash
-# Basic (auto-launches browser)
+# Default: connects to your running Chrome, falls back to launching a new browser
 claude mcp add agent-web-interface -- npx agent-web-interface@latest
 
-# With auto-connect to your Chrome profile (set via env var)
-claude mcp add agent-web-interface -e AWI_CDP_URL=http://localhost:9222 -- npx agent-web-interface@latest
+# Explicit mode: always connect to your Chrome (no fallback)
+claude mcp add agent-web-interface -e AWI_BROWSER_MODE=user -- npx agent-web-interface@latest
+
+# Explicit mode: always launch a persistent browser
+claude mcp add agent-web-interface -e AWI_BROWSER_MODE=persistent -- npx agent-web-interface@latest
 ```
 
 ---
@@ -123,38 +126,45 @@ The server accepts transport-level arguments only. Browser configuration is per-
 | `--transport` | Transport mode: `stdio` or `http` | `stdio` |
 | `--port`      | Port for HTTP transport           | `3000`  |
 
-### Browser Session Configuration
+### Browser Session Modes
 
-Browser initialization is automatic on the first tool call. The `navigate` tool accepts optional parameters to configure the session:
+Browser initialization is automatic on the first tool call. Set `AWI_BROWSER_MODE` to control how the browser is started:
 
-| Parameter      | Description                                        | Default |
-| -------------- | -------------------------------------------------- | ------- |
-| `headless`     | Run browser in headless mode                       | `false` |
-| `isolated`     | Use an isolated temp profile instead of persistent | `false` |
-| `auto_connect` | Auto-connect to Chrome 144+ via DevToolsActivePort | `false` |
+| Mode         | Behavior                                             | Profile                                       |
+| ------------ | ---------------------------------------------------- | --------------------------------------------- |
+| _(unset)_    | Auto: try `user` → `persistent` → `isolated`         | Depends on fallback                           |
+| `user`       | Connect to your running Chrome                       | Chrome's default profile                      |
+| `persistent` | Launch Chrome with a dedicated persistent profile    | `~/.cache/agent-web-interface/chrome-profile` |
+| `isolated`   | Launch Chrome with a temporary profile (clean slate) | None (deleted on close)                       |
 
 Examples:
 
 ```bash
-# Auto-launch visible browser (default)
+# Auto mode (default) — connects to Chrome if running, else launches
 npx agent-web-interface
+
+# Always connect to your Chrome (fails if Chrome isn't running)
+AWI_BROWSER_MODE=user npx agent-web-interface
+
+# Always launch with persistent profile
+AWI_BROWSER_MODE=persistent npx agent-web-interface
+
+# Headless isolated browser
+AWI_BROWSER_MODE=isolated AWI_HEADLESS=true npx agent-web-interface
 
 # HTTP transport mode
 npx agent-web-interface --transport http --port 8080
-
-# Connect to existing CDP endpoint via env var
-AWI_CDP_URL=http://localhost:9222 npx agent-web-interface
 ```
 
 ---
 
-## Using Your Existing Chrome Profile (Chrome 144+)
+## Using Your Existing Chrome (Chrome 144+)
 
 To connect with your bookmarks, extensions, and logged-in sessions:
 
 1. Navigate to `chrome://inspect/#remote-debugging` in Chrome
 2. Enable remote debugging and allow the connection
-3. Use the `auto_connect` parameter on the `navigate` tool, or set `AWI_CDP_URL`
+3. Set `AWI_BROWSER_MODE=user` (or leave unset for auto mode)
 
 ```json
 {
@@ -163,7 +173,7 @@ To connect with your bookmarks, extensions, and logged-in sessions:
       "command": "npx",
       "args": ["agent-web-interface@latest"],
       "env": {
-        "AWI_CDP_URL": "http://localhost:9222"
+        "AWI_BROWSER_MODE": "user"
       }
     }
   }
@@ -174,18 +184,20 @@ To connect with your bookmarks, extensions, and logged-in sessions:
 
 ## Environment Variables
 
-| Variable           | Description                                              | Default     |
-| ------------------ | -------------------------------------------------------- | ----------- |
-| `AWI_CDP_URL`      | CDP endpoint (http or ws) to connect to existing browser | -           |
-| `AWI_TRIM_REGIONS` | Set to `false` to disable region trimming globally       | `true`      |
-| `TRANSPORT`        | Transport mode override (`http`)                         | -           |
-| `HTTP_HOST`        | Host for HTTP transport                                  | `127.0.0.1` |
-| `HTTP_PORT`        | Port for HTTP transport                                  | `3000`      |
-| `LOG_LEVEL`        | Logging level                                            | `info`      |
-| `CEF_BRIDGE_HOST`  | CDP host for CEF bridge connection                       | `127.0.0.1` |
-| `CEF_BRIDGE_PORT`  | CDP port for CEF bridge connection                       | `9223`      |
-| `BRING_TO_FRONT`   | Set to `true` to focus the Chrome tab before each action | `false`     |
-| `CHROME_PATH`      | Path to Chrome executable (multi-tenant)                 | -           |
+| Variable           | Description                                              | Default                  |
+| ------------------ | -------------------------------------------------------- | ------------------------ |
+| `AWI_BROWSER_MODE` | Browser mode: `user`, `persistent`, or `isolated`        | _(unset: auto fallback)_ |
+| `AWI_HEADLESS`     | Run browser headless (`true`/`false`)                    | `false`                  |
+| `AWI_CDP_URL`      | Explicit CDP endpoint (overrides mode)                   | -                        |
+| `AWI_TRIM_REGIONS` | Set to `false` to disable region trimming globally       | `true`                   |
+| `TRANSPORT`        | Transport mode override (`http`)                         | -                        |
+| `HTTP_HOST`        | Host for HTTP transport                                  | `127.0.0.1`              |
+| `HTTP_PORT`        | Port for HTTP transport                                  | `3000`                   |
+| `LOG_LEVEL`        | Logging level                                            | `info`                   |
+| `CEF_BRIDGE_HOST`  | CDP host for CEF bridge connection                       | `127.0.0.1`              |
+| `CEF_BRIDGE_PORT`  | CDP port for CEF bridge connection                       | `9223`                   |
+| `BRING_TO_FRONT`   | Set to `true` to focus the Chrome tab before each action | `false`                  |
+| `CHROME_PATH`      | Path to Chrome executable (multi-tenant)                 | -                        |
 
 ---
 

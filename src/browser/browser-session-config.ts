@@ -1,42 +1,60 @@
 /**
  * Browser Session Config
  *
- * Defines the browser configuration that agents can specify per session.
- * Each session can independently choose to launch a new browser or connect
- * to an existing one, with its own headless/headed preference.
+ * Defines browser modes and loads configuration from environment variables.
+ * Browser config is infrastructure — set once at startup, never per-tool-call.
  *
- * Env var AWI_CDP_URL overrides to connect to an existing CDP endpoint.
+ * Env vars:
+ *   AWI_BROWSER_MODE  - user | persistent | isolated (default: unset = auto fallback)
+ *   AWI_CDP_URL       - Explicit CDP endpoint (overrides mode entirely)
+ *   AWI_HEADLESS      - true | false (default: false, only for persistent/isolated)
  *
  * @module browser/browser-session-config
  */
 
 /**
- * Per-session browser configuration.
+ * Browser session modes.
  *
- * Agents pass browser preferences via the `navigate` tool's optional parameters.
- * If not provided, sensible defaults are used (launch, headed, persistent profile).
+ * - `user`:       Connect to user's running Chrome via well-known profile directory.
+ * - `persistent`: Launch Chrome with a dedicated persistent profile.
+ * - `isolated`:   Launch Chrome with a temporary profile (deleted on close).
+ */
+export const BROWSER_MODES = ['user', 'persistent', 'isolated'] as const;
+
+export type BrowserMode = (typeof BROWSER_MODES)[number];
+
+/**
+ * Browser session configuration loaded from environment variables.
  */
 export interface BrowserSessionConfig {
-  /** Run browser in headless mode. Default: false */
-  headless?: boolean;
+  /** Browser mode. undefined = auto (fallback chain: user → persistent → isolated) */
+  browserMode?: BrowserMode;
 
-  /** Use an isolated temp profile instead of persistent. Default: false */
-  isolated?: boolean;
+  /** Run browser in headless mode. Only relevant for persistent/isolated. */
+  headless: boolean;
 
-  /** Auto-connect to Chrome 144+ via DevToolsActivePort */
-  autoConnect?: boolean;
+  /** Explicit CDP endpoint URL. Overrides browserMode entirely. */
+  cdpUrl?: string;
 }
 
 /**
- * Returns sensible default browser configuration.
+ * Load browser configuration from environment variables.
  *
- * Launch a headed Chrome with a persistent profile — the most common
- * configuration for interactive browser automation.
+ * Called once at session creation. The returned config is immutable
+ * for the lifetime of the session.
  */
-export function defaultBrowserConfig(): BrowserSessionConfig {
+export function loadBrowserConfig(): BrowserSessionConfig {
+  const rawMode = process.env.AWI_BROWSER_MODE?.trim().toLowerCase();
+  const browserMode: BrowserMode | undefined = BROWSER_MODES.includes(rawMode as BrowserMode)
+    ? (rawMode as BrowserMode)
+    : undefined;
+
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string must be falsy
+  const cdpUrl = process.env.AWI_CDP_URL?.trim() || undefined;
+
   return {
-    headless: false,
-    isolated: false,
-    autoConnect: true,
+    browserMode,
+    headless: process.env.AWI_HEADLESS?.trim().toLowerCase() === 'true',
+    cdpUrl,
   };
 }

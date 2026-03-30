@@ -16,7 +16,6 @@ import type { StateManager } from '../state/state-manager.js';
 import type { DependencyTracker } from '../form/dependency-tracker.js';
 import type { ObservationAccumulator } from '../observation/observation-accumulator.js';
 import type { RuntimeHealth } from '../state/health.types.js';
-import type { BrowserSessionConfig } from '../browser/browser-session-config.js';
 
 /**
  * Result of ensuring a CDP session is healthy.
@@ -55,37 +54,10 @@ export interface ToolContext {
 
   /**
    * Ensure the session's browser is ready.
-   * Lazily launches/connects based on the session's BrowserSessionConfig.
+   * Lazily launches/connects based on environment configuration.
    * Idempotent — returns immediately if already running.
    */
   ensureBrowser(): Promise<void>;
-
-  /**
-   * Set the browser configuration for this session.
-   * Must be called before the browser is launched/connected.
-   * @throws Error if browser is already running
-   */
-  setBrowserConfig(config: BrowserSessionConfig): void;
-
-  /**
-   * Get the current browser configuration for this session.
-   *
-   * Returns the desired session-level configuration, not live browser metadata.
-   */
-  getBrowserConfig(): BrowserSessionConfig;
-
-  /**
-   * Check if browser configuration can be changed.
-   * Returns true if no browser is running (allows config before launch or after crash).
-   */
-  canReconfigure(): boolean;
-
-  /**
-   * Shut down the current browser and clear session state so the browser
-   * can be reconfigured (e.g., switch from a launched browser to auto_connect).
-   * After this call, canReconfigure() returns true.
-   */
-  resetBrowser(): Promise<void>;
 
   // ---------------------------------------------------------------------------
   // Page lifecycle

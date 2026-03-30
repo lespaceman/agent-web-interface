@@ -126,13 +126,6 @@ export function createTestToolContext(overrides?: Partial<ToolContext>): ToolCon
       runtime_health: createHealthyRuntime(),
     } satisfies SnapshotCaptureResult),
     ensureBrowser: vi.fn().mockResolvedValue(undefined),
-    setBrowserConfig: vi.fn(),
-    getBrowserConfig: vi.fn().mockReturnValue({
-      headless: false,
-      isolated: false,
-    }),
-    canReconfigure: vi.fn().mockReturnValue(true),
-    resetBrowser: vi.fn().mockResolvedValue(undefined),
     requireSnapshot: vi.fn(),
     resolveElementByEid: vi.fn(),
     close: vi.fn().mockResolvedValue(undefined),

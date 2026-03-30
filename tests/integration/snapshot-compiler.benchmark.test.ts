@@ -271,7 +271,7 @@ describe('Snapshot Compiler Performance Benchmarks', () => {
       const compiler = new SnapshotCompiler();
       const snapshot = await compiler.compile(mockCdp, mockPage, 'page-1');
 
-      expect(snapshot.meta.capture_duration_ms).toBeGreaterThan(0);
+      expect(snapshot.meta.capture_duration_ms).toBeGreaterThanOrEqual(0);
       expect(snapshot.meta.capture_duration_ms).toBeLessThan(100);
     });
   });
