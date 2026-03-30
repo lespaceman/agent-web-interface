@@ -13,4 +13,3 @@
 - Merge pull request #56 from lespaceman/claude/fix-ci-npm-release-bhST8
 - fix: resolve security audit vulnerabilities (brace-expansion, path-to-regexp)
 - fix: exclude integration tests from CI to prevent Chrome-dependent failures
-
