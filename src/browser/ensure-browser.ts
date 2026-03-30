@@ -49,23 +49,38 @@ export async function ensureBrowserReady(
 
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string must be falsy
   const cdpUrl = process.env.AWI_CDP_URL?.trim() || undefined;
-  const shouldConnect = !!(cdpUrl ?? config.autoConnect);
 
-  if (shouldConnect) {
-    logger.info('Lazy browser initialization triggered', { mode: 'connect' });
+  // Explicit CDP URL — connect only, no fallback to launch
+  if (cdpUrl) {
+    logger.info('Lazy browser initialization triggered', { mode: 'connect', cdpUrl });
     try {
-      await session.connect({
-        endpointUrl: cdpUrl,
-        autoConnect: config.autoConnect,
-      });
+      await session.connect({ endpointUrl: cdpUrl });
       logger.info('Browser initialized successfully', { mode: 'connect' });
     } catch (error) {
+      const msg = extractErrorMessage(error);
       logger.error('Browser initialization failed', error instanceof Error ? error : undefined, {
         mode: 'connect',
       });
-      throw error;
+      throw new Error(
+        `Failed to connect to CDP endpoint (${cdpUrl}): ${msg}. ` +
+          'Try removing AWI_CDP_URL to auto-connect to a running Chrome, or launch a new browser with auto_connect=false.'
+      );
     }
     return;
+  }
+
+  // Auto-connect: try connecting to an existing Chrome first, fall back to launch
+  if (config.autoConnect) {
+    logger.info('Attempting auto-connect to existing Chrome');
+    try {
+      await session.connect({ autoConnect: true });
+      logger.info('Auto-connected to existing Chrome');
+      return;
+    } catch (error) {
+      logger.info('Auto-connect failed, falling back to launch', {
+        error: extractErrorMessage(error),
+      });
+    }
   }
 
   // Launch mode — try reconnecting to an existing browser first (persistent profiles only)
@@ -90,11 +105,23 @@ export async function ensureBrowserReady(
       return;
     }
 
+    const msg = extractErrorMessage(error);
     logger.error('Browser initialization failed', error instanceof Error ? error : undefined, {
       mode: 'launch',
       headless: config.headless,
     });
-    throw error;
+    const suggestions: string[] = [];
+    if (!config.headless) {
+      suggestions.push('try headless=true if no display is available');
+    }
+    if (!config.isolated) {
+      suggestions.push('try isolated=true to use a fresh profile');
+    }
+    if (config.headless) {
+      suggestions.push('try headless=false to launch a visible browser');
+    }
+    const hint = suggestions.length > 0 ? ` Suggestions: ${suggestions.join('; ')}.` : '';
+    throw new Error(`Failed to launch browser: ${msg}.${hint}`);
   }
 }
 

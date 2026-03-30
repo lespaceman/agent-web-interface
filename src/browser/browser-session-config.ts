@@ -37,5 +37,6 @@ export function defaultBrowserConfig(): BrowserSessionConfig {
   return {
     headless: false,
     isolated: false,
+    autoConnect: true,
   };
 }

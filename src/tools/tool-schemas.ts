@@ -120,12 +120,27 @@ export const NavigateInputSchema = z.object({
   url: z.string().url(),
   /** Page ID. If omitted, operates on the most recently used page */
   page_id: z.string().optional(),
-  /** Launch browser without a visible window. Ignored if browser is already running. */
-  headless: z.boolean().optional().describe('Launch browser without a visible window.'),
-  /** Use a fresh temporary profile instead of the persistent one. Ignored if browser is already running. */
-  isolated: z.boolean().optional().describe('Use a fresh temporary browser profile.'),
-  /** Connect to an already-running Chrome instead of launching a new one. Ignored if browser is already running. */
-  auto_connect: z.boolean().optional().describe('Connect to an already-running Chrome.'),
+  /** Launch browser in headless mode. Default: false (headed). Ignored if browser is already running. */
+  headless: z
+    .boolean()
+    .optional()
+    .describe(
+      'Launch browser without a visible window. Default: false (headed). Must be explicitly set to true for headless mode.'
+    ),
+  /** Use a fresh temporary profile. Default: false (persistent). Ignored if browser is already running. */
+  isolated: z
+    .boolean()
+    .optional()
+    .describe(
+      'Use a fresh temporary browser profile. Default: false (persistent profile). Must be explicitly set to true for isolation.'
+    ),
+  /** Try connecting to an already-running Chrome before launching. Default: true. Ignored if browser is already running. */
+  auto_connect: z
+    .boolean()
+    .optional()
+    .describe(
+      'Try to connect to an already-running Chrome before launching a new one. Default: true.'
+    ),
 });
 
 /** Returns XML state response string directly */
