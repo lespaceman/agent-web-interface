@@ -159,10 +159,22 @@ describe('click page focus', () => {
     });
   });
 
-  it('brings the target page to the front before dispatching the action', async () => {
+  it('does not bring page to front by default', async () => {
     await click({ page_id: 'page-focus', eid: 'eid-1' }, ctx);
 
-    expect(mockBringToFront).toHaveBeenCalledTimes(1);
+    expect(mockBringToFront).not.toHaveBeenCalled();
     expect(mockExecuteActionWithOutcome).toHaveBeenCalledTimes(1);
+  });
+
+  it('brings the target page to the front when BRING_TO_FRONT is true', async () => {
+    process.env.BRING_TO_FRONT = 'true';
+    try {
+      await click({ page_id: 'page-focus', eid: 'eid-1' }, ctx);
+
+      expect(mockBringToFront).toHaveBeenCalledTimes(1);
+      expect(mockExecuteActionWithOutcome).toHaveBeenCalledTimes(1);
+    } finally {
+      delete process.env.BRING_TO_FRONT;
+    }
   });
 });

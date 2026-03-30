@@ -117,7 +117,9 @@ export async function prepareActionContext(
   const resolvedPageId = handleRef.current.page_id;
 
   handleRef.current = (await ctx.ensureCdpSession(handleRef.current)).handle;
-  await handleRef.current.page.bringToFront();
+  if (process.env.BRING_TO_FRONT === 'true') {
+    await handleRef.current.page.bringToFront();
+  }
   const captureSnapshot = createActionCapture(ctx, handleRef, resolvedPageId);
 
   return { handleRef, pageId: resolvedPageId, captureSnapshot, ctx };

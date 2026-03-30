@@ -184,6 +184,7 @@ To connect with your bookmarks, extensions, and logged-in sessions:
 | `LOG_LEVEL`        | Logging level                                            | `info`      |
 | `CEF_BRIDGE_HOST`  | CDP host for CEF bridge connection                       | `127.0.0.1` |
 | `CEF_BRIDGE_PORT`  | CDP port for CEF bridge connection                       | `9223`      |
+| `BRING_TO_FRONT`   | Set to `true` to focus the Chrome tab before each action | `false`     |
 | `CHROME_PATH`      | Path to Chrome executable (multi-tenant)                 | -           |
 
 ---
