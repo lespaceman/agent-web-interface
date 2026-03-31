@@ -1,3 +1,8 @@
+## [4.6.0] - 2026-03-31
+
+- Redesign browser session management with explicit modes
+- Gate bringToFront behind BRING_TO_FRONT env var (default off)
+
 # Changelog
 
 ## [4.5.1] - 2026-03-29
